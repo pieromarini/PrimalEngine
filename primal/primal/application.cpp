@@ -36,7 +36,7 @@ namespace primal {
 	EventDispatcher dispatcher(e);
 	dispatcher.dispatch<WindowCloseEvent>(BIND_EVENT_FN(onWindowClose));
 
-	for (auto it = m_LayerStack.end(); it != m_LayerStack.begin(); ) {
+	for (auto it = m_LayerStack.end(); it != m_LayerStack.begin();) {
 	  (*--it)->onEvent(e);
 	  if (e.Handled)
 		break;
@@ -46,7 +46,7 @@ namespace primal {
   void Application::run() {
 	while (m_Running) {
 	  // NOTE: Application shouldn't be tied to GLFW. Move to platform
-	  float time = (float)glfwGetTime(); 
+	  float time = static_cast<float>(glfwGetTime()); 
 	  Timestep timestep = time - m_LastFrameTime;
 	  m_LastFrameTime = time;
 

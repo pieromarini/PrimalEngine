@@ -7,6 +7,7 @@ namespace primal {
 
 	Input* Input::s_Instance = new LinuxInput();
 
+	// NOTE: should probably cache the Window.
 	bool LinuxInput::isKeyPressedImpl(int keycode) {
 		auto window = static_cast<GLFWwindow*>(Application::get().getWindow().getNativeWindow());
 		auto state = glfwGetKey(window, keycode);
@@ -24,7 +25,7 @@ namespace primal {
 		double xpos, ypos;
 		glfwGetCursorPos(window, &xpos, &ypos);
 
-		return { (float)xpos, (float)ypos };
+		return { static_cast<float>(xpos), static_cast<float>(ypos) };
 	}
 
 	float LinuxInput::getMouseXImpl() {
