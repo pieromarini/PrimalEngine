@@ -12,7 +12,7 @@
 
 #include "primal/input.h"
 #include "primal/keyCodes.h"
-#include "primal/mouseButtonCodes.h"
+#include "primal/mouseCodes.h"
 
 #include "primal/events/event.h"
 #include "primal/events/applicationEvent.h"

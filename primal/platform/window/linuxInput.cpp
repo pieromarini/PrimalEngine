@@ -1,6 +1,6 @@
 #include <GLFW/glfw3.h>
 
-#include "primal/application.h"
+#include "../../primal/application.h"
 #include "linuxInput.h"
 
 namespace primal {
@@ -8,15 +8,15 @@ namespace primal {
 	Input* Input::s_Instance = new LinuxInput();
 
 	// NOTE: should probably cache the Window.
-	bool LinuxInput::isKeyPressedImpl(int keycode) {
+	bool LinuxInput::isKeyPressedImpl(KeyCode keycode) {
 		auto window = static_cast<GLFWwindow*>(Application::get().getWindow().getNativeWindow());
-		auto state = glfwGetKey(window, keycode);
+		auto state = glfwGetKey(window, static_cast<int32_t>(keycode));
 		return state == GLFW_PRESS || state == GLFW_REPEAT;
 	}
 
-	bool LinuxInput::isMouseButtonPressedImpl(int button) {
+	bool LinuxInput::isMouseButtonPressedImpl(MouseCode button) {
 		auto window = static_cast<GLFWwindow*>(Application::get().getWindow().getNativeWindow());
-		auto state = glfwGetMouseButton(window, button);
+		auto state = glfwGetMouseButton(window, static_cast<int32_t>(button));
 		return state == GLFW_PRESS;
 	}
 

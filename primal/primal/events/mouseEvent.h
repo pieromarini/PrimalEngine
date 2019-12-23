@@ -1,6 +1,7 @@
 #pragma once
 
 #include "event.h"
+#include "../input.h"
 
 namespace primal {
 
@@ -44,19 +45,18 @@ namespace primal {
 
   class PRIMAL_API MouseButtonEvent : public Event {
 	public:
-	  inline int getMouseButton() const { return m_Button; }
+	  inline MouseCode getMouseButton() const { return m_Button; }
 
 	  EVENT_CLASS_CATEGORY(EventCategoryMouse | EventCategoryInput)
 	protected:
-	  MouseButtonEvent(int button) : m_Button(button) {}
+	  MouseButtonEvent(MouseCode button) : m_Button(button) {}
 
-	  int m_Button;
+	  MouseCode m_Button;
   };
 
-  class PRIMAL_API MouseButtonPressedEvent : public MouseButtonEvent
-  {
+  class PRIMAL_API MouseButtonPressedEvent : public MouseButtonEvent {
 	public:
-	  MouseButtonPressedEvent(int button) : MouseButtonEvent(button) {}
+	  MouseButtonPressedEvent(MouseCode button) : MouseButtonEvent(button) {}
 
 	  std::string toString() const override {
 		std::stringstream ss;
@@ -69,7 +69,7 @@ namespace primal {
 
   class PRIMAL_API MouseButtonReleasedEvent : public MouseButtonEvent {
 	public:
-	  MouseButtonReleasedEvent(int button) : MouseButtonEvent(button) {}
+	  MouseButtonReleasedEvent(MouseCode button) : MouseButtonEvent(button) {}
 
 	  std::string toString() const override {
 		std::stringstream ss;
