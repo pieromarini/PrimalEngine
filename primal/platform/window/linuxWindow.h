@@ -15,31 +15,31 @@ namespace primal {
 
 	  void onUpdate() override;
 
-	  inline unsigned int getWidth() const override { return m_Data.width; }
-	  inline unsigned int getHeight() const override { return m_Data.height; }
+	  inline unsigned int getWidth() const override { return m_data.width; }
+	  inline unsigned int getHeight() const override { return m_data.height; }
 
 	  // Window attributes
-	  inline void setEventCallback(const EventCallbackFn& callback) override { m_Data.eventCallback = callback; }
+	  inline void setEventCallback(const eventCallbackFunc& callback) override { m_data.eventCallback = callback; }
 	  void setVSync(bool enabled) override;
 	  bool isVSync() const override;
 
-	  inline virtual void* getNativeWindow() const override { return m_Window; }
+	  inline virtual void* getNativeWindow() const override { return m_window; }
 	private:
 	  virtual void init(const WindowProps& props);
 	  virtual void shutdown();
 	private:
-	  GLFWwindow* m_Window;
-	  GraphicsContext* m_Context;
+	  GLFWwindow* m_window;
+	  GraphicsContext* m_context;
 
 	  struct WindowData {
 		std::string title;
 		unsigned int width, height;
 		bool vSync;
 
-		EventCallbackFn eventCallback;
+		eventCallbackFunc eventCallback;
 	  };
 
-	  WindowData m_Data;
+	  WindowData m_data;
   };
 
 }

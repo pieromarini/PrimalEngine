@@ -6,21 +6,21 @@ namespace primal {
 
   class PRIMAL_API WindowResizeEvent : public Event {
 	public:
-	  WindowResizeEvent(unsigned int width, unsigned int height) : m_Width(width), m_Height(height) {}
+	  WindowResizeEvent(unsigned int width, unsigned int height) : m_width(width), m_height(height) {}
 
-	  inline unsigned int getWidth() const { return m_Width; }
-	  inline unsigned int getHeight() const { return m_Height; }
+	  inline unsigned int getWidth() const { return m_width; }
+	  inline unsigned int getHeight() const { return m_height; }
 
 	  std::string toString() const override {
 		std::stringstream ss;
-		ss << "WindowResizeEvent: " << m_Width << ", " << m_Height;
+		ss << "WindowResizeEvent: " << m_width << ", " << m_height;
 		return ss.str();
 	  }
 
 	  EVENT_CLASS_TYPE(WindowResize)
 	  EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	private:
-	  unsigned int m_Width, m_Height;
+	  unsigned int m_width, m_height;
   };
 
   class PRIMAL_API WindowCloseEvent : public Event {

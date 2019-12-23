@@ -15,12 +15,12 @@ namespace primal {
 	  virtual void addVertexBuffer(const ref_ptr<VertexBuffer>& vertexBuffer) override;
 	  virtual void setIndexBuffer(const ref_ptr<IndexBuffer>& indexBuffer) override;
 
-	  virtual const std::vector<ref_ptr<VertexBuffer>>& getVertexBuffers() const override { return m_VertexBuffers; }
-	  virtual const ref_ptr<IndexBuffer>& getIndexBuffer() const override { return m_IndexBuffer; }
+	  virtual const std::vector<ref_ptr<VertexBuffer>>& getVertexBuffers() const override { return m_vertexBuffers; }
+	  virtual const ref_ptr<IndexBuffer>& getIndexBuffer() const override { return m_indexBuffer; }
 	private:
-	  uint32_t m_RendererID;
-	  std::vector<ref_ptr<VertexBuffer>> m_VertexBuffers;
-	  ref_ptr<IndexBuffer> m_IndexBuffer;
+	  uint32_t m_rendererID;
+	  std::vector<ref_ptr<VertexBuffer>> m_vertexBuffers;
+	  ref_ptr<IndexBuffer> m_indexBuffer;
   };
 
 }
