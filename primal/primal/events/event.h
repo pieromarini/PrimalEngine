@@ -52,21 +52,21 @@ namespace primal {
 
   class EventDispatcher {
 	template<typename T>
-	using EventFn = std::function<bool(T&)>;
+	using eventFunc = std::function<bool(T&)>;
 
 	public:
-	  EventDispatcher(Event& event) : m_Event(event) { }
+	  EventDispatcher(Event& event) : m_event(event) { }
 
 	  template<typename T>
-	  bool dispatch(EventFn<T> func) {
-		if (m_Event.getEventType() == T::getStaticType()) {
-		  m_Event.Handled = func(*(T*)&m_Event); // Prettier way?
+	  bool dispatch(eventFunc<T> func) {
+		if (m_event.getEventType() == T::getStaticType()) {
+		  m_event.Handled = func(*(T*)&m_event); // Prettier way?
 		  return true;
 		}
 		return false;
 	  }
 	private:
-	  Event& m_Event;
+	  Event& m_event;
   };
 
   inline std::ostream& operator<<(std::ostream& os, const Event& e) {

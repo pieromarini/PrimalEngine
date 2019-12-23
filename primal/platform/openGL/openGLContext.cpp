@@ -6,12 +6,12 @@
 
 namespace primal {
 
-  OpenGLContext::OpenGLContext(GLFWwindow* windowHandle) : m_WindowHandle(windowHandle) {
+  OpenGLContext::OpenGLContext(GLFWwindow* windowHandle) : m_windowHandle(windowHandle) {
 	PRIMAL_CORE_ASSERT(windowHandle, "Window handle is null!")
   }
 
   void OpenGLContext::init() {
-	glfwMakeContextCurrent(m_WindowHandle);
+	glfwMakeContextCurrent(m_windowHandle);
 	int status = gladLoadGL(glfwGetProcAddress);
 	PRIMAL_CORE_ASSERT(status, "Failed to initialize Glad!");
 
@@ -23,7 +23,7 @@ namespace primal {
   }
 
   void OpenGLContext::swapBuffers() {
-	glfwSwapBuffers(m_WindowHandle);
+	glfwSwapBuffers(m_windowHandle);
   }
 
 }

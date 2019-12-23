@@ -7,30 +7,30 @@ namespace primal {
 
   class PRIMAL_API KeyEvent : public Event {
 	public:
-	  inline KeyCode getKeyCode() const { return m_KeyCode; }
+	  inline KeyCode getKeyCode() const { return m_keyCode; }
 
 	  EVENT_CLASS_CATEGORY(EventCategoryKeyboard | EventCategoryInput)
 	protected:
-	  KeyEvent(KeyCode keycode) : m_KeyCode(keycode) {}
+	  KeyEvent(KeyCode keycode) : m_keyCode(keycode) {}
 
-	  KeyCode m_KeyCode;
+	  KeyCode m_keyCode;
   };
 
   class PRIMAL_API KeyPressedEvent : public KeyEvent {
 	public:
-	  KeyPressedEvent(KeyCode keycode, int repeatCount) : KeyEvent(keycode), m_RepeatCount(repeatCount) {}
+	  KeyPressedEvent(KeyCode keycode, int repeatCount) : KeyEvent(keycode), m_repeatCount(repeatCount) {}
 
-	  inline int getRepeatCount() const { return m_RepeatCount; }
+	  inline int getRepeatCount() const { return m_repeatCount; }
 
 	  std::string toString() const override {
 		std::stringstream ss;
-		ss << "KeyPressedEvent: " << m_KeyCode << " (" << m_RepeatCount << " repeats)";
+		ss << "KeyPressedEvent: " << m_keyCode << " (" << m_repeatCount << " repeats)";
 		return ss.str();
 	  }
 
 	  EVENT_CLASS_TYPE(KeyPressed)
 	private:
-	  int m_RepeatCount;
+	  int m_repeatCount;
   };
 
   class PRIMAL_API KeyReleasedEvent : public KeyEvent {
@@ -39,7 +39,7 @@ namespace primal {
 
 	  std::string toString() const override {
 		std::stringstream ss;
-		ss << "KeyReleasedEvent: " << m_KeyCode;
+		ss << "KeyReleasedEvent: " << m_keyCode;
 		return ss.str();
 	  }
 
@@ -52,7 +52,7 @@ namespace primal {
 
 	  std::string toString() const override {
 		std::stringstream ss;
-		ss << "KeyTypedEvent: " << m_KeyCode;
+		ss << "KeyTypedEvent: " << m_keyCode;
 		return ss.str();
 	  }
 

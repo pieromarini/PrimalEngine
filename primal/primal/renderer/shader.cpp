@@ -57,8 +57,8 @@ namespace primal {
 	  return;
 	}
 
-	m_RendererID = glCreateProgram();
-	GLuint program = m_RendererID;
+	m_rendererID = glCreateProgram();
+	GLuint program = m_rendererID;
 
 	glAttachShader(program, vertexShader);
 	glAttachShader(program, fragmentShader);
@@ -88,11 +88,11 @@ namespace primal {
   }
 
   Shader::~Shader() {
-	glDeleteProgram(m_RendererID);
+	glDeleteProgram(m_rendererID);
   }
 
   void Shader::bind() const {
-	glUseProgram(m_RendererID);
+	glUseProgram(m_rendererID);
   }
 
   void Shader::unbind() const {
@@ -100,7 +100,7 @@ namespace primal {
   }
 
   void Shader::uploadUniformMat4(const std::string& name, const glm::mat4& matrix) {
-	GLint location = glGetUniformLocation(m_RendererID, name.c_str());
+	GLint location = glGetUniformLocation(m_rendererID, name.c_str());
 	glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(matrix));
   }
 

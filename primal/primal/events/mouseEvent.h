@@ -7,29 +7,29 @@ namespace primal {
 
   class PRIMAL_API MouseMovedEvent : public Event {
 	public:
-	  MouseMovedEvent(float x, float y) : m_MouseX(x), m_MouseY(y) {}
+	  MouseMovedEvent(float x, float y) : m_mouseX(x), m_mouseY(y) {}
 
-	  inline float getX() const { return m_MouseX; }
-	  inline float getY() const { return m_MouseY; }
+	  inline float getX() const { return m_mouseX; }
+	  inline float getY() const { return m_mouseY; }
 
 	  std::string toString() const override {
 		std::stringstream ss;
-		ss << "MouseMovedEvent: " << m_MouseX << ", " << m_MouseY;
+		ss << "MouseMovedEvent: " << m_mouseX << ", " << m_mouseY;
 		return ss.str();
 	  }
 
 	  EVENT_CLASS_TYPE(MouseMoved)
 	  EVENT_CLASS_CATEGORY(EventCategoryMouse | EventCategoryInput)
 	private:
-	  float m_MouseX, m_MouseY;
+	  float m_mouseX, m_mouseY;
   };
 
   class PRIMAL_API MouseScrolledEvent : public Event {
 	public:
-	  MouseScrolledEvent(float xOffset, float yOffset) : m_XOffset(xOffset), m_YOffset(yOffset) {}
+	  MouseScrolledEvent(float xOffset, float yOffset) : m_xOffset(xOffset), m_yOffset(yOffset) {}
 
-	  inline float getXOffset() const { return m_XOffset; }
-	  inline float getYOffset() const { return m_YOffset; }
+	  inline float getXOffset() const { return m_xOffset; }
+	  inline float getYOffset() const { return m_yOffset; }
 
 	  std::string toString() const override {
 		std::stringstream ss;
@@ -40,18 +40,18 @@ namespace primal {
 	  EVENT_CLASS_TYPE(MouseScrolled)
 	  EVENT_CLASS_CATEGORY(EventCategoryMouse | EventCategoryInput)
 	private:
-	  float m_XOffset, m_YOffset;
+	  float m_xOffset, m_yOffset;
   };
 
   class PRIMAL_API MouseButtonEvent : public Event {
 	public:
-	  inline MouseCode getMouseButton() const { return m_Button; }
+	  inline MouseCode getMouseButton() const { return m_button; }
 
 	  EVENT_CLASS_CATEGORY(EventCategoryMouse | EventCategoryInput)
 	protected:
-	  MouseButtonEvent(MouseCode button) : m_Button(button) {}
+	  MouseButtonEvent(MouseCode button) : m_button(button) {}
 
-	  MouseCode m_Button;
+	  MouseCode m_button;
   };
 
   class PRIMAL_API MouseButtonPressedEvent : public MouseButtonEvent {
@@ -60,7 +60,7 @@ namespace primal {
 
 	  std::string toString() const override {
 		std::stringstream ss;
-		ss << "MouseButtonPressedEvent: " << m_Button;
+		ss << "MouseButtonPressedEvent: " << m_button;
 		return ss.str();
 	  }
 
@@ -73,7 +73,7 @@ namespace primal {
 
 	  std::string toString() const override {
 		std::stringstream ss;
-		ss << "MouseButtonReleasedEvent: " << m_Button;
+		ss << "MouseButtonReleasedEvent: " << m_button;
 		return ss.str();
 	  }
 
