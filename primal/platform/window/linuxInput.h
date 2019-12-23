@@ -2,7 +2,7 @@
 
 #include <utility>
 
-#include "../../primal/input.h"
+#include "../../primal/core/input.h"
 
 namespace primal {
 

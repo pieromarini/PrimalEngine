@@ -3,7 +3,7 @@
 #include <string>
 #include <GLFW/glfw3.h>
 
-#include "../../primal/window.h"
+#include "../../primal/core/window.h"
 #include "../../primal/renderer/graphicsContext.h"
 
 namespace primal {

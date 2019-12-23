@@ -1,18 +1,18 @@
 #pragma once 
 
-#include "primal/log.h"
+#include "primal/core/log.h"
 
-#include "primal/core.h"
-#include "primal/application.h"
+#include "primal/core/core.h"
+#include "primal/core/application.h"
 
 #include "primal/core/timestep.h"
 
-#include "primal/window.h"
-#include "primal/layerStack.h"
+#include "primal/core/window.h"
+#include "primal/core/layerStack.h"
 
-#include "primal/input.h"
-#include "primal/keyCodes.h"
-#include "primal/mouseCodes.h"
+#include "primal/core/input.h"
+#include "primal/core/keyCodes.h"
+#include "primal/core/mouseCodes.h"
 
 #include "primal/events/event.h"
 #include "primal/events/applicationEvent.h"
@@ -27,4 +27,4 @@
 #include "primal/renderer/orthographicCamera.h"
 
 /* ******************************************************* */
-#include "primal/entryPoint.h"
+#include "primal/core/entryPoint.h"

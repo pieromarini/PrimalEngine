@@ -1,10 +1,10 @@
 #include "linuxWindow.h"
 
-#include "../../primal/log.h"
+#include "../../primal/core/log.h"
 #include "../../primal/events/applicationEvent.h"
 #include "../../primal/events/mouseEvent.h"
 #include "../../primal/events/keyEvent.h"
-#include "../../primal/input.h"
+#include "../../primal/core/input.h"
 
 #include "../openGL/openGLContext.h"
 

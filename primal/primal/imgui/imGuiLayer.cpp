@@ -6,7 +6,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
-#include "../application.h"
+#include "../core/application.h"
 
 #include "imGuiLayer.h"
 

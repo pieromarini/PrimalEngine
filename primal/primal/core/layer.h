@@ -1,8 +1,8 @@
 #pragma once
 
 #include "core.h"
-#include "core/timestep.h"
-#include "events/event.h"
+#include "timestep.h"
+#include "../events/event.h"
 
 namespace primal { 
 

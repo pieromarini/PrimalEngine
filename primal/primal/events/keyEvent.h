@@ -1,7 +1,7 @@
 #pragma once
 
 #include "event.h"
-#include "../input.h"
+#include "../core/input.h"
 
 namespace primal {
 

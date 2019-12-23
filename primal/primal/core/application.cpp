@@ -1,11 +1,8 @@
 #include <GLFW/glfw3.h>
 
-#include "log.h"
-#include "input.h"
-#include "events/event.h"
-#include "renderer/renderer.h"
-
 #include "application.h"
+
+#include "../renderer/renderer.h"
 
 namespace primal {
 

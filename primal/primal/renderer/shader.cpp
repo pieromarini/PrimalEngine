@@ -3,7 +3,7 @@
 #include <glad/gl.h>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "../log.h"
+#include "../core/log.h"
 
 #include "shader.h"
 

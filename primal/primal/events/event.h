@@ -3,7 +3,7 @@
 #include <sstream>
 #include <functional>
 
-#include "../core.h"
+#include "../core/core.h"
 
 namespace primal {
 

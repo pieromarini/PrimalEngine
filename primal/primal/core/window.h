@@ -3,7 +3,7 @@
 #include <functional>
 
 #include "core.h"
-#include "events/event.h"
+#include "../events/event.h"
 
 namespace primal {
 

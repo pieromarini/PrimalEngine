@@ -3,7 +3,6 @@
 #include "buffer.h"
 #include "renderer.h"
 #include "rendererAPI.h"
-#include "../log.h"
 #include "../../platform/openGL/openGLBuffer.h"
 
 namespace primal {

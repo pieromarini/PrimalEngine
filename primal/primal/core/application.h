@@ -2,14 +2,16 @@
 
 #include "core.h"
 
+#include "log.h"
+#include "input.h"
 #include "window.h"
 #include "layerStack.h"
-#include "events/event.h"
-#include "events/applicationEvent.h"
+#include "../events/event.h"
+#include "../events/applicationEvent.h"
 
-#include "core/timestep.h"
+#include "timestep.h"
 
-#include "imgui/imGuiLayer.h"
+#include "../imgui/imGuiLayer.h"
 
 namespace primal { 
 
