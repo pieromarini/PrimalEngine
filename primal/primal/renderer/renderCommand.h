@@ -16,7 +16,7 @@ namespace primal {
 		s_RendererAPI->clear();
 	  }
 
-	  inline static void drawIndexed(const std::shared_ptr<VertexArray>& vertexArray) {
+	  inline static void drawIndexed(const ref_ptr<VertexArray>& vertexArray) {
 		s_RendererAPI->drawIndexed(vertexArray);
 	  }
 	private:

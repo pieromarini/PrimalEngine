@@ -6,8 +6,8 @@
 
 namespace primal {
 
-  std::shared_ptr<spdlog::logger> Log::s_CoreLogger;
-  std::shared_ptr<spdlog::logger> Log::s_ClientLogger;
+  ref_ptr<spdlog::logger> Log::s_CoreLogger;
+  ref_ptr<spdlog::logger> Log::s_ClientLogger;
 
   void Log::init() {
 	spdlog::set_pattern("%^[%T] %n: %v%$");

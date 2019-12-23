@@ -17,7 +17,7 @@ namespace primal {
 	PRIMAL_CORE_ASSERT(!s_Instance, "Application already exists!");
 	s_Instance = this;
 
-	m_Window = std::unique_ptr<Window>(Window::create());
+	m_Window = scope_ptr<Window>(Window::create());
 	m_Window->setEventCallback(BIND_EVENT_FN(onEvent));
 
 	m_ImGuiLayer = new ImGuiLayer();

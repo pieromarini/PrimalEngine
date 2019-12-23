@@ -1,7 +1,5 @@
 #pragma once
 
-#include <memory>
-
 #include "core.h"
 
 #include "window.h"
@@ -33,7 +31,7 @@ namespace primal {
 	private:
 	  bool onWindowClose(WindowCloseEvent& e);
 
-	  std::unique_ptr<Window> m_Window;
+	  scope_ptr<Window> m_Window;
 	  ImGuiLayer* m_ImGuiLayer;
 	  bool m_Running = true;
 	  LayerStack m_LayerStack;

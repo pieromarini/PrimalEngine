@@ -39,7 +39,7 @@ namespace primal {
 	glBindVertexArray(0);
   }
 
-  void OpenGLVertexArray::addVertexBuffer(const std::shared_ptr<VertexBuffer>& vertexBuffer) {
+  void OpenGLVertexArray::addVertexBuffer(const ref_ptr<VertexBuffer>& vertexBuffer) {
 	PRIMAL_CORE_ASSERT(vertexBuffer->getLayout().getElements().size(), "Vertex Buffer has no layout!");
 
 	glBindVertexArray(m_RendererID);
@@ -61,7 +61,7 @@ namespace primal {
 	m_VertexBuffers.push_back(vertexBuffer);
   }
 
-  void OpenGLVertexArray::setIndexBuffer(const std::shared_ptr<IndexBuffer>& indexBuffer) {
+  void OpenGLVertexArray::setIndexBuffer(const ref_ptr<IndexBuffer>& indexBuffer) {
 	glBindVertexArray(m_RendererID);
 	indexBuffer->bind();
 

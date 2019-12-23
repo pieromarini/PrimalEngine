@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 // Temporary for local testing.
 // NOTE: Will be defined inside the CMake build system with add_compile_definitions
 #define PRIMAL_PLATFORM_LINUX
@@ -64,3 +66,23 @@
 #define BIT(x) (1 << x)
 
 #define PRIMAL_BIND_EVENT_FN(fn) std::bind(&fn, this, std::placeholders::_1)
+
+namespace primal {
+
+  template<typename T>
+  using scope_ptr = std::unique_ptr<T>;
+
+  template<typename T, typename ... Args>
+  constexpr scope_ptr<T> createScope(Args&& ... args) {
+	return std::make_unique<T>(std::forward<Args>(args)...);
+  }
+
+  template<typename T>
+  using ref_ptr = std::shared_ptr<T>;
+
+  template<typename T, typename ... Args>
+  constexpr ref_ptr<T> createRef(Args&& ... args) {
+	return std::make_shared<T>(std::forward<Args>(args)...);
+  }
+
+}
