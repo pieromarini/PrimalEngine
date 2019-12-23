@@ -44,11 +44,9 @@
 	#endif
 
 	#define PRIMAL_ENABLE_ASSERTS
-#endif // End of Debug settings
+#endif
 
 // Assert statements
-// PRIMAL_ASSERT      will assert the passed statement; if not PRIMAL_ENABLE_ASSERTS will do nothing
-// PRIMAL_ASSERT_CALL will assert the passed statement; if not PRIMAL_ENABLE_ASSERTS will only call the statement
 #if defined PRIMAL_ENABLE_ASSERTS
 	#define PRIMAL_ASSERT(x, ...) { if(!(x)) { PRIMAL_ERROR("Assertion Failed: {0}", __VA_ARGS__); PRIMAL_DEBUGBREAK(); } }
 	#define PRIMAL_CORE_ASSERT(x, ...) { if(!(x)) { PRIMAL_CORE_ERROR("Assertion Failed: {0}", __VA_ARGS__); PRIMAL_DEBUGBREAK(); } }
