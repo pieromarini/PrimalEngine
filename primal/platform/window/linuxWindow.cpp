@@ -29,9 +29,9 @@ namespace primal {
   }
 
   void LinuxWindow::init(const WindowProps& props) {
-	m_Data.title = props.title;
-	m_Data.width = props.width;
-	m_Data.height = props.height;
+	m_data.title = props.title;
+	m_data.width = props.width;
+	m_data.height = props.height;
 
 	PRIMAL_CORE_INFO("Creating window {0} ({1}, {2})", props.title, props.width, props.height);
 
@@ -43,16 +43,16 @@ namespace primal {
 	  s_GLFWInitialized = true;
 	}
 
-	m_Window = glfwCreateWindow(static_cast<int>(props.width), static_cast<int>(props.height), m_Data.title.c_str(), nullptr, nullptr);
+	m_window = glfwCreateWindow(static_cast<int>(props.width), static_cast<int>(props.height), m_data.title.c_str(), nullptr, nullptr);
 
-	m_Context = new OpenGLContext(m_Window);
-	m_Context->init();
+	m_context = new OpenGLContext(m_window);
+	m_context->init();
 
-	glfwSetWindowUserPointer(m_Window, &m_Data);
+	glfwSetWindowUserPointer(m_window, &m_data);
 	setVSync(true);
 
 	// GLFW callbacks
-	glfwSetWindowSizeCallback(m_Window, [](GLFWwindow* window, int width, int height) {
+	glfwSetWindowSizeCallback(m_window, [](GLFWwindow* window, int width, int height) {
 	  WindowData& data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
 	  data.width = width;
 	  data.height = height;
@@ -61,13 +61,13 @@ namespace primal {
 	  data.eventCallback(event);
 	});
 
-	glfwSetWindowCloseCallback(m_Window, [](GLFWwindow* window) {
+	glfwSetWindowCloseCallback(m_window, [](GLFWwindow* window) {
 	  WindowData& data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
 	  WindowCloseEvent event;
 	  data.eventCallback(event);
 	});
 
-	glfwSetKeyCallback(m_Window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
+	glfwSetKeyCallback(m_window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
 	  WindowData& data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
 
 	  switch (action) {
@@ -89,14 +89,14 @@ namespace primal {
 	  }
 	});
 
-	glfwSetCharCallback(m_Window, [](GLFWwindow* window, unsigned int keycode) {
+	glfwSetCharCallback(m_window, [](GLFWwindow* window, unsigned int keycode) {
 	  WindowData& data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
 
 	  KeyTypedEvent event(static_cast<KeyCode>(keycode));
 	  data.eventCallback(event);
 	});
 
-	glfwSetMouseButtonCallback(m_Window, [](GLFWwindow* window, int button, int action, int mods) {
+	glfwSetMouseButtonCallback(m_window, [](GLFWwindow* window, int button, int action, int mods) {
 	  WindowData& data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
 
 	  switch (action) {
@@ -113,14 +113,14 @@ namespace primal {
 	  }
 	});
 
-	glfwSetScrollCallback(m_Window, [](GLFWwindow* window, double xOffset, double yOffset) {
+	glfwSetScrollCallback(m_window, [](GLFWwindow* window, double xOffset, double yOffset) {
 	  WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
 
 	  MouseScrolledEvent event(static_cast<float>(xOffset), static_cast<float>(yOffset));
 	  data.eventCallback(event);
 	});
 
-	glfwSetCursorPosCallback(m_Window, [](GLFWwindow* window, double xPos, double yPos) {
+	glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, double xPos, double yPos) {
 	  WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
 
 	  MouseMovedEvent event(static_cast<float>(xPos), static_cast<float>(yPos));
@@ -129,12 +129,12 @@ namespace primal {
   }
 
   void LinuxWindow::shutdown() {
-	glfwDestroyWindow(m_Window);
+	glfwDestroyWindow(m_window);
   }
 
   void LinuxWindow::onUpdate() {
 	glfwPollEvents();
-	m_Context->swapBuffers();
+	m_context->swapBuffers();
   }
 
   void LinuxWindow::setVSync(bool enabled) {
@@ -143,11 +143,11 @@ namespace primal {
 	else
 	  glfwSwapInterval(0);
 
-	m_Data.vSync = enabled;
+	m_data.vSync = enabled;
   }
 
   bool LinuxWindow::isVSync() const {
-	return m_Data.vSync;
+	return m_data.vSync;
   }
 
 }

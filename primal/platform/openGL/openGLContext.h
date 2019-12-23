@@ -13,7 +13,7 @@ namespace primal {
 	  virtual void init() override;
 	  virtual void swapBuffers() override;
 	private:
-	  GLFWwindow* m_WindowHandle;
+	  GLFWwindow* m_windowHandle;
   };
 
 }

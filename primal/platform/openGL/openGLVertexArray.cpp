@@ -24,15 +24,15 @@ namespace primal {
   }
 
   OpenGLVertexArray::OpenGLVertexArray() {
-	glCreateVertexArrays(1, &m_RendererID);
+	glCreateVertexArrays(1, &m_rendererID);
   }
 
   OpenGLVertexArray::~OpenGLVertexArray() {
-	glDeleteVertexArrays(1, &m_RendererID);
+	glDeleteVertexArrays(1, &m_rendererID);
   }
 
   void OpenGLVertexArray::bind() const {
-	glBindVertexArray(m_RendererID);
+	glBindVertexArray(m_rendererID);
   }
 
   void OpenGLVertexArray::unbind() const {
@@ -42,7 +42,7 @@ namespace primal {
   void OpenGLVertexArray::addVertexBuffer(const ref_ptr<VertexBuffer>& vertexBuffer) {
 	PRIMAL_CORE_ASSERT(vertexBuffer->getLayout().getElements().size(), "Vertex Buffer has no layout!");
 
-	glBindVertexArray(m_RendererID);
+	glBindVertexArray(m_rendererID);
 	vertexBuffer->bind();
 
 	uint32_t index = 0;
@@ -58,14 +58,14 @@ namespace primal {
 	  index++;
 	}
 
-	m_VertexBuffers.push_back(vertexBuffer);
+	m_vertexBuffers.push_back(vertexBuffer);
   }
 
   void OpenGLVertexArray::setIndexBuffer(const ref_ptr<IndexBuffer>& indexBuffer) {
-	glBindVertexArray(m_RendererID);
+	glBindVertexArray(m_rendererID);
 	indexBuffer->bind();
 
-	m_IndexBuffer = indexBuffer;
+	m_indexBuffer = indexBuffer;
   }
 
 }

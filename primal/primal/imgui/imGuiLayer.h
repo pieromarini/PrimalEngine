@@ -20,7 +20,7 @@ namespace primal {
 	  void begin();
 	  void end();
 	private:
-	  float m_Time = 0.0f;
+	  float m_time = 0.0f;
   };
 
 }
