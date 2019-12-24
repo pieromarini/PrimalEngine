@@ -5,7 +5,7 @@
 
 namespace primal {
 
-  class PRIMAL_API MouseMovedEvent : public Event {
+  class MouseMovedEvent : public Event {
 	public:
 	  MouseMovedEvent(float x, float y) : m_mouseX(x), m_mouseY(y) {}
 
@@ -24,7 +24,7 @@ namespace primal {
 	  float m_mouseX, m_mouseY;
   };
 
-  class PRIMAL_API MouseScrolledEvent : public Event {
+  class MouseScrolledEvent : public Event {
 	public:
 	  MouseScrolledEvent(float xOffset, float yOffset) : m_xOffset(xOffset), m_yOffset(yOffset) {}
 
@@ -43,7 +43,7 @@ namespace primal {
 	  float m_xOffset, m_yOffset;
   };
 
-  class PRIMAL_API MouseButtonEvent : public Event {
+  class MouseButtonEvent : public Event {
 	public:
 	  inline MouseCode getMouseButton() const { return m_button; }
 
@@ -54,7 +54,7 @@ namespace primal {
 	  MouseCode m_button;
   };
 
-  class PRIMAL_API MouseButtonPressedEvent : public MouseButtonEvent {
+  class MouseButtonPressedEvent : public MouseButtonEvent {
 	public:
 	  MouseButtonPressedEvent(MouseCode button) : MouseButtonEvent(button) {}
 
@@ -67,7 +67,7 @@ namespace primal {
 	  EVENT_CLASS_TYPE(MouseButtonPressed)
   };
 
-  class PRIMAL_API MouseButtonReleasedEvent : public MouseButtonEvent {
+  class MouseButtonReleasedEvent : public MouseButtonEvent {
 	public:
 	  MouseButtonReleasedEvent(MouseCode button) : MouseButtonEvent(button) {}
 

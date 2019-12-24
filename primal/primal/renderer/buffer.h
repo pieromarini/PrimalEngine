@@ -35,10 +35,10 @@ namespace primal {
 	std::string name;
 	ShaderDataType type;
 	uint32_t size;
-	uint32_t offset;
+	size_t offset;
 	bool normalized;
 
-	BufferElement() {}
+	BufferElement() = default;
 
 	BufferElement(ShaderDataType type, const std::string& name, bool normalized = false)
 	  : name(name), type(type), size(ShaderDataTypeSize(type)), offset(0), normalized(normalized) { }
@@ -65,33 +65,32 @@ namespace primal {
 
   class BufferLayout {
 	public:
-	  BufferLayout() {}
+	  BufferLayout() = default;
 
-	  BufferLayout(const std::initializer_list<BufferElement>& elements)
-		: m_elements(elements) {
+	  BufferLayout(const std::initializer_list<BufferElement>& elements) : m_Elements(elements) {
 		calculateOffsetsAndStride();
 	  }
 
-	  inline uint32_t getStride() const { return m_stride; }
-	  inline const std::vector<BufferElement>& getElements() const { return m_elements; }
+	  inline uint32_t getStride() const { return m_Stride; }
+	  inline const std::vector<BufferElement>& getElements() const { return m_Elements; }
 
-	  std::vector<BufferElement>::iterator begin() { return m_elements.begin(); }
-	  std::vector<BufferElement>::iterator end() { return m_elements.end(); }
-	  std::vector<BufferElement>::const_iterator begin() const { return m_elements.begin(); }
-	  std::vector<BufferElement>::const_iterator end() const { return m_elements.end(); }
+	  std::vector<BufferElement>::iterator begin() { return m_Elements.begin(); }
+	  std::vector<BufferElement>::iterator end() { return m_Elements.end(); }
+	  std::vector<BufferElement>::const_iterator begin() const { return m_Elements.begin(); }
+	  std::vector<BufferElement>::const_iterator end() const { return m_Elements.end(); }
 	private:
 	  void calculateOffsetsAndStride() {
-		uint32_t offset = 0;
-		m_stride = 0;
-		for (auto& element : m_elements) {
+		size_t offset = 0;
+		m_Stride = 0;
+		for (auto& element : m_Elements) {
 		  element.offset = offset;
 		  offset += element.size;
-		  m_stride += element.size;
+		  m_Stride += element.size;
 		}
 	  }
 
-	  std::vector<BufferElement> m_elements;
-	  uint32_t m_stride = 0;
+	  std::vector<BufferElement> m_Elements;
+	  uint32_t m_Stride = 0;
   };
 
   class VertexBuffer {
@@ -104,7 +103,7 @@ namespace primal {
 	  virtual const BufferLayout& getLayout() const = 0;
 	  virtual void setLayout(const BufferLayout& layout) = 0;
 
-	  static VertexBuffer* create(float* vertices, uint32_t size);
+	  static ref_ptr<VertexBuffer> create(float* vertices, uint32_t size);
   };
 
   class IndexBuffer {
@@ -116,7 +115,7 @@ namespace primal {
 
 	  virtual uint32_t getCount() const = 0;
 
-	  static IndexBuffer* create(uint32_t* indices, uint32_t size);
+	  static ref_ptr<IndexBuffer> create(uint32_t* indices, uint32_t size);
   };
 
 }

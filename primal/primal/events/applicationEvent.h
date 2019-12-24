@@ -4,7 +4,7 @@
 
 namespace primal {
 
-  class PRIMAL_API WindowResizeEvent : public Event {
+  class WindowResizeEvent : public Event {
 	public:
 	  WindowResizeEvent(unsigned int width, unsigned int height) : m_width(width), m_height(height) {}
 
@@ -23,7 +23,7 @@ namespace primal {
 	  unsigned int m_width, m_height;
   };
 
-  class PRIMAL_API WindowCloseEvent : public Event {
+  class WindowCloseEvent : public Event {
 	public:
 	  WindowCloseEvent() {}
 
@@ -31,7 +31,7 @@ namespace primal {
 	  EVENT_CLASS_CATEGORY(EventCategoryApplication)
   };
 
-  class PRIMAL_API AppTickEvent : public Event {
+  class AppTickEvent : public Event {
 	public:
 	  AppTickEvent() {}
 
@@ -39,7 +39,7 @@ namespace primal {
 	  EVENT_CLASS_CATEGORY(EventCategoryApplication)
   };
 
-  class PRIMAL_API AppUpdateEvent : public Event {
+  class AppUpdateEvent : public Event {
 	public:
 	  AppUpdateEvent() {}
 
@@ -47,7 +47,7 @@ namespace primal {
 	  EVENT_CLASS_CATEGORY(EventCategoryApplication)
   };
 
-  class PRIMAL_API AppRenderEvent : public Event {
+  class AppRenderEvent : public Event {
 	public:
 	  AppRenderEvent() {}
 

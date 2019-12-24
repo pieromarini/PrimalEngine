@@ -6,15 +6,15 @@
 
 namespace primal {
 
-  class PRIMAL_API Log {
+  class Log {
 	public:
 	  static void init();
 
-	  inline static ref_ptr<spdlog::logger>& getCoreLogger() { return s_CoreLogger; }
-	  inline static ref_ptr<spdlog::logger>& getClientLogger() { return s_ClientLogger; }
+	  inline static ref_ptr<spdlog::logger>& getCoreLogger() { return s_coreLogger; }
+	  inline static ref_ptr<spdlog::logger>& getClientLogger() { return s_clientLogger; }
 	private:
-	  static ref_ptr<spdlog::logger> s_CoreLogger;
-	  static ref_ptr<spdlog::logger> s_ClientLogger;
+	  static ref_ptr<spdlog::logger> s_coreLogger;
+	  static ref_ptr<spdlog::logger> s_clientLogger;
   };
 
 }

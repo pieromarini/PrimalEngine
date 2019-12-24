@@ -17,7 +17,7 @@ namespace primal {
   };
 
   // Interface for a platform-independent Window representation
-  class PRIMAL_API Window {
+  class Window {
 	public:
 	  using eventCallbackFunc = std::function<void(Event&)>;
 

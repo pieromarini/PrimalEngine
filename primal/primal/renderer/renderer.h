@@ -9,6 +9,11 @@ namespace primal {
 
   class Renderer {
 	public:
+	  static void init();
+	  static void shutdown();
+
+	  static void onWindowResize(uint32_t width, uint32_t height);
+
 	  static void beginScene(OrthographicCamera& camera);
 	  static void endScene();
 
@@ -20,7 +25,7 @@ namespace primal {
 		glm::mat4 viewProjectionMatrix;
 	  };
 
-	  static SceneData* s_SceneData;
+	  static SceneData* s_sceneData;
   };
 
 

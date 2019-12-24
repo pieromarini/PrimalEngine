@@ -4,6 +4,6 @@
 
 namespace primal {
 
-  RendererAPI* RenderCommand::s_RendererAPI = new OpenGLRendererAPI;
+  RendererAPI* RenderCommand::s_rendererAPI = new OpenGLRendererAPI;
 
 }

@@ -8,11 +8,12 @@
 #include "primal/core/timestep.h"
 
 #include "primal/core/window.h"
-#include "primal/core/layerStack.h"
+#include "primal/core/layer.h"
 
 #include "primal/core/input.h"
 #include "primal/core/keyCodes.h"
 #include "primal/core/mouseCodes.h"
+#include "primal/renderer/orthographicCameraController.h"
 
 #include "primal/events/event.h"
 #include "primal/events/applicationEvent.h"
@@ -20,11 +21,12 @@
 #include "primal/events/mouseEvent.h"
 
 #include "primal/renderer/renderer.h"
+#include "primal/renderer/renderer2D.h"
 #include "primal/renderer/renderCommand.h"
+
 #include "primal/renderer/buffer.h"
 #include "primal/renderer/shader.h"
+#include "primal/renderer/texture.h"
 #include "primal/renderer/vertexArray.h"
-#include "primal/renderer/orthographicCamera.h"
 
-/* ******************************************************* */
-#include "primal/core/entryPoint.h"
+#include "primal/renderer/orthographicCamera.h"

@@ -20,7 +20,7 @@ namespace primal {
 	  virtual const std::vector<ref_ptr<VertexBuffer>>& getVertexBuffers() const = 0;
 	  virtual const ref_ptr<IndexBuffer>& getIndexBuffer() const = 0;
 
-	  static VertexArray* create();
+	  static ref_ptr<VertexArray> create();
   };
 
 }

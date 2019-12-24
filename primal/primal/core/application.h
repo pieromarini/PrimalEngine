@@ -1,8 +1,8 @@
 #pragma once
 
+#include "log.h"
 #include "core.h"
 
-#include "log.h"
 #include "input.h"
 #include "window.h"
 #include "layerStack.h"
@@ -18,7 +18,7 @@ namespace primal {
   class Application {
 	public:
 	  Application();
-	  virtual ~Application() = default;
+	  virtual ~Application();
 
 	  void run();
 
@@ -28,14 +28,16 @@ namespace primal {
 	  void pushOverlay(Layer* layer);
 
 	  inline Window& getWindow() { return *m_window; }
-
 	  inline static Application& get() { return *s_instance; }
+
 	private:
 	  bool onWindowClose(WindowCloseEvent& e);
+	  bool onWindowResize(WindowResizeEvent& e);
 
 	  scope_ptr<Window> m_window;
 	  ImGuiLayer* m_imGuiLayer;
 	  bool m_running = true;
+	  bool m_minimized = false;
 	  LayerStack m_layerStack;
 	  float m_lastFrameTime = 0.0f;
 
