@@ -36,7 +36,7 @@ namespace primal {
 
 #define EVENT_CLASS_CATEGORY(category) virtual int getCategoryFlags() const override { return category; }
 
-  class PRIMAL_API Event {
+  class Event {
 	public:
 	  bool Handled = false;
 

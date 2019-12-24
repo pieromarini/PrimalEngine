@@ -4,104 +4,64 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "../core/log.h"
+#include "renderer.h"
+#include "rendererAPI.h"
+
+#include "../../platform/openGL/openGLShader.h"
 
 #include "shader.h"
 
 namespace primal {
 
-  Shader::Shader(const std::string& vertexSrc, const std::string& fragmentSrc) {
-	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-
-	const GLchar* source = vertexSrc.c_str();
-	glShaderSource(vertexShader, 1, &source, 0);
-
-	glCompileShader(vertexShader);
-
-	GLint isCompiled = 0;
-	glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &isCompiled);
-	if (isCompiled == GL_FALSE) {
-	  GLint maxLength = 0;
-	  glGetShaderiv(vertexShader, GL_INFO_LOG_LENGTH, &maxLength);
-
-	  std::vector<GLchar> infoLog(maxLength);
-	  glGetShaderInfoLog(vertexShader, maxLength, &maxLength, &infoLog[0]);
-
-	  // We don't need the shader anymore.
-	  glDeleteShader(vertexShader);
-
-	  PRIMAL_CORE_ERROR("{0}", infoLog.data());
-	  PRIMAL_CORE_ASSERT(false, "Vertex shader compilation failure!");
-	  return;
+  ref_ptr<Shader> Shader::create(const std::string& filepath) {
+	switch (Renderer::getAPI()) {
+	  case RendererAPI::API::None:    PRIMAL_CORE_ASSERT(false, "RendererAPI::None is currently not supported!"); return nullptr;
+	  case RendererAPI::API::OpenGL:  return createRef<OpenGLShader>(filepath);
 	}
 
-	GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+	PRIMAL_CORE_ASSERT(false, "Unknown RendererAPI!");
+	return nullptr;
+  }
 
-	source = fragmentSrc.c_str();
-	glShaderSource(fragmentShader, 1, &source, 0);
-
-	glCompileShader(fragmentShader);
-
-	glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &isCompiled);
-	if (isCompiled == GL_FALSE) {
-	  GLint maxLength = 0;
-	  glGetShaderiv(fragmentShader, GL_INFO_LOG_LENGTH, &maxLength);
-
-	  std::vector<GLchar> infoLog(maxLength);
-	  glGetShaderInfoLog(fragmentShader, maxLength, &maxLength, &infoLog[0]);
-
-	  glDeleteShader(fragmentShader);
-	  glDeleteShader(vertexShader);
-
-	  PRIMAL_CORE_ERROR("{0}", infoLog.data());
-	  PRIMAL_CORE_ASSERT(false, "Fragment shader compilation failure!");
-	  return;
+  ref_ptr<Shader> Shader::create(const std::string& name, const std::string& vertexSrc, const std::string& fragmentSrc) {
+	switch (Renderer::getAPI()) {
+	  case RendererAPI::API::None:    PRIMAL_CORE_ASSERT(false, "RendererAPI::None is currently not supported!"); return nullptr;
+	  case RendererAPI::API::OpenGL:  return createRef<OpenGLShader>(name, vertexSrc, fragmentSrc);
 	}
 
-	m_rendererID = glCreateProgram();
-	GLuint program = m_rendererID;
-
-	glAttachShader(program, vertexShader);
-	glAttachShader(program, fragmentShader);
-
-	glLinkProgram(program);
-
-	GLint isLinked = 0;
-	glGetProgramiv(program, GL_LINK_STATUS, static_cast<int*>(&isLinked));
-	if (isLinked == GL_FALSE) {
-	  GLint maxLength = 0;
-	  glGetProgramiv(program, GL_INFO_LOG_LENGTH, &maxLength);
-
-	  std::vector<GLchar> infoLog(maxLength);
-	  glGetProgramInfoLog(program, maxLength, &maxLength, &infoLog[0]);
-
-	  glDeleteProgram(program);
-	  glDeleteShader(vertexShader);
-	  glDeleteShader(fragmentShader);
-
-	  PRIMAL_CORE_ERROR("{0}", infoLog.data());
-	  PRIMAL_CORE_ASSERT(false, "Shader link failure!");
-	  return;
-	}
-
-	glDetachShader(program, vertexShader);
-	glDetachShader(program, fragmentShader);
+	PRIMAL_CORE_ASSERT(false, "Unknown RendererAPI!");
+	return nullptr;
   }
 
-  Shader::~Shader() {
-	glDeleteProgram(m_rendererID);
+  void ShaderLibrary::add(const std::string& name, const ref_ptr<Shader>& shader) {
+	PRIMAL_CORE_ASSERT(!exists(name), "Shader already exists!");
+	m_shaders[name] = shader;
   }
 
-  void Shader::bind() const {
-	glUseProgram(m_rendererID);
+  void ShaderLibrary::add(const ref_ptr<Shader>& shader) {
+	auto& name = shader->getName();
+	add(name, shader);
   }
 
-  void Shader::unbind() const {
-	glUseProgram(0);
+  ref_ptr<Shader> ShaderLibrary::load(const std::string& filepath) {
+	auto shader = Shader::create(filepath);
+	add(shader);
+	return shader;
   }
 
-  void Shader::uploadUniformMat4(const std::string& name, const glm::mat4& matrix) {
-	GLint location = glGetUniformLocation(m_rendererID, name.c_str());
-	glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(matrix));
+  ref_ptr<Shader> ShaderLibrary::load(const std::string& name, const std::string& filepath) {
+	auto shader = Shader::create(filepath);
+	add(name, shader);
+	return shader;
+  }
+
+  ref_ptr<Shader> ShaderLibrary::get(const std::string& name) {
+	PRIMAL_CORE_ASSERT(exists(name), "Shader not found!");
+	return m_shaders[name];
+  }
+
+  bool ShaderLibrary::exists(const std::string& name) const {
+	return m_shaders.find(name) != m_shaders.end();
   }
 
 }

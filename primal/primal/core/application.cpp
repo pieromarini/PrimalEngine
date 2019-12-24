@@ -6,8 +6,6 @@
 
 namespace primal {
 
-#define BIND_EVENT_FN(x) std::bind(&Application::x, this, std::placeholders::_1)
-
   Application* Application::s_instance = nullptr;
 
   Application::Application() {
@@ -15,7 +13,7 @@ namespace primal {
 	s_instance = this;
 
 	m_window = scope_ptr<Window>(Window::create());
-	m_window->setEventCallback(BIND_EVENT_FN(onEvent));
+	m_window->setEventCallback(PRIMAL_BIND_EVENT_FN(Application::onEvent));
 
 	m_imGuiLayer = new ImGuiLayer();
 	pushOverlay(m_imGuiLayer);
@@ -31,7 +29,8 @@ namespace primal {
 
   void Application::onEvent(Event& e) {
 	EventDispatcher dispatcher(e);
-	dispatcher.dispatch<WindowCloseEvent>(BIND_EVENT_FN(onWindowClose));
+	dispatcher.dispatch<WindowCloseEvent>(PRIMAL_BIND_EVENT_FN(Application::onWindowClose));
+	dispatcher.dispatch<WindowResizeEvent>(PRIMAL_BIND_EVENT_FN(Application::onWindowResize));
 
 	for (auto it = m_layerStack.end(); it != m_layerStack.begin();) {
 	  (*--it)->onEvent(e);
@@ -42,13 +41,14 @@ namespace primal {
 
   void Application::run() {
 	while (m_running) {
-	  // NOTE: Application shouldn't be tied to GLFW. Move to platform
-	  float time = static_cast<float>(glfwGetTime()); 
+	  float time = static_cast<float>(glfwGetTime());
 	  Timestep timestep = time - m_lastFrameTime;
 	  m_lastFrameTime = time;
 
-	  for (Layer* layer : m_layerStack)
-		layer->onUpdate(timestep);
+	  if (!m_minimized) {
+		for (Layer* layer : m_layerStack)
+		  layer->onUpdate(timestep);
+	  }
 
 	  m_imGuiLayer->begin();
 	  for (Layer* layer : m_layerStack)
@@ -62,6 +62,22 @@ namespace primal {
   bool Application::onWindowClose(WindowCloseEvent& e) {
 	m_running = false;
 	return true;
+  }
+
+  bool Application::onWindowResize(WindowResizeEvent& e) {
+	if (e.getWidth() == 0 || e.getHeight() == 0) {
+	  m_minimized = true;
+	  return false;
+	}
+
+	m_minimized = false;
+	Renderer::onWindowResize(e.getWidth(), e.getHeight());
+
+	return false;
+  }
+
+  Application::~Application() {
+	Renderer::shutdown();
   }
 
 }

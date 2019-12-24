@@ -1,26 +1,24 @@
-#include <cstdint>
+#include "texture.h"
 
-#include "buffer.h"
 #include "renderer.h"
-#include "rendererAPI.h"
-#include "../../platform/openGL/openGLBuffer.h"
+#include "../../platform/openGL/openGLTexture.h"
 
 namespace primal {
 
-  ref_ptr<VertexBuffer> VertexBuffer::create(float* vertices, uint32_t size) {
+  ref_ptr<Texture2D> Texture2D::create(uint32_t width, uint32_t height) {
 	switch (Renderer::getAPI()) {
 	  case RendererAPI::API::None:    PRIMAL_CORE_ASSERT(false, "RendererAPI::None is currently not supported!"); return nullptr;
-	  case RendererAPI::API::OpenGL:  return createRef<OpenGLVertexBuffer>(vertices, size);
+	  case RendererAPI::API::OpenGL:  return createRef<OpenGLTexture2D>(width, height);
 	}
 
 	PRIMAL_CORE_ASSERT(false, "Unknown RendererAPI!");
 	return nullptr;
   }
 
-  ref_ptr<IndexBuffer> IndexBuffer::create(uint32_t* indices, uint32_t size) {
+  ref_ptr<Texture2D> Texture2D::create(const std::string& path) {
 	switch (Renderer::getAPI()) {
 	  case RendererAPI::API::None:    PRIMAL_CORE_ASSERT(false, "RendererAPI::None is currently not supported!"); return nullptr;
-	  case RendererAPI::API::OpenGL:  return createRef<OpenGLIndexBuffer>(indices, size);
+	  case RendererAPI::API::OpenGL:  return createRef<OpenGLTexture2D>(path);
 	}
 
 	PRIMAL_CORE_ASSERT(false, "Unknown RendererAPI!");

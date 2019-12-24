@@ -8,7 +8,7 @@
 
 namespace primal {
 
-  class PRIMAL_API Input {
+  class Input {
 	public:
 	  inline static bool isKeyPressed(KeyCode keycode) { return s_Instance->isKeyPressedImpl(keycode); }
 

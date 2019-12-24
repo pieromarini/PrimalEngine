@@ -7,7 +7,7 @@
 
 namespace primal {
 
-  class PRIMAL_API LayerStack {
+  class LayerStack {
 	public:
 	  LayerStack();
 	  ~LayerStack();

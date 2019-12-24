@@ -10,6 +10,8 @@ set(VENDOR_LIB "${CMAKE_CURRENT_SOURCE_DIR}/vendor")
 set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/primal")
 set(SANDBOX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sandbox")
 
+set(OpenGL_GL_PREFERENCE "GLVND")
+
 # Cache Vars
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -27,10 +29,15 @@ file(GLOB_RECURSE SANDBOX_SRCS
 add_subdirectory(${VENDOR_LIB}/glad)
 add_subdirectory(${VENDOR_LIB}/glfw)
 add_subdirectory(${VENDOR_LIB}/imgui)
+add_subdirectory(${VENDOR_LIB}/soil)
+
 
 if(NOT TARGET spdlog)
 	find_package(spdlog REQUIRED)
 endif()
+
+find_package(OpenGL REQUIRED)
+find_library(SOIL SOIL vendor/soil/build/libsoil.a)
 
 include_directories(
 	${SRC_DIR}
@@ -39,13 +46,11 @@ include_directories(
 	${VENDOR_LIB}/imgui
 	${VENDOR_LIB}/glad/include
 	${VENDOR_LIB}/spdlog
+	${VENDOR_LIB}/soil/inc
 )
 
 
 add_library(${PRIMAL_CORE_LIB} STATIC ${CORE_SRCS})
-# add_custom_target(primal_static ALL COMMAND ${CMAKE_AR} rc primal_static.a 
-#	<TARGET_FILE:${PRIMAL_CORE_LIB}>
-# )
 
 add_executable(${SANDBOX_APP} ${SANDBOX_SRCS})
-target_link_libraries(${SANDBOX_APP} ${PRIMAL_CORE_LIB} glfw ${GLFW_LIBRARIES} glad imgui ${IMGUI_LIBRARIES} spdlog::spdlog)
+target_link_libraries(${SANDBOX_APP} ${PRIMAL_CORE_LIB} glfw ${GLFW_LIBRARIES} ${OPENGL_LIBRARY} soil glad imgui ${IMGUI_LIBRARIES} spdlog::spdlog)
