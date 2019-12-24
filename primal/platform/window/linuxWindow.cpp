@@ -5,19 +5,22 @@
 #include "../../primal/events/mouseEvent.h"
 #include "../../primal/events/keyEvent.h"
 #include "../../primal/core/input.h"
+#include "../../primal/renderer/renderer.h"
+#include "../../primal/renderer/rendererAPI.h"
 
 #include "../openGL/openGLContext.h"
+#include <GLFW/glfw3.h>
 
 namespace primal {
 
-  static bool s_GLFWInitialized = false;
+  static uint8_t s_glfwWindowCount = 0;
 
   static void GLFWErrorCallback(int error, const char* description) {
 	PRIMAL_CORE_ERROR("GLFW Error ({0}): {1}", error, description);
   }
 
-  Window* Window::create(const WindowProps& props) {
-	return new LinuxWindow(props);
+  scope_ptr<Window> Window::create(const WindowProps& props) {
+	return createScope<LinuxWindow>(props);
   }
 
   LinuxWindow::LinuxWindow(const WindowProps& props) {
@@ -35,17 +38,20 @@ namespace primal {
 
 	PRIMAL_CORE_INFO("Creating window {0} ({1}, {2})", props.title, props.width, props.height);
 
-	if (!s_GLFWInitialized) {
-	  // TODO: glfwTerminate on system shutdown
+	if (s_glfwWindowCount == 0) {
 	  int success = glfwInit();
 	  PRIMAL_CORE_ASSERT(success, "Could not intialize GLFW!");
 	  glfwSetErrorCallback(GLFWErrorCallback);
-	  s_GLFWInitialized = true;
 	}
+#if defined(PRIMAL_DEBUG)
+	if (Renderer::getAPI() == RendererAPI::API::OpenGL)
+	  glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
+#endif
 
 	m_window = glfwCreateWindow(static_cast<int>(props.width), static_cast<int>(props.height), m_data.title.c_str(), nullptr, nullptr);
+	s_glfwWindowCount++;
 
-	m_context = new OpenGLContext(m_window);
+	m_context = GraphicsContext::create(m_window);
 	m_context->init();
 
 	glfwSetWindowUserPointer(m_window, &m_data);
@@ -130,6 +136,10 @@ namespace primal {
 
   void LinuxWindow::shutdown() {
 	glfwDestroyWindow(m_window);
+	s_glfwWindowCount--;
+
+	if (s_glfwWindowCount == 0)
+	  glfwTerminate();
   }
 
   void LinuxWindow::onUpdate() {

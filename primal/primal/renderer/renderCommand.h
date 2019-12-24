@@ -28,7 +28,7 @@ namespace primal {
 		s_rendererAPI->drawIndexed(vertexArray);
 	  }
 	private:
-	  static RendererAPI* s_rendererAPI;
+	  static scope_ptr<RendererAPI> s_rendererAPI;
   };
 
 }

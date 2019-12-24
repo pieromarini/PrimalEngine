@@ -1,10 +1,11 @@
 #include <glad/gl.h>
 
+#include "../../primal/core/core.h"
 #include "openGLRendererAPI.h"
 
 namespace primal {
 
-  void OpenGLMessageCallback(unsigned source, unsigned type, unsigned id, unsigned severity, int length, const char* message, const void* userParam) {
+  void openGLMessageCallback(unsigned source, unsigned type, unsigned id, unsigned severity, int length, const char* message, const void* userParam) {
 	switch (severity) {
 	  case GL_DEBUG_SEVERITY_HIGH:         PRIMAL_CORE_CRITICAL(message); return;
 	  case GL_DEBUG_SEVERITY_MEDIUM:       PRIMAL_CORE_ERROR(message); return;
@@ -17,13 +18,12 @@ namespace primal {
 
   void OpenGLRendererAPI::init() {
 
-#ifdef PRIMAL_DEBUG
+	PRIMAL_CORE_INFO("Enabling OpenGL Debug Output");
 	glEnable(GL_DEBUG_OUTPUT);
 	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-	glDebugMessageCallback(OpenGLMessageCallback, nullptr);
+	glDebugMessageCallback(openGLMessageCallback, nullptr);
 
-	glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, NULL, GL_FALSE);
-#endif
+	glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_FALSE);
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

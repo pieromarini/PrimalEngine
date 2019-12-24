@@ -1,9 +1,10 @@
 #include "../../platform/openGL/openGLRendererAPI.h"
 
 #include "renderCommand.h"
+#include "rendererAPI.h"
 
 namespace primal {
 
-  RendererAPI* RenderCommand::s_rendererAPI = new OpenGLRendererAPI;
+  scope_ptr<RendererAPI> RenderCommand::s_rendererAPI = RendererAPI::create();
 
 }

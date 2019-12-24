@@ -12,19 +12,27 @@ namespace primal {
 	PRIMAL_CORE_ASSERT(!s_instance, "Application already exists!");
 	s_instance = this;
 
-	m_window = scope_ptr<Window>(Window::create());
+	m_window = Window::create();
 	m_window->setEventCallback(PRIMAL_BIND_EVENT_FN(Application::onEvent));
+
+	Renderer::init();
 
 	m_imGuiLayer = new ImGuiLayer();
 	pushOverlay(m_imGuiLayer);
   }
 
+  Application::~Application() {
+	Renderer::shutdown();
+  }
+
   void Application::pushLayer(Layer* layer) {
 	m_layerStack.pushLayer(layer);
+	layer->onAttach();
   }
 
   void Application::pushOverlay(Layer* layer) {
 	m_layerStack.pushOverlay(layer);
+	layer->onAttach();
   }
 
   void Application::onEvent(Event& e) {
@@ -75,9 +83,4 @@ namespace primal {
 
 	return false;
   }
-
-  Application::~Application() {
-	Renderer::shutdown();
-  }
-
 }

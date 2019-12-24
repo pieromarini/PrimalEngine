@@ -35,7 +35,7 @@ namespace primal {
 
 	  virtual void* getNativeWindow() const = 0;
 
-	  static Window* create(const WindowProps& props = WindowProps());
+	  static scope_ptr<Window> create(const WindowProps& props = WindowProps());
   };
 
 }

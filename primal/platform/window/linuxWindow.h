@@ -27,9 +27,9 @@ namespace primal {
 	private:
 	  virtual void init(const WindowProps& props);
 	  virtual void shutdown();
-	private:
+
 	  GLFWwindow* m_window;
-	  GraphicsContext* m_context;
+	  scope_ptr<GraphicsContext> m_context;
 
 	  struct WindowData {
 		std::string title;

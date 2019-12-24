@@ -24,7 +24,7 @@ namespace primal {
 
 	int width, height, channels;
 	// stbi_set_flip_vertically_on_load(1);
-	auto data = SOIL_load_image(path.c_str(), &width, &height, &channels, SOIL_LOAD_AUTO);
+	unsigned char* data = SOIL_load_image(path.c_str(), &width, &height, &channels, SOIL_LOAD_AUTO);
 
 	PRIMAL_CORE_ASSERT(data, "Failed to load image!");
 
