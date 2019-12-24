@@ -1,3 +1,3 @@
 #!/bin/bash
 
-optirun ./build/sandbox
+./build/sandbox
