@@ -54,3 +54,4 @@ add_library(${PRIMAL_CORE_LIB} STATIC ${CORE_SRCS})
 
 add_executable(${SANDBOX_APP} ${SANDBOX_SRCS})
 target_link_libraries(${SANDBOX_APP} ${PRIMAL_CORE_LIB} glfw ${GLFW_LIBRARIES} ${OPENGL_LIBRARY} soil glad imgui ${IMGUI_LIBRARIES} spdlog::spdlog)
+execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${primal_SOURCE_DIR}/res ${primal_BINARY_DIR}/res RESULT_VARIABLE exitcode)

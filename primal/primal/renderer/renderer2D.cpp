@@ -43,7 +43,7 @@ namespace primal {
 		uint32_t whiteTextureData = 0xffffffff;
 		s_data->whiteTexture->setData(&whiteTextureData, sizeof(uint32_t));
 
-		s_data->textureShader = Shader::create("assets/shaders/Texture.glsl");
+		s_data->textureShader = Shader::create("res/shaders/texture.glsl");
 		s_data->textureShader->bind();
 		s_data->textureShader->setInt("u_Texture", 0);
 	}
