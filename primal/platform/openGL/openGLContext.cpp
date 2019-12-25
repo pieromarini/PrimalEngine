@@ -11,6 +11,7 @@ namespace primal {
   }
 
   void OpenGLContext::init() {
+
 	glfwMakeContextCurrent(m_windowHandle);
 	int status = gladLoadGL(glfwGetProcAddress);
 	PRIMAL_CORE_ASSERT(status, "Failed to initialize Glad!");
@@ -18,7 +19,13 @@ namespace primal {
 	PRIMAL_CORE_INFO("OpenGL Info:");
 	PRIMAL_CORE_INFO("  Vendor: {0}", glGetString(GL_VENDOR));
 	PRIMAL_CORE_INFO("  Renderer: {0}", glGetString(GL_RENDERER));
-	PRIMAL_CORE_INFO("  Version: {0}", glGetString(GL_VERSION));
+
+	int min, max;
+	glGetIntegerv(GL_MAJOR_VERSION, &max);
+	glGetIntegerv(GL_MINOR_VERSION, &min);
+
+	PRIMAL_CORE_INFO("  Max Version: {0}", max);
+	PRIMAL_CORE_INFO("  Min Version: {0}", min);
 
   }
 

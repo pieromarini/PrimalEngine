@@ -1,4 +1,5 @@
 #include "linuxWindow.h"
+#include <cstdlib>
 
 #include "../../primal/core/log.h"
 #include "../../primal/events/applicationEvent.h"
@@ -32,6 +33,11 @@ namespace primal {
   }
 
   void LinuxWindow::init(const WindowProps& props) {
+
+	// NOTE: Require 4.6 version.
+	auto e = setenv("MESA_GL_VERSION_OVERRIDE", "4.6", true);
+	PRIMAL_CORE_ASSERT(e == 0, "Couldn't override OpenGL Version to 4.6");
+
 	m_data.title = props.title;
 	m_data.width = props.width;
 	m_data.height = props.height;
