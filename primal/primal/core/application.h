@@ -8,6 +8,7 @@
 #include "layerStack.h"
 #include "../events/event.h"
 #include "../events/applicationEvent.h"
+#include "../debug/instrumentor.h"
 
 #include "timestep.h"
 

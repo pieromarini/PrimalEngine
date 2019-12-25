@@ -36,13 +36,13 @@ namespace primal {
   }
 
   void Application::onEvent(Event& e) {
-	EventDispatcher dispatcher(e);
+	EventDispatcher dispatcher{e};
 	dispatcher.dispatch<WindowCloseEvent>(PRIMAL_BIND_EVENT_FN(Application::onWindowClose));
 	dispatcher.dispatch<WindowResizeEvent>(PRIMAL_BIND_EVENT_FN(Application::onWindowResize));
 
-	for (auto it = m_layerStack.end(); it != m_layerStack.begin();) {
-	  (*--it)->onEvent(e);
-	  if (e.Handled)
+	for (auto it = m_layerStack.rbegin(); it != m_layerStack.rend(); ++it) {
+	  (*it)->onEvent(e);
+	  if (e.handled)
 		break;
 	}
   }
@@ -54,14 +54,14 @@ namespace primal {
 	  m_lastFrameTime = time;
 
 	  if (!m_minimized) {
-		for (Layer* layer : m_layerStack)
+		for (auto layer : m_layerStack)
 		  layer->onUpdate(timestep);
-	  }
 
-	  m_imGuiLayer->begin();
-	  for (Layer* layer : m_layerStack)
-		layer->onImGuiRender();
-	  m_imGuiLayer->end();
+		m_imGuiLayer->begin();
+		for (auto layer : m_layerStack)
+		  layer->onImGuiRender();
+		m_imGuiLayer->end();
+	  }
 
 	  m_window->onUpdate();
 	}

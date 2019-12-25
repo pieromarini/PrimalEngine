@@ -38,7 +38,7 @@ namespace primal {
 
   class Event {
 	public:
-	  bool Handled = false;
+	  bool handled = false;
 
 	  virtual EventType getEventType() const = 0;
 	  virtual const char* getName() const = 0;
@@ -51,16 +51,13 @@ namespace primal {
   };
 
   class EventDispatcher {
-	template<typename T>
-	using eventFunc = std::function<bool(T&)>;
-
 	public:
 	  EventDispatcher(Event& event) : m_event(event) { }
 
-	  template<typename T>
-	  bool dispatch(eventFunc<T> func) {
+	  template<typename T, typename Func>
+	  bool dispatch(const Func& func) {
 		if (m_event.getEventType() == T::getStaticType()) {
-		  m_event.Handled = func(*(T*)&m_event); // Prettier way?
+		  m_event.handled = func(static_cast<T&>(m_event));
 		  return true;
 		}
 		return false;

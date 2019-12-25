@@ -15,6 +15,7 @@ namespace primal {
   ImGuiLayer::ImGuiLayer() : Layer("ImGuiLayer") { }
 
   void ImGuiLayer::onAttach() {
+	// Setup ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
@@ -22,6 +23,7 @@ namespace primal {
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;           // Enable Docking
 	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;         // Enable Multi-Viewport / Platform Windows
 
+	// Setup Dear ImGui style
 	ImGui::StyleColorsDark();
 
 	// When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
@@ -40,23 +42,25 @@ namespace primal {
   }
 
   void ImGuiLayer::onDetach() {
+
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
   }
 
   void ImGuiLayer::begin() {
+
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
   }
 
   void ImGuiLayer::end() {
+
 	ImGuiIO& io = ImGui::GetIO();
 	Application& app = Application::get();
-	io.DisplaySize = ImVec2(static_cast<float>(app.getWindow().getWidth()), static_cast<float>(app.getWindow().getHeight()));
+	io.DisplaySize = ImVec2((float)app.getWindow().getWidth(), (float)app.getWindow().getHeight());
 
-	// Rendering
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -66,11 +70,6 @@ namespace primal {
 	  ImGui::RenderPlatformWindowsDefault();
 	  glfwMakeContextCurrent(backup_current_context);
 	}
-  }
-
-  void ImGuiLayer::onImGuiRender() {
-	static bool show = true;
-	ImGui::ShowDemoWindow(&show);
   }
 
 }
