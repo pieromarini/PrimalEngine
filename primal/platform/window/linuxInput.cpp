@@ -5,7 +5,7 @@
 
 namespace primal {
 
-	Input* Input::s_Instance = new LinuxInput();
+	scope_ptr<Input> Input::s_Instance = createScope<LinuxInput>();
 
 	// NOTE: should probably cache the Window.
 	bool LinuxInput::isKeyPressedImpl(KeyCode keycode) {

@@ -24,7 +24,7 @@ namespace primal {
 	  virtual float getMouseXImpl() = 0;
 	  virtual float getMouseYImpl() = 0;
 	private:
-	  static Input* s_Instance;
+	  static scope_ptr<Input> s_Instance;
   };
 
 }
