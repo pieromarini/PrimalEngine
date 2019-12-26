@@ -3,6 +3,7 @@
 #include <fstream>
 
 #include "../../primal/core/core.h"
+#include "../../primal/core/application.h"
 #include "openGLShader.h"
 
 namespace primal {
@@ -18,6 +19,7 @@ namespace primal {
   }
 
   OpenGLShader::OpenGLShader(const std::string& filepath) {
+	PRIMAL_PROFILE_FUNCTION();
 
 	std::string source = readFile(filepath);
 	auto shaderSources = preProcess(source);
@@ -33,6 +35,7 @@ namespace primal {
 
   OpenGLShader::OpenGLShader(const std::string& name, const std::string& vertexSrc, const std::string& fragmentSrc)
 	: m_name(name) {
+	PRIMAL_PROFILE_FUNCTION();
 
 	std::unordered_map<GLenum, std::string> sources;
 	sources[GL_VERTEX_SHADER] = vertexSrc;
@@ -41,11 +44,13 @@ namespace primal {
   }
 
   OpenGLShader::~OpenGLShader() {
+	PRIMAL_PROFILE_FUNCTION();
 
 	glDeleteProgram(m_rendererID);
   }
 
   std::string OpenGLShader::readFile(const std::string& filepath) {
+	PRIMAL_PROFILE_FUNCTION();
 
 	std::string result;
 	std::ifstream in(filepath, std::ios::in | std::ios::binary);
@@ -68,6 +73,7 @@ namespace primal {
   }
 
   std::unordered_map<GLenum, std::string> OpenGLShader::preProcess(const std::string& source) {
+	PRIMAL_PROFILE_FUNCTION();
 
 	std::unordered_map<GLenum, std::string> shaderSources;
 
@@ -92,6 +98,7 @@ namespace primal {
   }
 
   void OpenGLShader::compile(const std::unordered_map<GLenum, std::string>& shaderSources) {
+	PRIMAL_PROFILE_FUNCTION();
 
 	GLuint program = glCreateProgram();
 	PRIMAL_CORE_ASSERT(shaderSources.size() <= 2, "We only support 2 shaders for now");
@@ -170,21 +177,32 @@ namespace primal {
   }
 
   void OpenGLShader::setInt(const std::string& name, int value) {
+	PRIMAL_PROFILE_FUNCTION();
 
 	uploadUniformInt(name, value);
   }
 
+  void OpenGLShader::setFloat(const std::string& name, const float value) {
+	PRIMAL_PROFILE_FUNCTION();
+
+	uploadUniformFloat(name, value);
+  }
+
   void OpenGLShader::setFloat3(const std::string& name, const glm::vec3& value) {
+	PRIMAL_PROFILE_FUNCTION();
 
 	uploadUniformFloat3(name, value);
   }
 
   void OpenGLShader::setFloat4(const std::string& name, const glm::vec4& value) {
+	PRIMAL_PROFILE_FUNCTION();
 
 	uploadUniformFloat4(name, value);
   }
 
   void OpenGLShader::setMat4(const std::string& name, const glm::mat4& value) {
+	PRIMAL_PROFILE_FUNCTION();
+
 	uploadUniformMat4(name, value);
   }
 

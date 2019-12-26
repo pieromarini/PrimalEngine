@@ -1,6 +1,7 @@
 #include <glad/gl.h>
 
 #include "../../primal/core/core.h"
+#include "../../primal/core/application.h"
 #include "openGLRendererAPI.h"
 
 namespace primal {
@@ -17,6 +18,7 @@ namespace primal {
   }
 
   void OpenGLRendererAPI::init() {
+	PRIMAL_PROFILE_FUNCTION();
 
 	PRIMAL_CORE_INFO("Enabling OpenGL Debug Output");
 	glEnable(GL_DEBUG_OUTPUT);

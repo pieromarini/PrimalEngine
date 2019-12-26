@@ -15,6 +15,8 @@ namespace primal {
   ImGuiLayer::ImGuiLayer() : Layer("ImGuiLayer") { }
 
   void ImGuiLayer::onAttach() {
+	PRIMAL_PROFILE_FUNCTION();
+
 	// Setup ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -42,6 +44,7 @@ namespace primal {
   }
 
   void ImGuiLayer::onDetach() {
+	PRIMAL_PROFILE_FUNCTION();
 
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
@@ -49,6 +52,7 @@ namespace primal {
   }
 
   void ImGuiLayer::begin() {
+	PRIMAL_PROFILE_FUNCTION();
 
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
@@ -56,6 +60,7 @@ namespace primal {
   }
 
   void ImGuiLayer::end() {
+	PRIMAL_PROFILE_FUNCTION();
 
 	ImGuiIO& io = ImGui::GetIO();
 	Application& app = Application::get();

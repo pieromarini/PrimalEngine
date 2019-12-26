@@ -1,5 +1,6 @@
 #include <glad/gl.h>
 
+#include "../../primal/core/application.h"
 #include "openGLVertexArray.h"
 
 namespace primal {
@@ -24,22 +25,32 @@ namespace primal {
   }
 
   OpenGLVertexArray::OpenGLVertexArray() {
+	PRIMAL_PROFILE_FUNCTION();
+
 	glCreateVertexArrays(1, &m_rendererID);
   }
 
   OpenGLVertexArray::~OpenGLVertexArray() {
+	PRIMAL_PROFILE_FUNCTION();
+
 	glDeleteVertexArrays(1, &m_rendererID);
   }
 
   void OpenGLVertexArray::bind() const {
+	PRIMAL_PROFILE_FUNCTION();
+
 	glBindVertexArray(m_rendererID);
   }
 
   void OpenGLVertexArray::unbind() const {
+	PRIMAL_PROFILE_FUNCTION();
+
 	glBindVertexArray(0);
   }
 
   void OpenGLVertexArray::addVertexBuffer(const ref_ptr<VertexBuffer>& vertexBuffer) {
+	PRIMAL_PROFILE_FUNCTION();
+
 	PRIMAL_CORE_ASSERT(vertexBuffer->getLayout().getElements().size(), "Vertex Buffer has no layout!");
 
 	glBindVertexArray(m_rendererID);
@@ -62,6 +73,8 @@ namespace primal {
   }
 
   void OpenGLVertexArray::setIndexBuffer(const ref_ptr<IndexBuffer>& indexBuffer) {
+	PRIMAL_PROFILE_FUNCTION();
+
 	glBindVertexArray(m_rendererID);
 	indexBuffer->bind();
 

@@ -1,6 +1,7 @@
 #include "linuxWindow.h"
 #include <cstdlib>
 
+#include "../../primal/core/application.h"
 #include "../../primal/core/log.h"
 #include "../../primal/events/applicationEvent.h"
 #include "../../primal/events/mouseEvent.h"
@@ -25,14 +26,19 @@ namespace primal {
   }
 
   LinuxWindow::LinuxWindow(const WindowProps& props) {
+	PRIMAL_PROFILE_FUNCTION();
+
 	init(props);
   }
 
   LinuxWindow::~LinuxWindow() {
+	PRIMAL_PROFILE_FUNCTION();
+
 	shutdown();
   }
 
   void LinuxWindow::init(const WindowProps& props) {
+	PRIMAL_PROFILE_FUNCTION();
 
 	// NOTE: Require 4.6 version.
 	auto e = setenv("MESA_GL_VERSION_OVERRIDE", "4.6", true);
@@ -45,6 +51,8 @@ namespace primal {
 	PRIMAL_CORE_INFO("Creating window {0} ({1} x {2})", props.title, props.width, props.height);
 
 	if (s_glfwWindowCount == 0) {
+	  PRIMAL_PROFILE_SCOPE("glfwInit");
+
 	  int success = glfwInit();
 	  PRIMAL_CORE_ASSERT(success, "Could not intialize GLFW!");
 	  glfwSetErrorCallback(GLFWErrorCallback);
@@ -54,8 +62,11 @@ namespace primal {
 	  glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
 #endif
 
-	m_window = glfwCreateWindow(static_cast<int>(props.width), static_cast<int>(props.height), m_data.title.c_str(), nullptr, nullptr);
-	s_glfwWindowCount++;
+	{
+	  PRIMAL_PROFILE_SCOPE("glfwCreateWindow");
+	  m_window = glfwCreateWindow(static_cast<int>(props.width), static_cast<int>(props.height), m_data.title.c_str(), nullptr, nullptr);
+	  s_glfwWindowCount++;
+	}
 
 	m_context = GraphicsContext::create(m_window);
 	m_context->init();
@@ -141,6 +152,8 @@ namespace primal {
   }
 
   void LinuxWindow::shutdown() {
+	PRIMAL_PROFILE_FUNCTION();
+
 	glfwDestroyWindow(m_window);
 	s_glfwWindowCount--;
 
@@ -149,11 +162,15 @@ namespace primal {
   }
 
   void LinuxWindow::onUpdate() {
+	PRIMAL_PROFILE_FUNCTION();
+
 	glfwPollEvents();
 	m_context->swapBuffers();
   }
 
   void LinuxWindow::setVSync(bool enabled) {
+	PRIMAL_PROFILE_FUNCTION();
+
 	if (enabled)
 	  glfwSwapInterval(1);
 	else

@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 
 #include "../../primal/core/log.h"
+#include "../../primal/core/application.h"
 #include "openGLContext.h"
 
 namespace primal {
@@ -11,6 +12,7 @@ namespace primal {
   }
 
   void OpenGLContext::init() {
+	PRIMAL_PROFILE_FUNCTION();
 
 	glfwMakeContextCurrent(m_windowHandle);
 	int status = gladLoadGL(glfwGetProcAddress);
@@ -30,6 +32,8 @@ namespace primal {
   }
 
   void OpenGLContext::swapBuffers() {
+	PRIMAL_PROFILE_FUNCTION();
+
 	glfwSwapBuffers(m_windowHandle);
   }
 

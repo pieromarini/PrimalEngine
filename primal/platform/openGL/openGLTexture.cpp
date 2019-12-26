@@ -1,11 +1,13 @@
-#include "openGLTexture.h"
-
 #include <SOIL/SOIL.h>
+
+#include "openGLTexture.h"
+#include "../../primal/core/application.h"
 
 namespace primal {
 
   OpenGLTexture2D::OpenGLTexture2D(uint32_t width, uint32_t height)
 	: m_width(width), m_height(height) {
+	PRIMAL_PROFILE_FUNCTION();
 
 	m_internalFormat = GL_RGBA8;
 	m_dataFormat = GL_RGBA;
@@ -21,9 +23,10 @@ namespace primal {
   }
 
   OpenGLTexture2D::OpenGLTexture2D(const std::string& path) : m_path(path) {
+	PRIMAL_PROFILE_FUNCTION();
 
 	int width, height, channels;
-	// stbi_set_flip_vertically_on_load(1);
+
 	unsigned char* data = SOIL_load_image(path.c_str(), &width, &height, &channels, SOIL_LOAD_AUTO);
 
 	PRIMAL_CORE_ASSERT(data, "Failed to load image!");
@@ -60,10 +63,13 @@ namespace primal {
   }
 
   OpenGLTexture2D::~OpenGLTexture2D() {
+	PRIMAL_PROFILE_FUNCTION();
+
 	glDeleteTextures(1, &m_rendererID);
   }
 
   void OpenGLTexture2D::setData(void* data, uint32_t size) {
+	PRIMAL_PROFILE_FUNCTION();
 
 	uint32_t bpp = m_dataFormat == GL_RGBA ? 4 : 3;
 	PRIMAL_CORE_ASSERT(size == m_width * m_height * bpp, "Data must be entire texture!");
@@ -71,6 +77,8 @@ namespace primal {
   }
 
   void OpenGLTexture2D::bind(uint32_t slot) const {
+	PRIMAL_PROFILE_FUNCTION();
+
 	glBindTextureUnit(slot, m_rendererID);
   }
 }

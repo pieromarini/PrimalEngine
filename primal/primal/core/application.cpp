@@ -9,6 +9,9 @@ namespace primal {
   Application* Application::s_instance = nullptr;
 
   Application::Application() {
+
+	PRIMAL_PROFILE_FUNCTION();
+
 	PRIMAL_CORE_ASSERT(!s_instance, "Application already exists!");
 	s_instance = this;
 
@@ -22,20 +25,25 @@ namespace primal {
   }
 
   Application::~Application() {
+	PRIMAL_PROFILE_FUNCTION();
+
 	Renderer::shutdown();
   }
 
   void Application::pushLayer(Layer* layer) {
+	PRIMAL_PROFILE_FUNCTION();
 	m_layerStack.pushLayer(layer);
 	layer->onAttach();
   }
 
   void Application::pushOverlay(Layer* layer) {
+	PRIMAL_PROFILE_FUNCTION();
 	m_layerStack.pushOverlay(layer);
 	layer->onAttach();
   }
 
   void Application::onEvent(Event& e) {
+	PRIMAL_PROFILE_FUNCTION();
 	EventDispatcher dispatcher{e};
 	dispatcher.dispatch<WindowCloseEvent>(PRIMAL_BIND_EVENT_FN(Application::onWindowClose));
 	dispatcher.dispatch<WindowResizeEvent>(PRIMAL_BIND_EVENT_FN(Application::onWindowResize));
@@ -48,18 +56,27 @@ namespace primal {
   }
 
   void Application::run() {
+	PRIMAL_PROFILE_FUNCTION();
+
 	while (m_running) {
+	  PRIMAL_PROFILE_SCOPE("ApplicationLoop");
 	  float time = static_cast<float>(glfwGetTime());
 	  Timestep timestep = time - m_lastFrameTime;
 	  m_lastFrameTime = time;
 
 	  if (!m_minimized) {
-		for (auto layer : m_layerStack)
-		  layer->onUpdate(timestep);
+		{
+		  PRIMAL_PROFILE_SCOPE("LayerStack onUpdate");
+		  for (auto layer : m_layerStack)
+			layer->onUpdate(timestep);
+		}
 
 		m_imGuiLayer->begin();
-		for (auto layer : m_layerStack)
-		  layer->onImGuiRender();
+		{
+		  PRIMAL_PROFILE_SCOPE("LayerStack onImGuiRender");
+		  for (auto layer : m_layerStack)
+			layer->onImGuiRender();
+		}
 		m_imGuiLayer->end();
 	  }
 
@@ -73,6 +90,7 @@ namespace primal {
   }
 
   bool Application::onWindowResize(WindowResizeEvent& e) {
+	PRIMAL_PROFILE_FUNCTION();
 	if (e.getWidth() == 0 || e.getHeight() == 0) {
 	  m_minimized = true;
 	  return false;
