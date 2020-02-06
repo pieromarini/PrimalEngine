@@ -1,5 +1,6 @@
 #include "renderer.h"
 #include "renderer2D.h"
+#include "renderer3D.h"
 
 namespace primal {
 
@@ -8,10 +9,12 @@ namespace primal {
   void Renderer::init() {
 	RenderCommand::init();
 	Renderer2D::init();
+	Renderer3D::init();
   }
 
   void Renderer::shutdown() {
 	Renderer2D::shutdown();
+	Renderer3D::shutdown();
   }
 
   void Renderer::onWindowResize(uint32_t width, uint32_t height) {

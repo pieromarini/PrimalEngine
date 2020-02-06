@@ -14,6 +14,7 @@
 #include "primal/core/keyCodes.h"
 #include "primal/core/mouseCodes.h"
 #include "primal/renderer/orthographicCameraController.h"
+#include "primal/renderer/perspectiveCameraController.h"
 
 #include "primal/events/event.h"
 #include "primal/events/applicationEvent.h"
@@ -22,6 +23,7 @@
 
 #include "primal/renderer/renderer.h"
 #include "primal/renderer/renderer2D.h"
+#include "primal/renderer/renderer3D.h"
 #include "primal/renderer/renderCommand.h"
 
 #include "primal/renderer/buffer.h"
@@ -30,3 +32,4 @@
 #include "primal/renderer/vertexArray.h"
 
 #include "primal/renderer/orthographicCamera.h"
+#include "primal/renderer/perspectiveCamera.h"
