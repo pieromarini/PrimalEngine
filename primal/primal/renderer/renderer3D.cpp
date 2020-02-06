@@ -11,7 +11,7 @@
 namespace primal {
 
   struct Renderer3DStorage {
-	ref_ptr<VertexArray> quadVertexArray;
+	ref_ptr<VertexArray> cubeVertexArray;
 	ref_ptr<Shader> textureShader;
 	ref_ptr<Texture2D> whiteTexture;
   };
@@ -22,7 +22,7 @@ namespace primal {
 	PRIMAL_PROFILE_FUNCTION();
 
 	s_data = new Renderer3DStorage();
-	s_data->quadVertexArray = VertexArray::create();
+	s_data->cubeVertexArray = VertexArray::create();
 
 	float cubeVertices[] = {
 	  //Back
@@ -62,14 +62,14 @@ namespace primal {
 	  0, 0, 1.
 	};
 
-	auto squareVB = VertexBuffer::create(cubeVertices, sizeof(cubeVertices));
-	squareVB->setLayout({
+	auto cubeVB = VertexBuffer::create(cubeVertices, sizeof(cubeVertices));
+	cubeVB->setLayout({
 		{ ShaderDataType::Float3, "a_Position" },
 		// { ShaderDataType::Float2, "a_TexCoord" }
 	});
-	s_data->quadVertexArray->addVertexBuffer(squareVB);
+	s_data->cubeVertexArray->addVertexBuffer(cubeVB);
 
-	uint32_t squareIndices[] = {
+	uint32_t cubeIndices[] = {
 	  0, 1, 2, 2, 3, 0,
 	  4, 5, 6, 6, 7, 4,
 	  8, 9, 10, 10, 11, 8,
@@ -77,8 +77,8 @@ namespace primal {
 	  16, 17, 18, 18, 19, 16,
 	  20, 21, 22, 22, 23, 20
 	};
-	auto squareIB = IndexBuffer::create(squareIndices, sizeof(squareIndices) / sizeof(uint32_t));
-	s_data->quadVertexArray->setIndexBuffer(squareIB);
+	auto squareIB = IndexBuffer::create(cubeIndices, sizeof(cubeIndices) / sizeof(uint32_t));
+	s_data->cubeVertexArray->setIndexBuffer(squareIB);
 
 	s_data->whiteTexture = Texture2D::create(1, 1);
 	uint32_t data = 0xffffffff;
@@ -114,8 +114,8 @@ namespace primal {
 
 	glm::mat4 transform = glm::translate(glm::mat4(1.0f), position) * glm::scale(glm::mat4(1.0f), size);
 	s_data->textureShader->setMat4("u_Transform", transform);
-	s_data->quadVertexArray->bind();
-	RenderCommand::drawIndexed(s_data->quadVertexArray);
+	s_data->cubeVertexArray->bind();
+	RenderCommand::drawIndexed(s_data->cubeVertexArray);
   }
 
   void Renderer3D::drawCube(const glm::vec3& position, const glm::vec3& size, const ref_ptr<Texture2D>& texture) {
@@ -127,8 +127,8 @@ namespace primal {
 	glm::mat4 transform = glm::translate(glm::mat4(1.0f), position) * glm::scale(glm::mat4(1.0f), size);
 	s_data->textureShader->setMat4("u_Transform", transform);
 
-	s_data->quadVertexArray->bind();
-	RenderCommand::drawIndexed(s_data->quadVertexArray);
+	s_data->cubeVertexArray->bind();
+	RenderCommand::drawIndexed(s_data->cubeVertexArray);
   }
 
 }
