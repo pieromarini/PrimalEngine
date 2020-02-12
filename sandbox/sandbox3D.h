@@ -20,6 +20,7 @@ class Sandbox3D : public primal::Layer {
 	// Temp
 	primal::ref_ptr<primal::VertexArray> m_squareVA;
 	primal::ref_ptr<primal::Shader> m_flatColorShader;
+	primal::ref_ptr<primal::Model> m_modelTest;
 
 	primal::ref_ptr<primal::Texture2D> m_checkerboardTexture;
 

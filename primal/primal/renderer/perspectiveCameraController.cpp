@@ -24,6 +24,12 @@ namespace primal {
 	  m_cameraPosition -= m_camera.getFrontVector() * m_cameraTranslationSpeed * ts.getSeconds();
 	}
 
+	if (Input::isKeyPressed(PRIMAL_KEY_Q)) {
+	  m_cameraPosition += m_camera.getUpVector() * m_cameraTranslationSpeed * ts.getSeconds();
+	} else if (Input::isKeyPressed(PRIMAL_KEY_E)) {
+	  m_cameraPosition -= m_camera.getUpVector() * m_cameraTranslationSpeed * ts.getSeconds();
+	}
+
 	m_camera.setPosition(m_cameraPosition);
 
 	m_cameraTranslationSpeed = m_zoomLevel;

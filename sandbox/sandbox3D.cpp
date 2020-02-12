@@ -10,6 +10,7 @@ Sandbox3D::Sandbox3D() : Layer("Sandbox3D"), m_cameraController(1280.0f / 720.0f
 void Sandbox3D::onAttach() {
   PRIMAL_PROFILE_FUNCTION();
 
+  m_modelTest = primal::createRef<primal::Model>("res/models/cube.obj");
   m_checkerboardTexture = primal::Texture2D::create("res/textures/checkerboard.png");
 }
 
@@ -32,9 +33,8 @@ void Sandbox3D::onUpdate(primal::Timestep ts) {
   {
 	PRIMAL_PROFILE_SCOPE("Renderer Draw");
 	primal::Renderer3D::beginScene(m_cameraController.getCamera());
-	primal::Renderer3D::drawCube({ 0.0f, 0.0f, 7.0f }, { 5.0f, 5.0f, 5.0f }, m_squareColor);
 	primal::Renderer3D::drawCube({ 0.0f, 0.0f, -1.0f }, { 0.5f, 0.75f, 0.5f }, m_squareColor);
-	primal::Renderer3D::drawCube({ 2.0f, 0.0f, -1.0f }, { 0.5f, 0.75f, 0.5f }, m_squareColor);
+	primal::Renderer3D::drawModel(m_modelTest, { 2.0f, 0.0f, -1.0f }, { 1.0f, 1.0f, 1.0f });
 	primal::Renderer3D::drawCube({ 5.0f, 1.0f, -1.0f }, { 0.5f, 0.75f, 0.5f }, m_squareColor);
 	// primal::Renderer3D::drawCube({ 0.0f, 0.0f, 1.0f }, { 10.0f, 10.0f , 0.5f}, m_checkerboardTexture);
 	primal::Renderer3D::endScene();

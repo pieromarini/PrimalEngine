@@ -22,6 +22,7 @@ namespace primal {
 	  const glm::mat4& getViewProjectionMatrix() const { return m_viewProjectionMatrix; }
 	  const glm::vec3& getFrontVector() const { return m_front; }
 	  const glm::vec3& getRightVector() const { return m_right; }
+	  const glm::vec3& getUpVector() const { return m_up; }
 	private:
 	  void recalculateVectors();
 

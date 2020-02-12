@@ -21,7 +21,6 @@ namespace primal {
 	private:
 	  std::string m_path;
 	  uint32_t m_width, m_height;
-	  uint32_t m_rendererID;
 	  GLenum m_internalFormat, m_dataFormat;
   };
 

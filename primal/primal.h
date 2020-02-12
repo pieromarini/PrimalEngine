@@ -26,6 +26,8 @@
 #include "primal/renderer/renderer3D.h"
 #include "primal/renderer/renderCommand.h"
 
+#include "primal/model/model.h"
+
 #include "primal/renderer/buffer.h"
 #include "primal/renderer/shader.h"
 #include "primal/renderer/texture.h"

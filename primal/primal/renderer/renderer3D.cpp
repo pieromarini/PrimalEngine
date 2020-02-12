@@ -109,7 +109,9 @@ namespace primal {
   void Renderer3D::drawCube(const glm::vec3& position, const glm::vec3& size, const glm::vec4& color) {
 	PRIMAL_PROFILE_FUNCTION();
 
-	s_data->textureShader->setFloat4("u_Color", color);
+	// NOTE: Skipping alpha channel for now
+	s_data->textureShader->setFloat3("u_ObjectColor", { color.r, color.g, color.b });
+	s_data->textureShader->setFloat3("u_LightColor", {  1.0f, 1.0f, 1.0f });
 	s_data->whiteTexture->bind();
 
 	glm::mat4 transform = glm::translate(glm::mat4(1.0f), position) * glm::scale(glm::mat4(1.0f), size);
@@ -129,6 +131,15 @@ namespace primal {
 
 	s_data->cubeVertexArray->bind();
 	RenderCommand::drawIndexed(s_data->cubeVertexArray);
+  }
+
+  void Renderer3D::drawModel(const ref_ptr<Model>& model, const glm::vec3& position, const glm::vec3& size) {
+	PRIMAL_PROFILE_FUNCTION();
+
+	glm::mat4 transform = glm::translate(glm::mat4(1.0f), position) * glm::scale(glm::mat4(1.0f), size);
+	s_data->textureShader->setMat4("u_Transform", transform);
+
+	model->draw(s_data->textureShader.get());
   }
 
 }

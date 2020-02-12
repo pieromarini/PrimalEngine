@@ -23,6 +23,10 @@ namespace primal {
 	public:
 	  static ref_ptr<Texture2D> create(uint32_t width, uint32_t height);
 	  static ref_ptr<Texture2D> create(const std::string& path);
+
+	  uint32_t getID() { return m_rendererID; }
+	protected:
+	  uint32_t m_rendererID;
   };
 
 }
