@@ -35,6 +35,8 @@ namespace primal {
   }
 
   void Mesh::draw(Shader* shader) {
+	// Setting Texture information for model.
+	// NOTE: Should this stay here or be handled by the renderer directly?
 	unsigned int diffuseNr = 1;
 	unsigned int specularNr = 1;
 	for(unsigned int i = 0; i < m_textures.size(); i++) {
@@ -46,12 +48,12 @@ namespace primal {
 	  else if(name == "texture_specular")
 		number = std::to_string(specularNr++);
 
-	  shader->setFloat(("material." + name + number).c_str(), i);
+	  shader->setInt((name + number).c_str(), i);
 	  glBindTexture(GL_TEXTURE_2D, m_textures[i].id);
 	}
 	glActiveTexture(GL_TEXTURE0);
 
-	// Draw. Move to Renderer.
+	// Draw. Move to RenderCommand (drawIndexed)
 	glBindVertexArray(VAO);
 	glDrawElements(GL_TRIANGLES, m_indices.size(), GL_UNSIGNED_INT, 0);
 	glBindVertexArray(0);

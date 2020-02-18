@@ -35,7 +35,7 @@ namespace primal {
 
 	  glm::vec3 m_cameraPosition = { 0.0f, 0.0f, 0.0f };
 	  float m_cameraRotation = 0.0f; // degrees, anti-clockwise direction
-	  float m_cameraTranslationSpeed = 5.0f;
+	  float m_cameraTranslationSpeed = 20.0f;
 	  float m_cameraRotationSpeed = 180.0f;
   };
 }

@@ -74,6 +74,8 @@ namespace primal {
 	glfwSetWindowUserPointer(m_window, &m_data);
 	setVSync(true);
 
+	glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
 	// GLFW callbacks
 	glfwSetWindowSizeCallback(m_window, [](GLFWwindow* window, int width, int height) {
 	  WindowData& data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
