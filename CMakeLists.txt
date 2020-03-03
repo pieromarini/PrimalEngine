@@ -28,6 +28,10 @@ enable_doxygen()
 # Setup static analysis
 include(cmake/StaticAnalyzers.cmake)
 
+# Check that all submodules are present
+include(cmake/SubmodulesCheck.cmake)
+check_submodules()
+
 option(BUILD_SHARED_LIBS "Enable compilation of shared libraries" OFF)
 option(ENABLE_TESTING "Enable Test Builds" ON)
 
