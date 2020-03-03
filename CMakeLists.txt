@@ -6,24 +6,40 @@ endif()
 
 project(PrimalEngine 1.0 DESCRIPTION "C++ Game Engine" LANGUAGES CXX)
 
+include(cmake/BasicSettings.cmake)
 
-# Setup clang-tidy
-if(CMAKE_VERSION VERSION_GREATER 3.6)
-    option(CLANG_TIDY_FIX "Perform fixes for Clang-Tidy" OFF)
-    find_program(CLANG_TIDY_EXE NAMES "clang-tidy" DOC "Path to clang-tidy executable")
+# Project Options as an interface library.
+add_library(project_options INTERFACE)
+target_compile_features(project_options INTERFACE cxx_std_17)
 
-    if(CLANG_TIDY_EXE)
-        if(CLANG_TIDY_FIX)
-            set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}" "-fix")
-        else()
-            set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
-        endif()
-    endif()
+# Project Compile flags as an interface library.
+add_library(project_warnings INTERFACE)
+include(cmake/CompilerWarnings.cmake)
+set_project_warnings(project_warnings)
+
+# sanitizer options
+include(cmake/Sanitizers.cmake)
+enable_sanitizers(project_options)
+
+# Doxygen
+include(cmake/Doxygen.cmake)
+enable_doxygen()
+
+# Setup static analysis
+include(cmake/StaticAnalyzers.cmake)
+
+option(BUILD_SHARED_LIBS "Enable compilation of shared libraries" OFF)
+option(ENABLE_TESTING "Enable Test Builds" ON)
+
+option(ENABLE_PCH "Enable Precompiled Headers" OFF)
+if (ENABLE_PCH)
+  target_precompile_headers(project_options INTERFACE <vector> <string> <map> <utility>)
 endif()
 
+if(ENABLE_TESTING)
+  enable_testing()
+  message("Building Tests")
+  add_subdirectory(tests)
+endif()
 
-
-# TODO: Create target first
-
-# target_compile_features(primal_engine PUBLIC cxx_std_17)
-# set_target_properties(primal_engine PROPERTIES CXX_EXTENSIONS OFF)
+add_subdirectory(src)
