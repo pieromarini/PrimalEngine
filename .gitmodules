@@ -1,0 +1,9 @@
+[submodule "extern/glfw"]
+	path = extern/glfw
+	url = https://github.com/glfw/glfw.git
+[submodule "extern/SOIL"]
+	path = extern/SOIL
+	url = https://github.com/burtonageo/SOIL
+[submodule "extern/assimp"]
+	path = extern/assimp
+	url = https://github.com/assimp/assimp

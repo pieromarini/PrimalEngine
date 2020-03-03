@@ -17,7 +17,7 @@ add_library(project_warnings INTERFACE)
 include(cmake/CompilerWarnings.cmake)
 set_project_warnings(project_warnings)
 
-# sanitizer options
+# Sanitizer
 include(cmake/Sanitizers.cmake)
 enable_sanitizers(project_options)
 
@@ -33,7 +33,7 @@ include(cmake/SubmodulesCheck.cmake)
 check_submodules()
 
 option(BUILD_SHARED_LIBS "Enable compilation of shared libraries" OFF)
-option(ENABLE_TESTING "Enable Test Builds" ON)
+option(ENABLE_TESTING "Enable Test Builds" OFF)
 
 option(ENABLE_PCH "Enable Precompiled Headers" OFF)
 if (ENABLE_PCH)
@@ -46,4 +46,50 @@ if(ENABLE_TESTING)
   add_subdirectory(tests)
 endif()
 
-add_subdirectory(src)
+
+# ============ Libraries / Linking ============ #
+include(cmake/srclist.cmake)
+
+set(LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/extern")
+set(PRIMAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
+set(SANDBOX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sandbox")
+set(ENGINE_LIB "lib_primal")
+add_library(${ENGINE_LIB} "${engine_sources}")
+target_include_directories(${ENGINE_LIB} "${PRIMAL_DIR}")
+
+# [LIB] GLFW
+set(GLFW_DIR "${LIB_DIR}/glfw")
+set(GLFW_BUILD_EXAMPLES OFF CACHE INTERNAL "Build the GLFW example programs")
+set(GLFW_BUILD_TESTS OFF CACHE INTERNAL "Build the GLFW test programs")
+set(GLFW_BUILD_DOCS OFF CACHE INTERNAL "Build the GLFW documentation")
+set(GLFW_INSTALL OFF CACHE INTERNAL "Generate installation target")
+add_subdirectory("${GLFW_DIR}")
+target_include_directories(${ENGINE_LIB} PRIVATE "${GLFW_DIR}/include")
+target_compile_definitions(${ENGINE_LIB} PRIVATE "GLFW_INCLUDE_NONE")
+
+# [LIB] GLAD
+set(GLAD_DIR "${LIB_DIR}/glad")
+add_library("glad" "${GLAD_DIR}/src/glad.c")
+target_include_directories("glad" PRIVATE "${GLAD_DIR}/include")
+target_include_directories(${ENGINE_LIB} PRIVATE "${GLAD_DIR}/include")
+
+# [LIB] SOIL
+set(SOIL_DIR "${LIB_DIR}/SOIL")
+add_subdirectory("${SOIL_DIR}")
+target_include_directories(${ENGINE_LIB} PRIVATE "${SOIL_DIR}/include")
+
+# [LIB] ASSIMP
+set(ASSIMP_DIR "${LIB_DIR}/assimp")
+set(ASSIMP_BUILD_TESTS OFF CACHE INTERNAL "If the test suite for Assimp is built in addition to the library.")
+set(ASSIMP_INSTALL OFF CACHE INTERNAL "Disable this if you want to use assimp as a submodule.")
+add_subdirectory("${ASSIMP_DIR}")
+target_include_directories(${ENGINE_LIB} PRIVATE "${ASSIMP_DIR}/include")
+
+# Engine Static Library Linking
+target_link_libraries(${ENGINE_LIB} glfw "${GLFW_LIBRARIES}" glad "${CMAKE_DL_LIBS}" "soil" project_options project_warnings)
+
+# [EXEC] Main Executable Linking
+set(EXEC_NAME "sandbox")
+add_executable(${EXEC_NAME} PUBLIC ${exec_sources})
+target_include_directories(${EXEC_NAME} PRIVATE ${SANDBOX_DIR})
+target_link_libraries(${EXEC_NAME} PRIVATE ${ENGINE_LIB})
