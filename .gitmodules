@@ -1,9 +1,13 @@
 [submodule "extern/glfw"]
 	path = extern/glfw
 	url = https://github.com/glfw/glfw.git
-[submodule "extern/SOIL"]
-	path = extern/SOIL
-	url = https://github.com/burtonageo/SOIL
 [submodule "extern/assimp"]
 	path = extern/assimp
 	url = https://github.com/assimp/assimp
+[submodule "extern/imgui"]
+	path = extern/imgui
+	url = https://github.com/ocornut/imgui
+	branch = docking
+[submodule "extern/spdlog"]
+	path = extern/spdlog
+	url = https://github.com/gabime/spdlog

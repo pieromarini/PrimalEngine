@@ -1,18 +1,27 @@
-build/
-imgui.ini
-*.json
-
 .DS_Store
 
-# build artifacts
+# Extra
+imgui.ini
+*.json
+*.plist
+
+# build/compilation artifacts
 *.o
 *.a
+*.lib
+*.a
+*.out
 
 # Output
 bin/
 lib/
 
+# CMake
 CMakeCache.txt
 CMakeFiles
 cmake_install.cmake
 cmake_uninstall.cmake
+
+# Build folders
+build/
+target/

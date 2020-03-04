@@ -4,7 +4,7 @@ if(${CMAKE_VERSION} VERSION_LESS 3.12)
 	cmake_policy(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}})
 endif()
 
-project(PrimalEngine 1.0 DESCRIPTION "C++ Game Engine" LANGUAGES CXX)
+project(PrimalEngine DESCRIPTION "C++ Game Engine" LANGUAGES C CXX)
 
 include(cmake/BasicSettings.cmake)
 
@@ -48,14 +48,14 @@ endif()
 
 
 # ============ Libraries / Linking ============ #
-include(cmake/srclist.cmake)
+include(cmake/SrcList.cmake)
 
 set(LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/extern")
-set(PRIMAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
+set(SOURCES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(SANDBOX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sandbox")
 set(ENGINE_LIB "lib_primal")
 add_library(${ENGINE_LIB} "${engine_sources}")
-target_include_directories(${ENGINE_LIB} "${PRIMAL_DIR}")
+target_include_directories(${ENGINE_LIB} PRIVATE "${SOURCES_DIR}")
 
 # [LIB] GLFW
 set(GLFW_DIR "${LIB_DIR}/glfw")
@@ -73,6 +73,27 @@ add_library("glad" "${GLAD_DIR}/src/glad.c")
 target_include_directories("glad" PRIVATE "${GLAD_DIR}/include")
 target_include_directories(${ENGINE_LIB} PRIVATE "${GLAD_DIR}/include")
 
+# [LIB] ImGUI
+set(IMGUI_DIR "${LIB_DIR}/imgui")
+add_library(imgui 
+	${IMGUI_DIR}/imconfig.h
+	${IMGUI_DIR}/imgui.h
+	${IMGUI_DIR}/imgui.cpp
+	${IMGUI_DIR}/imgui_demo.cpp
+	${IMGUI_DIR}/imgui_draw.cpp
+	${IMGUI_DIR}/examples/imgui_impl_glfw.h
+	${IMGUI_DIR}/examples/imgui_impl_glfw.cpp
+	${IMGUI_DIR}/examples/imgui_impl_opengl3.h
+	${IMGUI_DIR}/examples/imgui_impl_opengl3.cpp
+	${IMGUI_DIR}/imgui_internal.h
+	${IMGUI_DIR}/imgui_widgets.cpp
+	${IMGUI_DIR}/imstb_rectpack.h
+	${IMGUI_DIR}/imstb_textedit.h
+	${IMGUI_DIR}/imstb_truetype.h
+)
+target_include_directories(imgui PRIVATE "${IMGUI_DIR}")
+target_include_directories(${ENGINE_LIB} PRIVATE "${IMGUI_DIR}")
+
 # [LIB] SOIL
 set(SOIL_DIR "${LIB_DIR}/SOIL")
 add_subdirectory("${SOIL_DIR}")
@@ -82,14 +103,25 @@ target_include_directories(${ENGINE_LIB} PRIVATE "${SOIL_DIR}/include")
 set(ASSIMP_DIR "${LIB_DIR}/assimp")
 set(ASSIMP_BUILD_TESTS OFF CACHE INTERNAL "If the test suite for Assimp is built in addition to the library.")
 set(ASSIMP_INSTALL OFF CACHE INTERNAL "Disable this if you want to use assimp as a submodule.")
+set(ENABLE_BOOST_WORKAROUND ON)
+set(BUILD_STATIC_LIB ON)
+set(BUILD_ASSIMP_TOOLS  ON)
+set(ASSIMP_BUILD_STATIC_LIB ON)
 add_subdirectory("${ASSIMP_DIR}")
 target_include_directories(${ENGINE_LIB} PRIVATE "${ASSIMP_DIR}/include")
 
+# [LIB] spdlog
+set(SPDLOG_DIR "${LIB_DIR}/spdlog")
+add_subdirectory("${SPDLOG_DIR}")
+target_include_directories(${ENGINE_LIB} PRIVATE "${SPDLOG_DIR}/include")
+
 # Engine Static Library Linking
-target_link_libraries(${ENGINE_LIB} glfw "${GLFW_LIBRARIES}" glad "${CMAKE_DL_LIBS}" "soil" project_options project_warnings)
+target_link_libraries(${ENGINE_LIB} glfw "${GLFW_LIBRARIES}" soil glad "${CMAKE_DL_LIBS}" imgui assimp spdlog::spdlog project_options project_warnings)
 
 # [EXEC] Main Executable Linking
 set(EXEC_NAME "sandbox")
-add_executable(${EXEC_NAME} PUBLIC ${exec_sources})
+add_executable(${EXEC_NAME} ${sandbox_sources})
 target_include_directories(${EXEC_NAME} PRIVATE ${SANDBOX_DIR})
 target_link_libraries(${EXEC_NAME} PRIVATE ${ENGINE_LIB})
+
+execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/res ${PROJECT_BINARY_DIR}/res RESULT_VARIABLE exitcode)

@@ -1,6 +1,6 @@
 #include "mesh.h"
 #include <glm/fwd.hpp>
-#include <glad/gl.h>
+#include <glad/glad.h>
 
 namespace primal {
 

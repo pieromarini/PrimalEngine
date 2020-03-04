@@ -1,6 +1,6 @@
 #include <vector>
 
-#include <glad/gl.h>
+#include <glad/glad.h>
 #include <glm/gtc/type_ptr.hpp>
 
 #include "../core/log.h"

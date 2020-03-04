@@ -1,4 +1,4 @@
-#include <glad/gl.h>
+#include <glad/glad.h>
 
 #include "../../primal/core/application.h"
 #include "openGLVertexArray.h"

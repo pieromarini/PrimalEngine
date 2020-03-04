@@ -1,4 +1,4 @@
-#include <glad/gl.h>
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
 #include "../../primal/core/log.h"
@@ -15,7 +15,7 @@ namespace primal {
 	PRIMAL_PROFILE_FUNCTION();
 
 	glfwMakeContextCurrent(m_windowHandle);
-	int status = gladLoadGL(glfwGetProcAddress);
+	int status = gladLoadGL();
 	PRIMAL_CORE_ASSERT(status, "Failed to initialize Glad!");
 
 	PRIMAL_CORE_INFO("OpenGL Info:");
