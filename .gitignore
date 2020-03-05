@@ -5,6 +5,9 @@ imgui.ini
 *.json
 *.plist
 
+# clangd completion with compile-commands
+.clangd
+
 # build/compilation artifacts
 *.o
 *.a

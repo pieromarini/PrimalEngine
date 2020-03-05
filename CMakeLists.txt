@@ -125,3 +125,6 @@ target_include_directories(${EXEC_NAME} PRIVATE ${SANDBOX_DIR})
 target_link_libraries(${EXEC_NAME} PRIVATE ${ENGINE_LIB})
 
 execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/res ${PROJECT_BINARY_DIR}/res RESULT_VARIABLE exitcode)
+
+# NOTE: We move the compile_commands.json file to the project root so that completion engines can pick it up automatically.
+file(RENAME "${CMAKE_BINARY_DIR}/compile_commands.json" "${PROJECT_SOURCE_DIR}/compile_commands.json")
