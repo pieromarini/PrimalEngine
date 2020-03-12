@@ -5,7 +5,7 @@
 
 #include "sandbox3D.h"
 
-Sandbox3D::Sandbox3D() : Layer("Sandbox3D"), m_cameraController(1280.0f / 720.0f) { }
+Sandbox3D::Sandbox3D() : Layer("Sandbox3D"), m_cameraController(1280.0F / 720.0F) { }
 
 void Sandbox3D::onAttach() {
   PRIMAL_PROFILE_FUNCTION();
@@ -48,7 +48,9 @@ void Sandbox3D::onImGuiRender() {
   ImGui::ColorEdit4("Square Color", glm::value_ptr(m_squareColor));
 
   auto cameraPos = m_cameraController.getCamera().getPosition();
-  ImGui::Text("Camera Pos: (%f, %f, %f)", cameraPos.x, cameraPos.y, cameraPos.z);
+  ImGui::Text("Camera Pos: (%f, %f, %f)", static_cast<double>(cameraPos.x),
+										  static_cast<double>(cameraPos.y),
+										  static_cast<double>(cameraPos.z));
 
   ImGui::End();
 }

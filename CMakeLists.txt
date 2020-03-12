@@ -25,9 +25,6 @@ enable_sanitizers(project_options)
 include(cmake/Doxygen.cmake)
 enable_doxygen()
 
-# Setup static analysis
-include(cmake/StaticAnalyzers.cmake)
-
 # Check that all submodules are present
 include(cmake/SubmodulesCheck.cmake)
 check_submodules()
@@ -55,6 +52,10 @@ set(SOURCES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(SANDBOX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sandbox")
 set(ENGINE_LIB "lib_primal")
 add_library(${ENGINE_LIB} "${engine_sources}")
+
+# Setup static analysis
+include(cmake/StaticAnalyzers.cmake)
+
 target_include_directories(${ENGINE_LIB} PRIVATE "${SOURCES_DIR}")
 
 # [LIB] GLFW
@@ -116,15 +117,18 @@ add_subdirectory("${SPDLOG_DIR}")
 target_include_directories(${ENGINE_LIB} PRIVATE "${SPDLOG_DIR}/include")
 
 # Engine Static Library Linking
-target_link_libraries(${ENGINE_LIB} glfw "${GLFW_LIBRARIES}" soil glad "${CMAKE_DL_LIBS}" imgui assimp spdlog::spdlog project_options project_warnings)
+target_link_libraries(${ENGINE_LIB} glfw "${GLFW_LIBRARIES}" soil glad "${CMAKE_DL_LIBS}" imgui assimp spdlog::spdlog)
 
 # [EXEC] Main Executable Linking
 set(EXEC_NAME "sandbox")
 add_executable(${EXEC_NAME} ${sandbox_sources})
 target_include_directories(${EXEC_NAME} PRIVATE ${SANDBOX_DIR})
-target_link_libraries(${EXEC_NAME} PRIVATE ${ENGINE_LIB})
+target_link_libraries(${EXEC_NAME} PRIVATE ${ENGINE_LIB} project_options project_warnings)
 
 execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/res ${PROJECT_BINARY_DIR}/res RESULT_VARIABLE exitcode)
 
 # NOTE: We move the compile_commands.json file to the project root so that completion engines can pick it up automatically.
-file(RENAME "${CMAKE_BINARY_DIR}/compile_commands.json" "${PROJECT_SOURCE_DIR}/compile_commands.json")
+# TODO: FIX. this should be the final step after running 'make'
+if(EXISTS "${CMAKE_BINARY_DIR}/compile_commands.json")
+	file(RENAME "${CMAKE_BINARY_DIR}/compile_commands.json" "${PROJECT_SOURCE_DIR}/compile_commands.json")
+endif()
