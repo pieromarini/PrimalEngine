@@ -1,0 +1,5 @@
+---
+Checks:           'cppcoreguidelines-*,-cppcoreguidelines-pro-type-union-access,modernize-*,clang-analyzer-*,misc-*,-modernize-use-trailing-return-type'
+WarningsAsErrors: '0'
+HeaderFilterRegex: ''
+FormatStyle:     none

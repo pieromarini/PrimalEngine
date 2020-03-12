@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../primal/primal.h"
+#include "../src/primal.h"
 
 class Sandbox2D : public primal::Layer {
   public:
