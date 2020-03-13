@@ -34,7 +34,7 @@ namespace primal {
   }
 
   void Mesh::draw(Shader* shader) {
-	// Setting Texture information for model.
+	// Binding Texture information for Mesh.
 	// TODO: Move to Renderer 
 	unsigned int diffuseNr = 1;
 	unsigned int specularNr = 1;
@@ -56,7 +56,7 @@ namespace primal {
 	VAO->bind();
 	glDrawElements(GL_TRIANGLES, m_indices.size(), GL_UNSIGNED_INT, 0);
 	glBindVertexArray(0);
-  }  
+  }
 
 
 }

@@ -60,6 +60,7 @@ namespace primal {
 	  vertex.Normal = vec;
 
 	  // texture coordinates
+	  // NOTE: Only handles 1 set of texture coordinates
 	  if(mesh->mTextureCoords[0]) {
 		glm::vec2 vec;
 		vec.x = mesh->mTextureCoords[0][i].x; 
@@ -84,35 +85,42 @@ namespace primal {
 
 	  vertices.push_back(vertex);
 	}
+
 	for(unsigned int i = 0; i < mesh->mNumFaces; i++) {
 	  aiFace face = mesh->mFaces[i];
 	  for(unsigned int j = 0; j < face.mNumIndices; j++)
 		indices.push_back(face.mIndices[j]);
 	}
-	aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];    
 
-	// we assume a convention for sampler names in the shaders. Each diffuse texture should be named
-	// as 'texture_diffuseN' where N is a sequential number ranging from 1 to MAX_SAMPLER_NUMBER. 
-	// Same applies to other texture as the following list summarizes:
-	// diffuse: texture_diffuseN
-	// specular: texture_specularN
-	// normal: texture_normalN
+	if (mesh->mMaterialIndex >= 0) {
+	  aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];    
 
-	// 1. diffuse maps
-	std::vector<TextureWrapper> diffuseMaps = loadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse");
-	textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
+	  /* NOTE: PrimalEngine assumes a convention for sampler names in the shaders.
+	   * Each diffuse texture should be named as 'texture_diffuseN' where N is a
+	   * sequential number ranging from 1 to MAX_SAMPLER_NUMBER. 
+	   * Same applies to other texture as the following list summarizes:
+	   * diffuse: texture_diffuseN
+	   * specular: texture_specularN
+	   * normal: texture_normalN
+	   * height: texture_heightN
+	   */
 
-	// 2. specular maps
-	std::vector<TextureWrapper> specularMaps = loadMaterialTextures(material, aiTextureType_SPECULAR, "texture_specular");
-	textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
+	  // 1. diffuse maps
+	  std::vector<TextureWrapper> diffuseMaps = loadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse");
+	  textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
 
-	// 3. normal maps
-	std::vector<TextureWrapper> normalMaps = loadMaterialTextures(material, aiTextureType_HEIGHT, "texture_normal");
-	textures.insert(textures.end(), normalMaps.begin(), normalMaps.end());
+	  // 2. specular maps
+	  std::vector<TextureWrapper> specularMaps = loadMaterialTextures(material, aiTextureType_SPECULAR, "texture_specular");
+	  textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
 
-	// 4. height maps
-	std::vector<TextureWrapper> heightMaps = loadMaterialTextures(material, aiTextureType_AMBIENT, "texture_height");
-	textures.insert(textures.end(), heightMaps.begin(), heightMaps.end());
+	  // 3. normal maps
+	  std::vector<TextureWrapper> normalMaps = loadMaterialTextures(material, aiTextureType_NORMALS, "texture_normal");
+	  textures.insert(textures.end(), normalMaps.begin(), normalMaps.end());
+
+	  // 4. height maps
+	  std::vector<TextureWrapper> heightMaps = loadMaterialTextures(material, aiTextureType_HEIGHT, "texture_height");
+	  textures.insert(textures.end(), heightMaps.begin(), heightMaps.end());
+	}
 
 	return Mesh(vertices, indices, textures);
   }
@@ -123,9 +131,9 @@ namespace primal {
 	  aiString str;
 	  mat->GetTexture(type, i, &str);
 	  bool skip = false;
-	  for(unsigned int j = 0; j < m_texturesLoaded.size(); j++) {
-		if(std::strcmp(m_texturesLoaded[j].path.data(), str.C_Str()) == 0) {
-		  textures.push_back(m_texturesLoaded[j]);
+	  for(auto& texture : m_texturesLoaded) {
+		if(std::strcmp(texture.path.data(), str.C_Str()) == 0) {
+		  textures.push_back(texture);
 		  skip = true; 
 		  break;
 		}
@@ -138,7 +146,10 @@ namespace primal {
 		texture.type = typeName;
 		texture.path = str.C_Str();
 		textures.push_back(texture);
-		m_texturesLoaded.push_back(texture); // add to loaded textures
+
+		// NOTE: TEMPORARY basic caching.
+		// This will be removed when the "Resource Manager" is implemented.
+		m_texturesLoaded.push_back(texture);
 	  }
 	}
 
