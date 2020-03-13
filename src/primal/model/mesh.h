@@ -5,6 +5,8 @@
 #include <string>
 
 #include "../renderer/shader.h"
+#include "../renderer/vertexArray.h"
+#include "../renderer/buffer.h"
 
 namespace primal {
 
@@ -24,15 +26,17 @@ namespace primal {
 
   class Mesh {
 	public:
-	  Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices, std::vector<TextureWrapper> textures);
+	  Mesh(std::vector<Vertex> vertices, std::vector<uint32_t> indices, std::vector<TextureWrapper> textures);
 
 	  void draw(Shader* shader);
 
 	  std::vector<Vertex> m_vertices;
-	  std::vector<unsigned int> m_indices;
+	  std::vector<uint32_t> m_indices;
 	  std::vector<TextureWrapper> m_textures;
 	private:
-	  unsigned int VAO, VBO, EBO;
+	  ref_ptr<VertexArray> VAO;
+	  ref_ptr<VertexBuffer> VBO;
+	  ref_ptr<IndexBuffer> EBO;
 	  void setupMesh();
   };
 }

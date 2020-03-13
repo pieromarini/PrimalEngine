@@ -22,7 +22,7 @@ class Sandbox3D : public primal::Layer {
 	primal::ref_ptr<primal::Shader> m_flatColorShader;
 	primal::ref_ptr<primal::Model> m_modelTest;
 
-	primal::ref_ptr<primal::Texture2D> m_checkerboardTexture;
+	primal::ref_ptr<primal::Texture2D> m_modelTexture;
 
 	glm::vec4 m_squareColor = { 0.2F, 0.3F, 0.8F, 1.0F };
 };

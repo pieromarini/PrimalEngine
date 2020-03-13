@@ -5,8 +5,8 @@
 namespace primal {
 
   void Model::draw(Shader* shader) {
-	for(unsigned int i = 0; i < m_meshes.size(); i++)
-	  m_meshes[i].draw(shader);
+	for(auto &mesh : m_meshes)
+	  mesh.draw(shader);
   }
 
   void Model::loadModel(const std::string path) {
@@ -44,7 +44,7 @@ namespace primal {
 
 	// Walk through each of the mesh's vertices
 	for(unsigned int i = 0; i < mesh->mNumVertices; i++) {
-	  Vertex vertex;
+	  Vertex vertex{};
 	  glm::vec3 vec;
 
 	  // positions
@@ -69,19 +69,19 @@ namespace primal {
 		vertex.TexCoords = glm::vec2(0.0f, 0.0f);
 	  }
 
-	  /*
-	  // tangent
-	  vec.x = mesh->mTangents[i].x;
-	  vec.y = mesh->mTangents[i].y;
-	  vec.z = mesh->mTangents[i].z;
-	  vertex.Tangent = vec;
+	  // tangents and bitangents
+	  if (mesh->HasTangentsAndBitangents()) {
+		vec.x = mesh->mTangents[i].x;
+		vec.y = mesh->mTangents[i].y;
+		vec.z = mesh->mTangents[i].z;
+		vertex.Tangent = vec;
 
-	  // bitangent
-	  vec.x = mesh->mBitangents[i].x;
-	  vec.y = mesh->mBitangents[i].y;
-	  vec.z = mesh->mBitangents[i].z;
-	  vertex.Bitangent = vec;
-	  */
+		vec.x = mesh->mBitangents[i].x;
+		vec.y = mesh->mBitangents[i].y;
+		vec.z = mesh->mBitangents[i].z;
+		vertex.Bitangent = vec;
+	  }
+
 	  vertices.push_back(vertex);
 	}
 	for(unsigned int i = 0; i < mesh->mNumFaces; i++) {

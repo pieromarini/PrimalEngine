@@ -104,6 +104,7 @@ namespace primal {
 	  virtual void setLayout(const BufferLayout& layout) = 0;
 
 	  static ref_ptr<VertexBuffer> create(float* vertices, uint32_t size);
+	  static ref_ptr<VertexBuffer> create(const void* data, uint32_t size);
   };
 
   class IndexBuffer {

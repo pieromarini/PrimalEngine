@@ -1,6 +1,8 @@
-#include "mesh.h"
 #include <glm/fwd.hpp>
 #include <glad/glad.h>
+
+#include "mesh.h"
+#include "primal/core/log.h"
 
 namespace primal {
 
@@ -9,34 +11,31 @@ namespace primal {
   }
 
   void Mesh::setupMesh() {
-	glGenVertexArrays(1, &VAO);
-	glGenBuffers(1, &VBO);
-	glGenBuffers(1, &EBO);
+	VAO = VertexArray::create();
 
-	glBindVertexArray(VAO);
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	VAO->bind();
 
-	glBufferData(GL_ARRAY_BUFFER, m_vertices.size() * sizeof(Vertex), &m_vertices[0], GL_STATIC_DRAW);  
+	VBO = VertexBuffer::create(&m_vertices[0], m_vertices.size() * sizeof(Vertex));
 
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, m_indices.size() * sizeof(unsigned int), &m_indices[0], GL_STATIC_DRAW);
+	VBO->setLayout({
+	  { ShaderDataType::Float3, "a_Position" },
+	  { ShaderDataType::Float3, "a_Normal" },
+	  { ShaderDataType::Float2, "a_TexCoords" },
+	  { ShaderDataType::Float3, "a_Tangent" },
+	  { ShaderDataType::Float3, "a_Bitangent" },
+	});
 
-	// vertex positions
-	glEnableVertexAttribArray(0);	
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
-	// vertex normals
-	glEnableVertexAttribArray(1);	
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
-	// vertex texture coords
-	glEnableVertexAttribArray(2);	
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
+	EBO = IndexBuffer::create(&m_indices[0], m_indices.size());
 
-	glBindVertexArray(0);
+	VAO->addVertexBuffer(VBO);
+	VAO->setIndexBuffer(EBO);
+
+	VAO->unbind();
   }
 
   void Mesh::draw(Shader* shader) {
 	// Setting Texture information for model.
-	// NOTE: Should this stay here or be handled by the renderer directly?
+	// TODO: Move to Renderer 
 	unsigned int diffuseNr = 1;
 	unsigned int specularNr = 1;
 	for(unsigned int i = 0; i < m_textures.size(); i++) {
@@ -53,8 +52,8 @@ namespace primal {
 	}
 	glActiveTexture(GL_TEXTURE0);
 
-	// Draw. Move to RenderCommand (drawIndexed)
-	glBindVertexArray(VAO);
+	// TODO: Move to Renderer
+	VAO->bind();
 	glDrawElements(GL_TRIANGLES, m_indices.size(), GL_UNSIGNED_INT, 0);
 	glBindVertexArray(0);
   }  

@@ -17,6 +17,14 @@ namespace primal {
 	glBufferData(GL_ARRAY_BUFFER, size, vertices, GL_STATIC_DRAW);
   }
 
+  OpenGLVertexBuffer::OpenGLVertexBuffer(const void* data, uint32_t size) {
+	PRIMAL_PROFILE_FUNCTION();
+
+	glCreateBuffers(1, &m_rendererID);
+	glBindBuffer(GL_ARRAY_BUFFER, m_rendererID);
+	glBufferData(GL_ARRAY_BUFFER, size, data, GL_STATIC_DRAW);
+  }
+
   OpenGLVertexBuffer::~OpenGLVertexBuffer() {
 	PRIMAL_PROFILE_FUNCTION();
 
