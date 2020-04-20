@@ -1,4 +1,4 @@
-#include "../vendor/imgui/imgui.h"
+#include "../extern/imgui/imgui.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>

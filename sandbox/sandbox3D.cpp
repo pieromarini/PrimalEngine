@@ -1,17 +1,17 @@
-#include "../vendor/imgui/imgui.h"
+#include "../extern/imgui/imgui.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include "sandbox3D.h"
 
-Sandbox3D::Sandbox3D() : Layer("Sandbox3D"), m_cameraController(1280.0f / 720.0f) { }
+Sandbox3D::Sandbox3D() : Layer("Sandbox3D"), m_cameraController(1280.0F / 720.0F) { }
 
 void Sandbox3D::onAttach() {
   PRIMAL_PROFILE_FUNCTION();
 
   m_modelTest = primal::createRef<primal::Model>("res/models/cottage.obj");
-  m_checkerboardTexture = primal::Texture2D::create("res/models/cottage_textures/cottage_diffuse.png");
+  m_modelTexture = primal::Texture2D::create("res/models/cottage_textures/cottage_diffuse.png");
 }
 
 void Sandbox3D::onDetach() {
@@ -33,10 +33,7 @@ void Sandbox3D::onUpdate(primal::Timestep ts) {
   {
 	PRIMAL_PROFILE_SCOPE("Renderer Draw");
 	primal::Renderer3D::beginScene(m_cameraController.getCamera());
-	primal::Renderer3D::drawModel(m_modelTest, { 5.0f, 0.0f, 0.0f }, { 0.1f, 0.1f, 0.1f }, m_checkerboardTexture);
-	primal::Renderer3D::drawCube({ 0.0f, 0.0f, -1.0f }, { 0.5f, 0.75f, 0.5f }, m_squareColor);
-	// primal::Renderer3D::drawCube({ 5.0f, 1.0f, -1.0f }, { 0.5f, 0.75f, 0.5f }, m_squareColor);
-	// primal::Renderer3D::drawCube({ 0.0f, 0.0f, 1.0f }, { 10.0f, 10.0f , 0.5f}, m_checkerboardTexture);
+	primal::Renderer3D::drawModel(m_modelTest, { 5.0f, 0.0f, 0.0f }, { 0.1f, 0.1f, 0.1f }, m_modelTexture);
 	primal::Renderer3D::endScene();
   }
 }
@@ -48,7 +45,9 @@ void Sandbox3D::onImGuiRender() {
   ImGui::ColorEdit4("Square Color", glm::value_ptr(m_squareColor));
 
   auto cameraPos = m_cameraController.getCamera().getPosition();
-  ImGui::Text("Camera Pos: (%f, %f, %f)", cameraPos.x, cameraPos.y, cameraPos.z);
+  ImGui::Text("Camera Pos: (%f, %f, %f)", static_cast<double>(cameraPos.x),
+										  static_cast<double>(cameraPos.y),
+										  static_cast<double>(cameraPos.z));
 
   ImGui::End();
 }
