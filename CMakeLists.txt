@@ -68,6 +68,11 @@ add_subdirectory("${GLFW_DIR}")
 target_include_directories(${ENGINE_LIB} PRIVATE "${GLFW_DIR}/include")
 target_compile_definitions(${ENGINE_LIB} PRIVATE "GLFW_INCLUDE_NONE")
 
+# [LIB] glm
+set(GLM_DIR "${LIB_DIR}/glm")
+add_subdirectory("${GLM_DIR}")
+target_include_directories(${ENGINE_LIB} PRIVATE "${GLM_DIR}")
+
 # [LIB] GLAD
 set(GLAD_DIR "${LIB_DIR}/glad")
 add_library("glad" "${GLAD_DIR}/src/glad.c")
@@ -92,7 +97,7 @@ add_library(imgui
 	${IMGUI_DIR}/imstb_textedit.h
 	${IMGUI_DIR}/imstb_truetype.h
 )
-target_include_directories(imgui PRIVATE "${IMGUI_DIR}")
+target_include_directories(imgui PRIVATE "${IMGUI_DIR}" "${GLFW_DIR}/include")
 target_include_directories(${ENGINE_LIB} PRIVATE "${IMGUI_DIR}")
 
 # [LIB] SOIL
@@ -122,7 +127,7 @@ target_link_libraries(${ENGINE_LIB} glfw "${GLFW_LIBRARIES}" soil glad "${CMAKE_
 # [EXEC] Main Executable Linking
 set(EXEC_NAME "sandbox")
 add_executable(${EXEC_NAME} ${sandbox_sources})
-target_include_directories(${EXEC_NAME} PRIVATE ${SANDBOX_DIR})
+target_include_directories(${EXEC_NAME} PRIVATE ${SANDBOX_DIR} ${GLM_DIR})
 target_link_libraries(${EXEC_NAME} PRIVATE ${ENGINE_LIB} project_options project_warnings)
 
 execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/res ${PROJECT_BINARY_DIR}/res RESULT_VARIABLE exitcode)

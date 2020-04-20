@@ -1,6 +1,6 @@
 option(ENABLE_CPPCHECK "Enable static analysis with cppcheck" OFF)
-option(ENABLE_CLANG_TIDY "Enable static analysis with clang-tidy" ON)
-option(CLANG_TIDY_FIX "Perform fixes with clang-tidy" ON)
+option(ENABLE_CLANG_TIDY "Enable static analysis with clang-tidy" OFF)
+option(CLANG_TIDY_FIX "Perform fixes with clang-tidy" OFF)
 
 # TODO: Fix. Apply only to relevant targets
 if(ENABLE_CPPCHECK)
