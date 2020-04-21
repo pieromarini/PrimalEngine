@@ -23,6 +23,9 @@ namespace primal {
 	  void setVSync(bool enabled) override;
 	  bool isVSync() const override;
 
+	  void toggleCursor() override;
+	  int getCursorMode() override;
+
 	  inline virtual void* getNativeWindow() const override { return m_window; }
 	private:
 	  virtual void init(const WindowProps& props);

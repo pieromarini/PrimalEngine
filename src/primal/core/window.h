@@ -33,6 +33,9 @@ namespace primal {
 	  virtual void setVSync(bool enabled) = 0;
 	  virtual bool isVSync() const = 0;
 
+	  virtual void toggleCursor() = 0;
+	  virtual int getCursorMode() = 0;
+
 	  virtual void* getNativeWindow() const = 0;
 
 	  static scope_ptr<Window> create(const WindowProps& props = WindowProps());

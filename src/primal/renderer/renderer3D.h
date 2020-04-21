@@ -20,6 +20,9 @@ namespace primal {
 	  static void drawCube(const glm::vec3& position, const glm::vec3& size, const ref_ptr<Texture2D>& texture);
 
 	  static void drawModel(const ref_ptr<Model>& model, const glm::vec3& position, const glm::vec3& size, const ref_ptr<Texture2D>& texture);
+
+	  static glm::vec3 lightDirection;
+
   };
 
 }

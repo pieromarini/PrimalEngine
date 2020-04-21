@@ -34,11 +34,12 @@ namespace primal {
   }
 
   void Mesh::draw(Shader* shader) {
+	std::size_t diffuseNr = 1;
+	std::size_t specularNr = 1;
+
 	// Binding Texture information for Mesh.
-	// TODO: Move to Renderer 
-	unsigned int diffuseNr = 1;
-	unsigned int specularNr = 1;
-	for(unsigned int i = 0; i < m_textures.size(); i++) {
+	// NOTE: Should this belong here?
+	for(std::size_t i = 0; i < m_textures.size(); i++) {
 	  glActiveTexture(GL_TEXTURE0 + i);
 	  std::string number;
 	  std::string name = m_textures[i].type;
@@ -47,14 +48,14 @@ namespace primal {
 	  else if(name == "texture_specular")
 		number = std::to_string(specularNr++);
 
-	  shader->setInt((name + number).c_str(), i);
+	  shader->setInt(("u_Material." + name + number).c_str(), i);
 	  glBindTexture(GL_TEXTURE_2D, m_textures[i].id);
 	}
 	glActiveTexture(GL_TEXTURE0);
 
 	// TODO: Move to Renderer
 	VAO->bind();
-	glDrawElements(GL_TRIANGLES, m_indices.size(), GL_UNSIGNED_INT, 0);
+	glDrawElements(GL_TRIANGLES, m_indices.size(), GL_UNSIGNED_INT, nullptr);
 	glBindVertexArray(0);
   }
 

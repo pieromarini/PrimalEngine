@@ -185,4 +185,16 @@ namespace primal {
 	return m_data.vSync;
   }
 
+  void LinuxWindow::toggleCursor() {
+	if (glfwGetInputMode(m_window, GLFW_CURSOR) == GLFW_CURSOR_NORMAL) {
+	  glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	} else {
+	  glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	}
+  }
+
+  int LinuxWindow::getCursorMode() {
+	return glfwGetInputMode(m_window, GLFW_CURSOR);
+  }
+
 }

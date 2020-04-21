@@ -1,3 +1,4 @@
+#include "GLFW/glfw3.h"
 #include "primal/core/core.h"
 #include "primal/core/application.h"
 
@@ -29,6 +30,10 @@ namespace primal {
 	  m_cameraPosition -= m_camera.getUpVector() * m_cameraTranslationSpeed * ts.getSeconds();
 	}
 
+	if (Input::isKeyPressed(PRIMAL_KEY_P)) {
+	  Application::get().getWindow().toggleCursor();
+	}
+
 	m_camera.setPosition(m_cameraPosition);
 
 	m_cameraTranslationSpeed = m_zoomLevel;
@@ -54,6 +59,11 @@ namespace primal {
 
   bool PerspectiveCameraController::onMouseMoved(MouseMovedEvent& e) {
 	PRIMAL_PROFILE_FUNCTION();
+
+	// NOTE: TEMP. Stop rotating the camera while on free mouse mode.
+	if (Application::get().getWindow().getCursorMode() == GLFW_CURSOR_NORMAL) {
+	  return false;
+	}
 
 	m_camera.setRotation(e.getX(), e.getY());
 	return false;

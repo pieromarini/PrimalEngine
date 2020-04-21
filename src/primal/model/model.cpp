@@ -148,7 +148,7 @@ namespace primal {
 		textures.push_back(texture);
 
 		// NOTE: TEMPORARY basic caching.
-		// This will be removed when the "Resource Manager" is implemented.
+		// This will be removed when the "ResourceManager" is implemented.
 		m_texturesLoaded.push_back(texture);
 	  }
 	}
