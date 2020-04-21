@@ -2,7 +2,7 @@
 
 #include "core.h"
 #include "timestep.h"
-#include "../events/event.h"
+#include "primal/events/event.h"
 
 namespace primal { 
 

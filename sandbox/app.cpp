@@ -1,5 +1,5 @@
 #include "../src/primal.h"
-#include "../src/primal/core/entryPoint.h"
+#include "primal/core/entryPoint.h"
 
 #include "sandbox2D.h"
 #include "sandbox3D.h"

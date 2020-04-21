@@ -1,4 +1,4 @@
-#include "../../platform/openGL/openGLRendererAPI.h"
+#include "platform/openGL/openGLRendererAPI.h"
 
 #include "renderCommand.h"
 #include "rendererAPI.h"

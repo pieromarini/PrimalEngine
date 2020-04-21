@@ -1,6 +1,6 @@
 #include <GLFW/glfw3.h>
 
-#include "../../primal/core/application.h"
+#include "primal/core/application.h"
 #include "linuxInput.h"
 
 namespace primal {

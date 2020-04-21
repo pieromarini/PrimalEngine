@@ -1,6 +1,6 @@
 #include "rendererAPI.h"
 
-#include "../../platform/openGL/openGLRendererAPI.h"
+#include "platform/openGL/openGLRendererAPI.h"
 
 namespace primal {
 

@@ -1,7 +1,7 @@
 #include <glad/glad.h>
 
-#include "../../primal/core/core.h"
-#include "../../primal/core/application.h"
+#include "primal/core/core.h"
+#include "primal/core/application.h"
 #include "openGLRendererAPI.h"
 
 namespace primal {

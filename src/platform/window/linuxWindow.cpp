@@ -1,14 +1,14 @@
 #include "linuxWindow.h"
 #include <cstdlib>
 
-#include "../../primal/core/application.h"
-#include "../../primal/core/log.h"
-#include "../../primal/events/applicationEvent.h"
-#include "../../primal/events/mouseEvent.h"
-#include "../../primal/events/keyEvent.h"
-#include "../../primal/core/input.h"
-#include "../../primal/renderer/renderer.h"
-#include "../../primal/renderer/rendererAPI.h"
+#include "primal/core/application.h"
+#include "primal/core/log.h"
+#include "primal/events/applicationEvent.h"
+#include "primal/events/mouseEvent.h"
+#include "primal/events/keyEvent.h"
+#include "primal/core/input.h"
+#include "primal/renderer/renderer.h"
+#include "primal/renderer/rendererAPI.h"
 
 #include "../openGL/openGLContext.h"
 #include <GLFW/glfw3.h>

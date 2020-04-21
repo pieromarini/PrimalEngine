@@ -1,7 +1,7 @@
 #include "graphicsContext.h"
 
-#include "../renderer/renderer.h"
-#include "../../platform/openGL/openGLContext.h"
+#include "primal/renderer/renderer.h"
+#include "platform/openGL/openGLContext.h"
 
 namespace primal {
 

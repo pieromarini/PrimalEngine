@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../../primal/renderer/shader.h"
-#include "../../primal/core/log.h"
-#include "../../primal/core/core.h"
+#include "primal/renderer/shader.h"
+#include "primal/core/log.h"
+#include "primal/core/core.h"
 #include <glm/glm.hpp>
 
 // TODO: REMOVE!

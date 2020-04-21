@@ -1,6 +1,6 @@
 #include <glad/glad.h>
 
-#include "../../primal/core/application.h"
+#include "primal/core/application.h"
 #include "openGLVertexArray.h"
 
 namespace primal {

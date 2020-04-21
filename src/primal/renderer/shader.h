@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../core/core.h"
+#include "primal/core/core.h"
 #include <string>
 #include <unordered_map>
 

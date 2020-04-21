@@ -2,8 +2,8 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <fstream>
 
-#include "../../primal/core/core.h"
-#include "../../primal/core/application.h"
+#include "primal/core/core.h"
+#include "primal/core/application.h"
 #include "openGLShader.h"
 
 namespace primal {

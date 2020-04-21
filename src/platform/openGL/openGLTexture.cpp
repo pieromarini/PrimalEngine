@@ -1,7 +1,7 @@
 #include <SOIL/SOIL.h>
 
 #include "openGLTexture.h"
-#include "../../primal/core/application.h"
+#include "primal/core/application.h"
 
 namespace primal {
 

@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "../core/log.h"
+#include "primal/core/log.h"
 
 namespace primal {
 

@@ -2,7 +2,7 @@
 
 #include "application.h"
 
-#include "../renderer/renderer.h"
+#include "primal/renderer/renderer.h"
 
 namespace primal {
 

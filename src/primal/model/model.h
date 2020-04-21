@@ -5,7 +5,7 @@
 #include <assimp/postprocess.h>
 
 #include "mesh.h"
-#include "../core/core.h"
+#include "primal/core/core.h"
 
 namespace primal {
   class Model {

@@ -1,12 +1,12 @@
+#include <glm/gtc/matrix_transform.hpp>
 #include "renderer3D.h"
 
-#include "../core/application.h"
+#include "primal/core/application.h"
 #include "texture.h"
 #include "vertexArray.h"
 #include "shader.h"
 #include "renderCommand.h"
 
-#include <glm/gtc/matrix_transform.hpp>
 
 namespace primal {
 

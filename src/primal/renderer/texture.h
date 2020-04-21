@@ -2,8 +2,8 @@
 
 #include <string>
 
-#include "../core/log.h"
-#include "../core/core.h"
+#include "primal/core/log.h"
+#include "primal/core/core.h"
 
 namespace primal {
 

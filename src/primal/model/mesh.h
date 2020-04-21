@@ -4,9 +4,9 @@
 #include <vector>
 #include <string>
 
-#include "../renderer/shader.h"
-#include "../renderer/vertexArray.h"
-#include "../renderer/buffer.h"
+#include "primal/renderer/shader.h"
+#include "primal/renderer/vertexArray.h"
+#include "primal/renderer/buffer.h"
 
 namespace primal {
 

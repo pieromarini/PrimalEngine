@@ -1,8 +1,8 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-#include "../../primal/core/log.h"
-#include "../../primal/core/application.h"
+#include "primal/core/log.h"
+#include "primal/core/application.h"
 #include "openGLContext.h"
 
 namespace primal {

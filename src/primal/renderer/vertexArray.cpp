@@ -2,8 +2,8 @@
 
 #include "renderer.h"
 #include "rendererAPI.h"
-#include "../core/log.h"
-#include "../../platform/openGL/openGLVertexArray.h"
+#include "primal/core/log.h"
+#include "platform/openGL/openGLVertexArray.h"
 
 namespace primal {
 

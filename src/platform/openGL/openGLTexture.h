@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../primal/renderer/texture.h"
+#include "primal/renderer/texture.h"
 
 #include <glad/glad.h>
 

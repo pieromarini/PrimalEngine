@@ -6,13 +6,13 @@
 #include "input.h"
 #include "window.h"
 #include "layerStack.h"
-#include "../events/event.h"
-#include "../events/applicationEvent.h"
-#include "../debug/instrumentor.h"
+#include "primal/events/event.h"
+#include "primal/events/applicationEvent.h"
+#include "primal/debug/instrumentor.h"
 
 #include "timestep.h"
 
-#include "../imgui/imGuiLayer.h"
+#include "primal/imgui/imGuiLayer.h"
 
 namespace primal { 
 

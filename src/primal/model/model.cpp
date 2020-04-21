@@ -1,6 +1,6 @@
 #include "model.h"
-#include "../core/log.h"
-#include "../renderer/texture.h"
+#include "primal/core/log.h"
+#include "primal/renderer/texture.h"
 
 namespace primal {
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../primal/renderer/rendererAPI.h"
+#include "primal/renderer/rendererAPI.h"
 
 namespace primal {
 

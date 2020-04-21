@@ -3,11 +3,11 @@
 #include <glad/glad.h>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "../core/log.h"
+#include "primal/core/log.h"
 #include "renderer.h"
 #include "rendererAPI.h"
 
-#include "../../platform/openGL/openGLShader.h"
+#include "platform/openGL/openGLShader.h"
 
 #include "shader.h"
 

@@ -1,10 +1,10 @@
 #pragma once
 
 #include "perspectiveCamera.h"
-#include "../core/timestep.h"
+#include "primal/core/timestep.h"
 
-#include "../events/mouseEvent.h"
-#include "../events/applicationEvent.h"
+#include "primal/events/mouseEvent.h"
+#include "primal/events/applicationEvent.h"
 
 
 namespace primal {

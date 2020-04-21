@@ -3,7 +3,7 @@
 #include "perspectiveCamera.h"
 
 #include "texture.h"
-#include "../model/model.h"
+#include "primal/model/model.h"
 
 namespace primal {
 

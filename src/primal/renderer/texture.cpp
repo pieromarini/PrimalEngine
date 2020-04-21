@@ -1,7 +1,7 @@
 #include "texture.h"
 
 #include "renderer.h"
-#include "../../platform/openGL/openGLTexture.h"
+#include "platform/openGL/openGLTexture.h"
 
 namespace primal {
 

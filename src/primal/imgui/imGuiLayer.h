@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../core/layer.h"
+#include "primal/core/layer.h"
 
-#include "../events/applicationEvent.h"
-#include "../events/keyEvent.h"
-#include "../events/mouseEvent.h"
+#include "primal/events/applicationEvent.h"
+#include "primal/events/keyEvent.h"
+#include "primal/events/mouseEvent.h"
 
 namespace primal {
 

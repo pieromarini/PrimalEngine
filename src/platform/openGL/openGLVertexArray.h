@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../primal/renderer/vertexArray.h"
+#include "primal/renderer/vertexArray.h"
 
 namespace primal {
 

@@ -127,7 +127,7 @@ target_link_libraries(${ENGINE_LIB} glfw "${GLFW_LIBRARIES}" soil glad "${CMAKE_
 # [EXEC] Main Executable Linking
 set(EXEC_NAME "sandbox")
 add_executable(${EXEC_NAME} ${sandbox_sources})
-target_include_directories(${EXEC_NAME} PRIVATE ${SANDBOX_DIR} ${GLM_DIR})
+target_include_directories(${EXEC_NAME} PRIVATE ${SANDBOX_DIR} ${GLM_DIR} ${SOURCES_DIR})
 target_link_libraries(${EXEC_NAME} PRIVATE ${ENGINE_LIB} project_options project_warnings)
 
 execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/res ${PROJECT_BINARY_DIR}/res RESULT_VARIABLE exitcode)

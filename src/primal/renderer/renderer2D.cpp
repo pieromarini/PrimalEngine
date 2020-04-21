@@ -1,6 +1,6 @@
 #include "renderer2D.h"
 
-#include "../core/application.h"
+#include "primal/core/application.h"
 #include "texture.h"
 #include "vertexArray.h"
 #include "shader.h"

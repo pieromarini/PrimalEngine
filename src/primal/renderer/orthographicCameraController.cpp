@@ -1,5 +1,5 @@
-#include "../core/core.h"
-#include "../core/application.h"
+#include "primal/core/core.h"
+#include "primal/core/application.h"
 
 #include "orthographicCameraController.h"
 
