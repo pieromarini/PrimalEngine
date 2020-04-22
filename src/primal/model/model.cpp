@@ -127,7 +127,7 @@ namespace primal {
 
   std::vector<TextureWrapper> Model::loadMaterialTextures(aiMaterial *mat, aiTextureType type, std::string typeName) {
 	std::vector<TextureWrapper> textures;
-	for(unsigned int i = 0; i < mat->GetTextureCount(type); i++) {
+	for(std::size_t i = 0; i < mat->GetTextureCount(type); i++) {
 	  aiString str;
 	  mat->GetTexture(type, i, &str);
 	  bool skip = false;

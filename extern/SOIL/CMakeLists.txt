@@ -18,7 +18,11 @@ set (SRC_FILES
 	"${SRC_DIR}/SOIL.c"
 	"${SRC_DIR}/stb_image_aug.c")
 
-add_library(${SOIL_TARGET})
+if (BUILD_SHARED_LIBS)
+	add_library(${SOIL_TARGET} SHARED)
+else()
+	add_library(${SOIL_TARGET} STATIC)
+endif()
 
 target_include_directories(${SOIL_TARGET}
 	PUBLIC ${INCLUDE_DIR} ${OPENGL_INCLUDE_DIR}

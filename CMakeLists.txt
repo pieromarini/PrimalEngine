@@ -29,7 +29,7 @@ enable_doxygen()
 include(cmake/SubmodulesCheck.cmake)
 check_submodules()
 
-option(BUILD_SHARED_LIBS "Enable compilation of shared libraries" OFF)
+option(BUILD_SHARED_LIBS "Enable compilation of shared libraries" ON)
 option(ENABLE_TESTING "Enable Test Builds" OFF)
 
 option(ENABLE_PCH "Enable Precompiled Headers" OFF)
@@ -50,8 +50,13 @@ include(cmake/SrcList.cmake)
 set(LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/extern")
 set(SOURCES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(SANDBOX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sandbox")
-set(ENGINE_LIB "lib_primal")
-add_library(${ENGINE_LIB} "${engine_sources}")
+set(ENGINE_LIB "primal_engine")
+if (BUILD_SHARED_LIBS)
+	add_library(${ENGINE_LIB} SHARED "${engine_sources}")
+	set_target_properties(${ENGINE_LIB} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+else()
+	add_library(${ENGINE_LIB} "${engine_sources}")
+endif()
 
 # Setup static analysis
 include(cmake/StaticAnalyzers.cmake)
@@ -75,13 +80,13 @@ target_include_directories(${ENGINE_LIB} PRIVATE "${GLM_DIR}")
 
 # [LIB] GLAD
 set(GLAD_DIR "${LIB_DIR}/glad")
-add_library("glad" "${GLAD_DIR}/src/glad.c")
-target_include_directories("glad" PRIVATE "${GLAD_DIR}/include")
+add_library(glad "${GLAD_DIR}/src/glad.c")
+target_include_directories(glad PRIVATE "${GLAD_DIR}/include")
 target_include_directories(${ENGINE_LIB} PRIVATE "${GLAD_DIR}/include")
 
 # [LIB] ImGUI
 set(IMGUI_DIR "${LIB_DIR}/imgui")
-add_library(imgui 
+add_library(imgui STATIC
 	${IMGUI_DIR}/imconfig.h
 	${IMGUI_DIR}/imgui.h
 	${IMGUI_DIR}/imgui.cpp
@@ -97,6 +102,10 @@ add_library(imgui
 	${IMGUI_DIR}/imstb_textedit.h
 	${IMGUI_DIR}/imstb_truetype.h
 )
+if (BUILD_SHARED_LIBS)
+	# NOTE: Need to enable PIC so we can build the shared library correctly.
+	set_target_properties(imgui PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
 target_include_directories(imgui PRIVATE "${IMGUI_DIR}" "${GLFW_DIR}/include")
 target_include_directories(${ENGINE_LIB} PRIVATE "${IMGUI_DIR}")
 
@@ -107,21 +116,25 @@ target_include_directories(${ENGINE_LIB} PRIVATE "${SOIL_DIR}/include")
 
 # [LIB] ASSIMP
 set(ASSIMP_DIR "${LIB_DIR}/assimp")
-set(ASSIMP_BUILD_TESTS OFF CACHE INTERNAL "If the test suite for Assimp is built in addition to the library.")
-set(ASSIMP_INSTALL OFF CACHE INTERNAL "Disable this if you want to use assimp as a submodule.")
-set(ENABLE_BOOST_WORKAROUND ON)
-set(BUILD_STATIC_LIB ON)
-set(BUILD_ASSIMP_TOOLS  ON)
-set(ASSIMP_BUILD_STATIC_LIB ON)
+set(ASSIMP_BUILD_SAMPLES OFF)
+set(ASSIMP_BUILD_TESTS OFF)
+set(ASSIMP_BUILD_ASSIMP_TOOLS  OFF)
+set(ASSIMP_NO_EXPORT OFF)
+set(ASSIMP_INSTALL OFF)
 add_subdirectory("${ASSIMP_DIR}")
 target_include_directories(${ENGINE_LIB} PRIVATE "${ASSIMP_DIR}/include")
 
 # [LIB] spdlog
 set(SPDLOG_DIR "${LIB_DIR}/spdlog")
 add_subdirectory("${SPDLOG_DIR}")
+if (BUILD_SHARED_LIBS)
+	set(SPDLOG_BUILD_SHARED ON)
+	set(SPDLOG_BUILD_TEXTS OFF)
+	set_target_properties(spdlog PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
 target_include_directories(${ENGINE_LIB} PRIVATE "${SPDLOG_DIR}/include")
 
-# Engine Static Library Linking
+# Engine Library Linking
 target_link_libraries(${ENGINE_LIB} glfw "${GLFW_LIBRARIES}" soil glad "${CMAKE_DL_LIBS}" imgui assimp spdlog::spdlog)
 
 # [EXEC] Main Executable Linking
