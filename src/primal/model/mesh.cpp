@@ -1,12 +1,10 @@
-#include <glm/fwd.hpp>
-#include <glad/glad.h>
-
 #include "mesh.h"
 #include "primal/core/log.h"
+#include "primal/renderer/renderCommand.h"
 
 namespace primal {
 
-  Mesh::Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices, std::vector<TextureWrapper> textures) : m_vertices(vertices), m_indices(indices), m_textures(textures) { 
+  Mesh::Mesh(std::vector<Vertex> &vertices, std::vector<unsigned int> &indices, std::vector<ref_ptr<Texture2D>> &textures) : m_vertices(vertices), m_indices(indices), m_textures(textures) { 
 	setupMesh();
   }
 
@@ -36,27 +34,32 @@ namespace primal {
   void Mesh::draw(Shader* shader) {
 	std::size_t diffuseNr = 1;
 	std::size_t specularNr = 1;
+	std::size_t normalNr = 1;
+	std::size_t heightNr = 1;
 
 	// Binding Texture information for Mesh.
-	// NOTE: Should this belong here?
-	for(std::size_t i = 0; i < m_textures.size(); i++) {
-	  glActiveTexture(GL_TEXTURE0 + i);
+	for(std::size_t i = 0; i < m_textures.size(); ++i) {
 	  std::string number;
-	  std::string name = m_textures[i].type;
+	  std::string name = m_textures[i]->m_type;
 	  if(name == "texture_diffuse")
 		number = std::to_string(diffuseNr++);
 	  else if(name == "texture_specular")
 		number = std::to_string(specularNr++);
+	  else if(name == "texture_normal")
+		number = std::to_string(normalNr++);
+	  else if(name == "texture_height")
+		number = std::to_string(heightNr++);
 
 	  shader->setInt(("u_Material." + name + number).c_str(), i);
-	  glBindTexture(GL_TEXTURE_2D, m_textures[i].id);
+	  m_textures[i]->bind(i);
 	}
-	glActiveTexture(GL_TEXTURE0);
 
 	// TODO: Move to Renderer
-	VAO->bind();
-	glDrawElements(GL_TRIANGLES, m_indices.size(), GL_UNSIGNED_INT, nullptr);
-	glBindVertexArray(0);
+	RenderCommand::drawIndexed(VAO);
+  }
+
+  void Mesh::setTexture(ref_ptr<Texture2D> texture) {
+	m_textures.push_back(texture);
   }
 
 

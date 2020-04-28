@@ -12,24 +12,30 @@ namespace primal {
 	m_internalFormat = GL_RGBA8;
 	m_dataFormat = GL_RGBA;
 
-	glCreateTextures(GL_TEXTURE_2D, 1, &m_rendererID);
-	glTextureStorage2D(m_rendererID, 1, m_internalFormat, m_width, m_height);
+	glCreateTextures(GL_TEXTURE_2D, 1, &m_id);
+	glTextureStorage2D(m_id, 1, m_internalFormat, m_width, m_height);
 
-	glTextureParameteri(m_rendererID, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTextureParameteri(m_rendererID, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTextureParameteri(m_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTextureParameteri(m_id, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-	glTextureParameteri(m_rendererID, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTextureParameteri(m_rendererID, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTextureParameteri(m_id, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTextureParameteri(m_id, GL_TEXTURE_WRAP_T, GL_REPEAT);
   }
 
-  OpenGLTexture2D::OpenGLTexture2D(const std::string& path) : m_path(path) {
+  OpenGLTexture2D::OpenGLTexture2D(const std::string& path, const std::string& type) {
+	
 	PRIMAL_PROFILE_FUNCTION();
 
-	int width, height, channels;
+	m_path = path;
+	m_type = type;
 
-	unsigned char* data = SOIL_load_image(path.c_str(), &width, &height, &channels, SOIL_LOAD_AUTO);
+	int width = 0;
+	int height = 0;
+	int channels = 0;
 
-	PRIMAL_CORE_ASSERT(data, "Failed to load image!");
+	unsigned char* data = SOIL_load_image(m_path.c_str(), &width, &height, &channels, SOIL_LOAD_AUTO);
+
+	PRIMAL_CORE_ASSERT(data, "Failed to load image at " + m_path);
 
 	m_width = width;
 	m_height = height;
@@ -48,16 +54,16 @@ namespace primal {
 
 	PRIMAL_CORE_ASSERT(internalFormat & dataFormat, "Format not supported!");
 
-	glCreateTextures(GL_TEXTURE_2D, 1, &m_rendererID);
-	glTextureStorage2D(m_rendererID, 1, internalFormat, m_width, m_height);
+	glCreateTextures(GL_TEXTURE_2D, 1, &m_id);
+	glTextureStorage2D(m_id, 1, internalFormat, m_width, m_height);
 
-	glTextureParameteri(m_rendererID, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTextureParameteri(m_rendererID, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTextureParameteri(m_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTextureParameteri(m_id, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-	glTextureParameteri(m_rendererID, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTextureParameteri(m_rendererID, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTextureParameteri(m_id, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTextureParameteri(m_id, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-	glTextureSubImage2D(m_rendererID, 0, 0, 0, m_width, m_height, dataFormat, GL_UNSIGNED_BYTE, data);
+	glTextureSubImage2D(m_id, 0, 0, 0, m_width, m_height, dataFormat, GL_UNSIGNED_BYTE, data);
 
 	SOIL_free_image_data(data);
   }
@@ -65,7 +71,7 @@ namespace primal {
   OpenGLTexture2D::~OpenGLTexture2D() {
 	PRIMAL_PROFILE_FUNCTION();
 
-	glDeleteTextures(1, &m_rendererID);
+	glDeleteTextures(1, &m_id);
   }
 
   void OpenGLTexture2D::setData(void* data, uint32_t size) {
@@ -73,12 +79,12 @@ namespace primal {
 
 	uint32_t bpp = m_dataFormat == GL_RGBA ? 4 : 3;
 	PRIMAL_CORE_ASSERT(size == m_width * m_height * bpp, "Data must be entire texture!");
-	glTextureSubImage2D(m_rendererID, 0, 0, 0, m_width, m_height, m_dataFormat, GL_UNSIGNED_BYTE, data);
+	glTextureSubImage2D(m_id, 0, 0, 0, m_width, m_height, m_dataFormat, GL_UNSIGNED_BYTE, data);
   }
 
   void OpenGLTexture2D::bind(uint32_t slot) const {
 	PRIMAL_PROFILE_FUNCTION();
 
-	glBindTextureUnit(slot, m_rendererID);
+	glBindTextureUnit(slot, m_id);
   }
 }

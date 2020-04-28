@@ -10,7 +10,7 @@ Sandbox2D::Sandbox2D() : Layer("Sandbox2D"), m_cameraController(1280.0f / 720.0f
 void Sandbox2D::onAttach() {
   PRIMAL_PROFILE_FUNCTION();
 
-  m_checkerboardTexture = primal::Texture2D::create("res/textures/checkerboard.png");
+  m_checkerboardTexture = primal::Texture2D::create("res/textures/checkerboard.png", "texture_diffuse");
 }
 
 void Sandbox2D::onDetach() {

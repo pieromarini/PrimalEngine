@@ -46,8 +46,10 @@ namespace primal {
   }
 
   void OpenGLRendererAPI::drawIndexed(const ref_ptr<VertexArray>& vertexArray) {
+	vertexArray->bind();
 	glDrawElements(GL_TRIANGLES, vertexArray->getIndexBuffer()->getCount(), GL_UNSIGNED_INT, nullptr);
 	glBindTexture(GL_TEXTURE_2D, 0);
+	vertexArray->unbind();
   }
 
 }

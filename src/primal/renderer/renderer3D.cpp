@@ -23,8 +23,6 @@ namespace primal {
 
 	s_data = new Renderer3DStorage();
 	s_data->textureShader = Shader::create("res/shaders/texture.glsl");
-	// s_data->textureShader->bind();
-	// s_data->textureShader->setInt("u_Texture", 0);
   }
 
   void Renderer3D::shutdown() {
@@ -79,6 +77,15 @@ namespace primal {
 	PRIMAL_PROFILE_FUNCTION();
 
 	texture->bind();
+
+	glm::mat4 transform = glm::translate(glm::mat4(1.0f), position) * glm::scale(glm::mat4(1.0f), size);
+	s_data->textureShader->setMat4("u_Transform", transform);
+
+	model->draw(s_data->textureShader.get());
+  }
+
+  void Renderer3D::drawModel(const ref_ptr<Model>& model, const glm::vec3& position, const glm::vec3& size) {
+	PRIMAL_PROFILE_FUNCTION();
 
 	glm::mat4 transform = glm::translate(glm::mat4(1.0f), position) * glm::scale(glm::mat4(1.0f), size);
 	s_data->textureShader->setMat4("u_Transform", transform);
