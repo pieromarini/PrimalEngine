@@ -10,8 +10,9 @@ namespace primal {
 	public:
 	  OpenGLContext(GLFWwindow* windowHandle);
 
-	  virtual void init() override;
-	  virtual void swapBuffers() override;
+	  void init() override;
+	  void swapBuffers() override;
+
 	private:
 	  GLFWwindow* m_windowHandle;
   };

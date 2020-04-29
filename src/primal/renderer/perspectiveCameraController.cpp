@@ -43,6 +43,7 @@ namespace primal {
 	PRIMAL_PROFILE_FUNCTION();
 
 	EventDispatcher dispatcher(e);
+	// TODO: Use lambdas here instead of bind.
 	dispatcher.dispatch<MouseScrolledEvent>(PRIMAL_BIND_EVENT_FN(PerspectiveCameraController::onMouseScrolled));
 	dispatcher.dispatch<WindowResizeEvent>(PRIMAL_BIND_EVENT_FN(PerspectiveCameraController::onWindowResized));
 	dispatcher.dispatch<MouseMovedEvent>(PRIMAL_BIND_EVENT_FN(PerspectiveCameraController::onMouseMoved));

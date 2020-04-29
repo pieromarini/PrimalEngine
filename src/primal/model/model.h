@@ -7,6 +7,7 @@
 #include "mesh.h"
 #include "primal/core/core.h"
 #include "primal/renderer/texture.h"
+#include "primal/model/material.h"
 
 namespace primal {
   class Model {
@@ -18,11 +19,10 @@ namespace primal {
 	  void draw(Shader* shader);	
 
 	  // NOTE: Temporary. just to load textures for simple (1 mesh) models.
-	  void loadTexture(const std::string path, const std::string type);
+	  void loadTexture(const std::string& path, const std::string& type);
 
 	private:
 	  std::vector<Mesh> m_meshes;
-	  std::vector<ref_ptr<Texture2D>> m_texturesLoaded;
 	  std::string m_directory;
 
 	  void loadModel(const std::string path);

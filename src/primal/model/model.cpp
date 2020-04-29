@@ -9,9 +9,8 @@ namespace primal {
 	  mesh.draw(shader);
   }
 
-  void Model::loadTexture(const std::string path, const std::string type) {
+  void Model::loadTexture(const std::string& path, const std::string& type) {
 	auto texture = Texture2D::create(path, type);
-	m_texturesLoaded.push_back(texture);
 
 	for (auto& mesh : m_meshes) {
 	  mesh.setTexture(texture);
@@ -142,26 +141,11 @@ namespace primal {
 	std::string fullPath;
 
 	for(std::size_t i = 0; i < mat->GetTextureCount(type); ++i) {
-	  aiString str;
-	  mat->GetTexture(type, i, &str);
-	  fullPath = m_directory + "/" + str.C_Str();
-	  bool skip = false;
-	  for(auto& texture : m_texturesLoaded) {
-		if(std::strcmp(texture->m_path.data(), fullPath.data()) == 0) {
-		  textures.push_back(texture);
-		  skip = true; 
-		  break;
-		}
-	  }
+	  aiString texturePath;
+	  mat->GetTexture(type, i, &texturePath);
+	  fullPath = m_directory + "/" + texturePath.C_Str();
 
-	  if(!skip) {
-		auto texture = Texture2D::create(fullPath, typeName);
-		textures.push_back(texture);
-
-		// NOTE: TEMPORARY basic caching.
-		// This will be removed when the "ResourceManager" is implemented.
-		m_texturesLoaded.push_back(texture);
-	  }
+	  textures.emplace_back(Texture2D::create(fullPath, typeName));
 	}
 
 	return textures;

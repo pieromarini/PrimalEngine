@@ -62,6 +62,7 @@ namespace primal {
 		}
 		return false;
 	  }
+
 	private:
 	  Event& m_event;
   };

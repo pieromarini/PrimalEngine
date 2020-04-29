@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <utility>
 
 #include "core.h"
 #include "primal/events/event.h"
@@ -12,8 +13,8 @@ namespace primal {
 	unsigned int width;
 	unsigned int height;
 
-	WindowProps(const std::string& t = "Primal Engine", unsigned int w = 1280, unsigned int h = 720)
-	  : title(t), width(w), height(h) { }
+	WindowProps(std::string t = "Primal Engine", unsigned int w = 1280, unsigned int h = 720)
+	  : title(std::move(t)), width(w), height(h) { }
   };
 
   // Interface for a platform-independent Window representation

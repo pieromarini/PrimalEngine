@@ -22,7 +22,8 @@ namespace primal {
 	PRIMAL_CORE_INFO("  Vendor: {0}", glGetString(GL_VENDOR));
 	PRIMAL_CORE_INFO("  Renderer: {0}", glGetString(GL_RENDERER));
 
-	int min, max;
+	int min = 0;
+	int max = 0;
 	glGetIntegerv(GL_MAJOR_VERSION, &max);
 	glGetIntegerv(GL_MINOR_VERSION, &min);
 

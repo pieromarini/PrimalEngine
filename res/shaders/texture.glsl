@@ -71,7 +71,7 @@ struct SpotLight {
     vec3 specular;       
 };
 
-#define MAX_POINT_LIGHTS 4
+#define MAX_POINT_LIGHTS 1
 
 layout(location = 0) out vec4 color;
 
@@ -79,11 +79,10 @@ in vec3 Normal;
 in vec3 FragPos;
 in vec2 TexCoords;
 
-// uniform sampler2D texture_diffuse1;
-
 uniform vec3 u_ViewPos;
 uniform DirectionalLight u_DirLight;
-// uniform PointLight u_PointLights[NR_POINT_LIGHTS];
+uniform int u_numPointLights;
+uniform PointLight u_PointLights[MAX_POINT_LIGHTS];
 // uniform SpotLight u_SpotLight;
 uniform Material u_Material;
 
@@ -97,8 +96,8 @@ void main() {
 
     vec3 result = CalcDirectionalLight(u_DirLight, norm, viewDir);
 
-    // for(int i = 0; i < MAX_POINT_LIGHTS; i++)
-        // result += CalcPointLight(u_PointLights[i], norm, FragPos, viewDir);    
+    for(int i = 0; i < u_numPointLights; i++)
+        result += CalcPointLight(u_PointLights[i], norm, FragPos, viewDir);    
 
     // result += CalcSpotLight(u_SpotLight, norm, FragPos, viewDir);    
     

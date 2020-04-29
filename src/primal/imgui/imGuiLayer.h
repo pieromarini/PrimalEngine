@@ -11,10 +11,10 @@ namespace primal {
   class ImGuiLayer : public Layer {
 	public:
 	  ImGuiLayer();
-	  ~ImGuiLayer() = default;
+	  ~ImGuiLayer() override = default;
 
-	  virtual void onAttach() override;
-	  virtual void onDetach() override;
+	  void onAttach() override;
+	  void onDetach() override;
 
 	  void begin();
 	  void end();

@@ -45,7 +45,8 @@ void Sandbox3D::onImGuiRender() {
   PRIMAL_PROFILE_FUNCTION();
   ImGui::Begin("Settings");
 
-  ImGui::SliderFloat3("Light Direction", glm::value_ptr(primal::Renderer3D::lightDirection), -10, 10);
+  ImGui::SliderFloat3("DirectionalLight Direction", glm::value_ptr(primal::Renderer3D::lightDirection), -10, 10);
+  ImGui::SliderFloat3("PointLight Position", glm::value_ptr(primal::Renderer3D::pointLightPosition), -10, 10);
 
   auto cameraPos = m_cameraController.getCamera().getPosition();
   ImGui::Text("Camera Pos: (%f, %f, %f)", static_cast<double>(cameraPos.x),

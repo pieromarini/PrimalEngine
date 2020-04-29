@@ -11,7 +11,7 @@ namespace primal {
   class LinuxWindow : public Window {
 	public:
 	  LinuxWindow(const WindowProps& props);
-	  virtual ~LinuxWindow();
+	   ~LinuxWindow() override;
 
 	  void onUpdate() override;
 
@@ -26,10 +26,11 @@ namespace primal {
 	  void toggleCursor() override;
 	  int getCursorMode() override;
 
-	  inline virtual void* getNativeWindow() const override { return m_window; }
+	  inline void* getNativeWindow() const override { return m_window; }
+
 	private:
-	  virtual void init(const WindowProps& props);
-	  virtual void shutdown();
+	  void init(const WindowProps& props);
+	  void shutdown();
 
 	  GLFWwindow* m_window;
 	  scope_ptr<GraphicsContext> m_context;

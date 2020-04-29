@@ -17,6 +17,7 @@ namespace primal {
   static Renderer3DStorage* s_data;
 
   glm::vec3 Renderer3D::lightDirection = { 2.0f, -1.0f, 0.0f };
+  glm::vec3 Renderer3D::pointLightPosition = { 0.0f, 0.0f, 0.0f };
 
   void Renderer3D::init() {
 	PRIMAL_PROFILE_FUNCTION();
@@ -48,8 +49,8 @@ namespace primal {
 	s_data->textureShader->setFloat3("u_DirLight.diffuse", { 0.2f, 0.2f, 0.2f });
 	s_data->textureShader->setFloat3("u_DirLight.specular", { 0.1f, 0.1f, 0.1f });
 
-	/*
-	s_data->textureShader->setFloat3("u_PointLights[0].position", { 2.0f, 0.5f, 0.0f });
+	s_data->textureShader->setInt("u_numPointLights", 1);
+	s_data->textureShader->setFloat3("u_PointLights[0].position", pointLightPosition);
 	s_data->textureShader->setFloat3("u_PointLights[0].ambient", { 1.0f, 1.0f, 1.0f });
 	s_data->textureShader->setFloat3("u_PointLights[0].diffuse", { 1.0f, 1.0f, 1.0f });
 	s_data->textureShader->setFloat3("u_PointLights[0].specular", { 0.5f, 0.5f, 0.5f });
@@ -57,6 +58,7 @@ namespace primal {
 	s_data->textureShader->setFloat("u_PointLights[0].linear", 0.09);
 	s_data->textureShader->setFloat("u_PointLights[0].quadratic", 0.032);
 
+	/*
 	s_data->textureShader->setFloat3("u_SpotLight.position", { 12.0f, 4.5f, 0.0f });
 	s_data->textureShader->setFloat3("u_SpotLight.ambient", { 1.0f, 1.0f, 1.0f });
 	s_data->textureShader->setFloat3("u_SpotLight.diffuse", { 1.0f, 1.0f, 1.0f });

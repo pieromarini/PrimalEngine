@@ -36,7 +36,7 @@ namespace primal {
 	}
 
 	Application& app = Application::get();
-	GLFWwindow* window = static_cast<GLFWwindow*>(app.getWindow().getNativeWindow());
+	auto window = static_cast<GLFWwindow*>(app.getWindow().getNativeWindow());
 
 	// Setup Platform/Renderer bindings
 	ImGui_ImplGlfw_InitForOpenGL(window, true);

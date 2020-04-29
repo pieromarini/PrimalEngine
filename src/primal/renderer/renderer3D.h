@@ -23,6 +23,7 @@ namespace primal {
 	  static void drawModel(const ref_ptr<Model>& model, const glm::vec3& position, const glm::vec3& size);
 
 	  static glm::vec3 lightDirection;
+	  static glm::vec3 pointLightPosition;
 
   };
 

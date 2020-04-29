@@ -79,17 +79,17 @@ namespace primal {
 
 	const char* typeToken = "#type";
 	size_t typeTokenLength = strlen(typeToken);
-	size_t pos = source.find(typeToken, 0); //Start of shader type declaration line
+	size_t pos = source.find(typeToken, 0); // Start of shader type declaration line
 	while (pos != std::string::npos) {
-	  size_t eol = source.find_first_of("\r\n", pos); //End of shader type declaration line
+	  size_t eol = source.find_first_of("\r\n", pos); // End of shader type declaration line
 	  PRIMAL_CORE_ASSERT(eol != std::string::npos, "Syntax error");
-	  size_t begin = pos + typeTokenLength + 1; //Start of shader type name (after "#type " keyword)
+	  size_t begin = pos + typeTokenLength + 1; // Start of shader type name (after "#type " keyword)
 	  std::string type = source.substr(begin, eol - begin);
 	  PRIMAL_CORE_ASSERT(ShaderTypeFromString(type), "Invalid shader type specified");
 
-	  size_t nextLinePos = source.find_first_not_of("\r\n", eol); //Start of shader code after shader type declaration line
+	  size_t nextLinePos = source.find_first_not_of("\r\n", eol); // Start of shader code after shader type declaration line
 	  PRIMAL_CORE_ASSERT(nextLinePos != std::string::npos, "Syntax error");
-	  pos = source.find(typeToken, nextLinePos); //Start of next shader type declaration line
+	  pos = source.find(typeToken, nextLinePos); // Start of next shader type declaration line
 
 	  shaderSources[ShaderTypeFromString(type)] = (pos == std::string::npos) ? source.substr(nextLinePos) : source.substr(nextLinePos, pos - nextLinePos);
 	}
@@ -103,7 +103,7 @@ namespace primal {
 	GLuint program = glCreateProgram();
 	PRIMAL_CORE_ASSERT(shaderSources.size() <= 2, "We only support 2 shaders for now");
 
-	std::array<GLenum, 2> glShaderIDs;
+	std::array<GLenum, 2> glShaderIDs{};
 	int glShaderIDIndex = 0;
 
 	for (auto& kv : shaderSources) {
@@ -113,7 +113,7 @@ namespace primal {
 	  GLuint shader = glCreateShader(type);
 
 	  const GLchar* sourceCStr = source.c_str();
-	  glShaderSource(shader, 1, &sourceCStr, 0);
+	  glShaderSource(shader, 1, &sourceCStr, nullptr);
 
 	  glCompileShader(shader);
 
