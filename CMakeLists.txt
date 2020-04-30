@@ -6,6 +6,10 @@ endif()
 
 project(PrimalEngine DESCRIPTION "C++ Game Engine" LANGUAGES C CXX)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS ON)
+
 include(cmake/BasicSettings.cmake)
 
 # Project Options as an interface library.

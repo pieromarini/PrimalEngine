@@ -1,5 +1,5 @@
 ---
-Checks:           'cppcoreguidelines-*,-cppcoreguidelines-pro-type-union-access,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,modernize-*,clang-analyzer-*,misc-*,-modernize-use-trailing-return-type'
+Checks:           'cppcoreguidelines-*,-cppcoreguidelines-pro-type-union-access,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-cppcoreguidelines-pro-bounds-pointer-arithmetic,modernize-*,clang-analyzer-*,misc-*,-modernize-use-trailing-return-type'
 WarningsAsErrors: '0'
 HeaderFilterRegex: ''
 FormatStyle:     none
