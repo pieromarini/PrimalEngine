@@ -12,18 +12,14 @@
  */
 
 namespace primal {
+
   class Material {
 	public:
-	  Material(const std::string& diffuse);
-	  Material(const std::string& diffuse, const std::string& specular);
-	  Material(const std::string& diffuse, const std::string& specular, const std::string& normal);
-	  Material(const std::string& diffuse, const std::string& specular, const std::string& normal, const std::string& height);
 
-	private:
-	  ref_ptr<Texture2D> m_textureDiffuse;
-	  ref_ptr<Texture2D> m_textureSpecular;
-	  ref_ptr<Texture2D> m_textureNormal;
-	  ref_ptr<Texture2D> m_textureHeight;
+	  static ref_ptr<Material> create(std::vector<ref_ptr<Texture2D>> textures);
+
+	  std::vector<ref_ptr<Texture2D>> m_textures;
 	  float m_shininess{0.5f};
   };
+
 }

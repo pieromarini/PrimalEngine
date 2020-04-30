@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 
+#include "primal/model/material.h"
 #include "primal/renderer/shader.h"
 #include "primal/renderer/texture.h"
 #include "primal/renderer/vertexArray.h"
@@ -20,7 +21,8 @@ namespace primal {
 
   class Mesh {
 	public:
-	  Mesh(std::vector<Vertex> &vertices, std::vector<uint32_t> &indices, std::vector<ref_ptr<Texture2D>> &textures);
+	  Mesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices, std::vector<ref_ptr<Texture2D>>& textures);
+	  Mesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices, const ref_ptr<Material> material);
 
 	  void draw(Shader* shader);
 
@@ -34,8 +36,9 @@ namespace primal {
 	  ref_ptr<VertexBuffer> VBO;
 	  ref_ptr<IndexBuffer> EBO;
 
+	  ref_ptr<Material> m_material;
+
 	  std::vector<Vertex> m_vertices;
 	  std::vector<uint32_t> m_indices;
-	  std::vector<ref_ptr<Texture2D>> m_textures;
   };
 }

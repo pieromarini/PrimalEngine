@@ -28,6 +28,6 @@ namespace primal {
 	  void loadModel(const std::string path);
 	  void processNode(aiNode *node, const aiScene *scene);
 	  Mesh processMesh(aiMesh *mesh, const aiScene *scene);
-	  std::vector<ref_ptr<Texture2D>> loadMaterialTextures(aiMaterial *mat, aiTextureType type, std::string typeName);
+	  std::vector<ref_ptr<Texture2D>> loadMaterialTextures(aiMaterial *mat);
   };
 }

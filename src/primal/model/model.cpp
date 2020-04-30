@@ -1,4 +1,5 @@
 #include "model.h"
+#include "assimp/material.h"
 #include "primal/core/log.h"
 #include "primal/renderer/texture.h"
 
@@ -49,8 +50,7 @@ namespace primal {
 	// data to fill
 	std::vector<Vertex> vertices;
 	std::vector<unsigned int> indices;
-	std::vector<ref_ptr<Texture2D>> textures;
-
+	ref_ptr<Material> material;
 	// Walk through each of the mesh's vertices
 	for(unsigned int i = 0; i < mesh->mNumVertices; ++i) {
 	  Vertex vertex{};
@@ -95,57 +95,50 @@ namespace primal {
 	  vertices.push_back(vertex);
 	}
 
-	for(unsigned int i = 0; i < mesh->mNumFaces; ++i) {
+	for(std::size_t i = 0; i < mesh->mNumFaces; ++i) {
 	  aiFace face = mesh->mFaces[i];
-	  for(unsigned int j = 0; j < face.mNumIndices; ++j)
+	  for(std::size_t j = 0; j < face.mNumIndices; ++j)
 		indices.push_back(face.mIndices[j]);
 	}
 
 	if (mesh->mMaterialIndex >= 0) {
+	  aiMaterial* aiMat = scene->mMaterials[mesh->mMaterialIndex];    
 
-	  /* NOTE: PrimalEngine assumes a convention for sampler names in the shaders.
-	   * Each diffuse texture should be named as 'texture_diffuseN' where N is a
-	   * sequential number ranging from 1 to MAX_SAMPLER_NUMBER. 
-	   * Same applies to other textures as the following list summarizes:
-	   * diffuse: texture_diffuseN
-	   * specular: texture_specularN
-	   * normal: texture_normalN
-	   * height: texture_heightN
-	   */
-
-	  aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];    
-
-	  // 1. diffuse maps
-	  std::vector<ref_ptr<Texture2D>> diffuseMaps = loadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse");
-	  textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
-
-	  // 2. specular maps
-	  std::vector<ref_ptr<Texture2D>> specularMaps = loadMaterialTextures(material, aiTextureType_SPECULAR, "texture_specular");
-	  textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
-
-	  // 3. normal maps
-	  std::vector<ref_ptr<Texture2D>> normalMaps = loadMaterialTextures(material, aiTextureType_NORMALS, "texture_normal");
-	  textures.insert(textures.end(), normalMaps.begin(), normalMaps.end());
-
-	  // 4. height maps
-	  std::vector<ref_ptr<Texture2D>> heightMaps = loadMaterialTextures(material, aiTextureType_HEIGHT, "texture_height");
-	  textures.insert(textures.end(), heightMaps.begin(), heightMaps.end());
+	  // NOTE: rvalue created moves into Material instance?
+	  material = Material::create(loadMaterialTextures(aiMat));
 	}
 
-	return Mesh(vertices, indices, textures);
+
+	return Mesh(vertices, indices, material);
   }
 
-  std::vector<ref_ptr<Texture2D>> Model::loadMaterialTextures(aiMaterial *mat, aiTextureType type, std::string typeName) {
+  std::vector<ref_ptr<Texture2D>> Model::loadMaterialTextures(aiMaterial *mat) {
 	std::vector<ref_ptr<Texture2D>> textures;
+
+	/* NOTE: PrimalEngine assumes a convention for sampler names in the shaders.
+	 * Each diffuse texture should be named as 'texture_diffuseN' where N is a
+	 * sequential number ranging from 1 to MAX_SAMPLER_NUMBER. 
+	 * Same applies to other textures as the following list summarizes:
+	 * diffuse: texture_diffuseN
+	 * specular: texture_specularN
+	 * normal: texture_normalN
+	 * height: texture_heightN
+	 */
+	std::array<std::pair<aiTextureType, std::string>, 4> types {{
+	  { aiTextureType_DIFFUSE, "texture_diffuse" }, { aiTextureType_SPECULAR, "texture_specular" },
+	  { aiTextureType_HEIGHT, "texture_height" }, { aiTextureType_NORMALS, "texture_normal" }
+	}};
 
 	std::string fullPath;
 
-	for(std::size_t i = 0; i < mat->GetTextureCount(type); ++i) {
-	  aiString texturePath;
-	  mat->GetTexture(type, i, &texturePath);
-	  fullPath = m_directory + "/" + texturePath.C_Str();
+	for (const auto& [type, typeName] : types) {
+	  for(std::size_t i = 0; i < mat->GetTextureCount(type); ++i) {
+		aiString texturePath;
+		mat->GetTexture(type, i, &texturePath);
+		fullPath = m_directory + "/" + texturePath.C_Str();
 
-	  textures.emplace_back(Texture2D::create(fullPath, typeName));
+		textures.emplace_back(Texture2D::create(fullPath, typeName));
+	  }
 	}
 
 	return textures;
