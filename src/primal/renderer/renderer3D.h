@@ -4,6 +4,7 @@
 
 #include "texture.h"
 #include "primal/model/model.h"
+#include "primal/renderer/framebuffer.h"
 
 namespace primal {
 
@@ -16,6 +17,7 @@ namespace primal {
 	  static void endScene();
 
 	  // Primitives
+	  static void drawScreenQuad();
 	  static void drawCube(const glm::vec3& position, const glm::vec3& size, const glm::vec4& color);
 	  static void drawCube(const glm::vec3& position, const glm::vec3& size, const ref_ptr<Texture2D>& texture);
 

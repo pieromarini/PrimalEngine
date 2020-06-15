@@ -19,6 +19,7 @@ class Sandbox3D : public primal::Layer {
 	primal::ref_ptr<primal::Model> m_modelHouse;
 	primal::ref_ptr<primal::Model> m_modelNanosuit;
 	primal::ref_ptr<primal::Model> m_modelTree;
+	primal::ref_ptr<primal::Model> m_modelBackpack;
 
 	double m_lastFrameTime{0};
 };

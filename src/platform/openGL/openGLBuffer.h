@@ -8,13 +8,14 @@ namespace primal {
 	public:
 	  OpenGLVertexBuffer(float* vertices, uint32_t size);
 	  OpenGLVertexBuffer(const void* data, uint32_t size);
-	  virtual ~OpenGLVertexBuffer();
+	  ~OpenGLVertexBuffer() override;
 
-	  virtual void bind() const override;
-	  virtual void unbind() const override;
+	  void bind() const override;
+	  void unbind() const override;
 
-	  virtual const BufferLayout& getLayout() const override { return m_layout; }
-	  virtual void setLayout(const BufferLayout& layout) override { m_layout = layout; }
+	  [[nodiscard]] const BufferLayout& getLayout() const override { return m_layout; }
+	  void setLayout(const BufferLayout& layout) override { m_layout = layout; }
+
 	private:
 	  uint32_t m_rendererID;
 	  BufferLayout m_layout;

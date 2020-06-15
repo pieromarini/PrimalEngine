@@ -18,6 +18,9 @@ namespace primal {
 	  virtual void clear() = 0;
 
 	  virtual void drawIndexed(const ref_ptr<VertexArray>& vertexArray) = 0;
+	  virtual void draw(const ref_ptr<VertexArray>& vertexArray) = 0;
+
+	  virtual void setDepthTesting(bool flag) = 0;
 
 	  inline static API getAPI() { return s_api; }
 	  static scope_ptr<RendererAPI> create();

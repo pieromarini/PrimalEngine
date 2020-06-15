@@ -13,6 +13,9 @@ namespace primal {
 	  void clear() override;
 
 	  void drawIndexed(const ref_ptr<VertexArray>& vertexArray) override;
+	  void draw(const ref_ptr<VertexArray>& vertexArray) override;
+
+	  void setDepthTesting(bool flag) override;
   };
 
 

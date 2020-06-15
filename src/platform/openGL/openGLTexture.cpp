@@ -42,12 +42,15 @@ namespace primal {
 	m_height = height;
 
 	GLenum internalFormat = 0, dataFormat = 0;
-	if (channels == 4) {
-	  internalFormat = GL_RGBA8;
-	  dataFormat = GL_RGBA;
+	if (channels == 1) {
+	  internalFormat = GL_R8;
+	  dataFormat = GL_RED;
 	} else if (channels == 3) {
 	  internalFormat = GL_RGB8;
 	  dataFormat = GL_RGB;
+	} else if (channels == 4) {
+	  internalFormat = GL_RGBA8;
+	  dataFormat = GL_RGBA;
 	}
 
 	m_internalFormat = internalFormat;

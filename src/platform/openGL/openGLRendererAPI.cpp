@@ -51,4 +51,15 @@ namespace primal {
 	vertexArray->unbind();
   }
 
+  void OpenGLRendererAPI::draw(const ref_ptr<VertexArray>& vertexArray) {
+
+  }
+
+  void OpenGLRendererAPI::setDepthTesting(bool flag) {
+	if (flag)
+	  glEnable(GL_DEPTH_TEST);
+	else
+	  glDisable(GL_DEPTH_TEST);
+  }
+
 }

@@ -27,6 +27,14 @@ namespace primal {
 	  inline static void drawIndexed(const ref_ptr<VertexArray>& vertexArray) {
 		s_rendererAPI->drawIndexed(vertexArray);
 	  }
+	  
+	  inline static void draw(const ref_ptr<VertexArray>& vertexArray) {
+		s_rendererAPI->draw(vertexArray);
+	  }
+
+	  inline static void setDepthTesting(bool flag) {
+		s_rendererAPI->setDepthTesting(flag);
+	  }
 	private:
 	  static scope_ptr<RendererAPI> s_rendererAPI;
   };

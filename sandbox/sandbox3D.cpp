@@ -16,8 +16,6 @@ void Sandbox3D::onAttach() {
   m_modelHouse->loadTexture("res/models/cottage/cottage_diffuse.png", "texture_diffuse");
 
   m_modelNanosuit = primal::createRef<primal::Model>("res/models/nanosuit/nanosuit.obj");
-
-  // m_modelTree = primal::createRef<primal::Model>("res/models/highpoly-tree/tree.fbx");
 }
 
 void Sandbox3D::onDetach() {
@@ -32,19 +30,13 @@ void Sandbox3D::onUpdate(primal::Timestep ts) {
   m_cameraController.onUpdate(ts);
 
   {
-	PRIMAL_PROFILE_SCOPE("Renderer Preparation");
-	primal::RenderCommand::setClearColor({ 0.1f, 0.1f, 0.1f, 1 });
-	primal::RenderCommand::clear();
-  }
-
-  {
-	PRIMAL_PROFILE_SCOPE("Renderer Draw");
+	PRIMAL_PROFILE_SCOPE("Renderer Offscreen Draw");
 	primal::Renderer3D::beginScene(m_cameraController.getCamera());
 	primal::Renderer3D::drawModel(m_modelHouse, { 5.0f, 0.0f, 0.0f }, { 0.1f, 0.1f, 0.1f });
 	primal::Renderer3D::drawModel(m_modelNanosuit, { 1.0f, 0.0f, 0.0f }, { 0.1f, 0.1f, 0.1f });
-	// primal::Renderer3D::drawModel(m_modelTree, { -5.0f, 0.0f, 0.0f }, { 0.05f, 0.05f, 0.05f });
 	primal::Renderer3D::endScene();
   }
+
 }
 
 void Sandbox3D::onImGuiRender() {

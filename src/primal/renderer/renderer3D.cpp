@@ -1,5 +1,9 @@
 #include <glm/gtc/matrix_transform.hpp>
+#include "primal/model/mesh.h"
+#include "primal/renderer/buffer.h"
+#include "primal/renderer/framebuffer.h"
 #include "renderer3D.h"
+#include "renderer2D.h"
 
 #include "primal/core/application.h"
 #include "texture.h"
@@ -12,6 +16,9 @@ namespace primal {
 
   struct Renderer3DStorage {
 	ref_ptr<Shader> textureShader;
+	ref_ptr<Shader> screenShader;
+	ref_ptr<Framebuffer> framebuffer;
+	ref_ptr<VertexArray> screenQuadVA;
   };
 
   static Renderer3DStorage* s_data;
@@ -25,6 +32,32 @@ namespace primal {
 
 	s_data = new Renderer3DStorage();
 	s_data->textureShader = Shader::create("res/shaders/texture.glsl");
+	s_data->screenShader = Shader::create("res/shaders/screen_shader.glsl");
+
+	s_data->framebuffer = Framebuffer::create();
+	s_data->framebuffer->addTextureAttachment();
+	s_data->framebuffer->addDepthStencilAttachment();
+	s_data->framebuffer->validate();
+
+	std::array quadVertices = {
+	  -1.0f, -1.0f, 0.0f, 0.0f,
+	  1.0f, -1.0f, 1.0f, 0.0f,
+	  1.0f,  1.0f, 1.0f, 1.0f,
+	  -1.0f,  1.0f, 0.0f, 1.0f
+	};
+	std::array<uint32_t, 6> indices = {
+	  0, 1, 2, 2, 3, 0
+	};
+
+	s_data->screenQuadVA = VertexArray::create();
+	auto vb = VertexBuffer::create(quadVertices.data(), quadVertices.size() * sizeof(float));
+	vb->setLayout({
+	  { ShaderDataType::Float2, "a_Position" },
+	  { ShaderDataType::Float2, "a_TexCoords" }
+	});
+	auto ib = IndexBuffer::create(indices.data(), indices.size());;
+	s_data->screenQuadVA->addVertexBuffer(vb);
+	s_data->screenQuadVA->setIndexBuffer(ib);
   }
 
   void Renderer3D::shutdown() {
@@ -35,6 +68,11 @@ namespace primal {
 
   void Renderer3D::beginScene(const PerspectiveCamera& camera) {
 	PRIMAL_PROFILE_FUNCTION();
+	s_data->framebuffer->bind();
+	RenderCommand::setClearColor({0.1f, 0.1f, 0.1f, 1.0f});
+	RenderCommand::clear();
+
+	RenderCommand::setDepthTesting(true);
 
 	s_data->textureShader->bind();
 	s_data->textureShader->setMat4("u_ViewProjection", camera.getViewProjectionMatrix());
@@ -67,21 +105,27 @@ namespace primal {
 	s_data->textureShader->setFloat("u_PointLights[1].linear", 0.09);
 	s_data->textureShader->setFloat("u_PointLights[1].quadratic", 0.032);
 
-	/*
-	s_data->textureShader->setFloat3("u_SpotLight.position", { 12.0f, 4.5f, 0.0f });
-	s_data->textureShader->setFloat3("u_SpotLight.ambient", { 1.0f, 1.0f, 1.0f });
-	s_data->textureShader->setFloat3("u_SpotLight.diffuse", { 1.0f, 1.0f, 1.0f });
-	s_data->textureShader->setFloat3("u_SpotLight.specular", { 0.5f, 0.5f, 0.5f });
-	s_data->textureShader->setFloat("u_SpotLight.constant", 1.0f);
-	s_data->textureShader->setFloat("u_SpotLight.linear", 0.09);
-	s_data->textureShader->setFloat("u_SpotLight.quadratic", 0.032);
-	s_data->textureShader->setFloat("u_SpotLight.cutOff", glm::cos(glm::radians(12.5f)));
-	s_data->textureShader->setFloat("u_SpotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
-	*/
   }
 
   void Renderer3D::endScene() {
 	PRIMAL_PROFILE_FUNCTION();
+	s_data->framebuffer->unbind();
+	drawScreenQuad();
+  }
+
+  // NOTE: Temporary. this renders the framebuffer color texture to a quad.
+  void Renderer3D::drawScreenQuad() {
+	PRIMAL_PROFILE_FUNCTION();
+
+	RenderCommand::setClearColor({1.0f, 1.0f, 1.0f, 1.0f});
+	RenderCommand::clear();
+
+	s_data->screenShader->bind();
+
+	s_data->screenQuadVA->bind();
+	RenderCommand::setDepthTesting(false);
+	s_data->framebuffer->bindColorBufferTexture();
+	RenderCommand::drawIndexed(s_data->screenQuadVA);
   }
 
   void Renderer3D::drawModel(const ref_ptr<Model>& model, const glm::vec3& position, const glm::vec3& size, const ref_ptr<Texture2D>& texture) {
