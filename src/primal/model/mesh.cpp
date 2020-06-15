@@ -36,13 +36,16 @@ namespace primal {
 	VAO->unbind();
   }
 
+  // NOTE: Should texture binding be moved to the Rendering API?
+  // RenderCommand::bindTextures() ??
+  // RenderCommand::unbindTextures() ??
   void Mesh::draw(Shader* shader) {
 	std::size_t diffuseNr = 1;
 	std::size_t specularNr = 1;
 	std::size_t normalNr = 1;
 	std::size_t heightNr = 1;
 
-	// Binding Texture information for Mesh.
+	// NOTE: Bind texture units for mesh
 	for(std::size_t i = 0; i < m_material->m_textures.size(); ++i) {
 	  std::string number;
 	  std::string name = m_material->m_textures[i]->m_type;
@@ -60,11 +63,15 @@ namespace primal {
 	}
 
 	RenderCommand::drawIndexed(VAO);
+
+	// NOTE: Texture Unit unbinding
+	for(std::size_t i = 0; i < m_material->m_textures.size(); ++i) {
+	  m_material->m_textures[i]->unbind(i);
+	}
   }
 
   void Mesh::setTexture(ref_ptr<Texture2D> texture) {
 	m_material->m_textures.push_back(texture);
   }
-
 
 }

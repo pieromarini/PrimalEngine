@@ -26,18 +26,18 @@ namespace primal {
 
 	  virtual void onUpdate() = 0;
 
-	  virtual unsigned int getWidth() const = 0;
-	  virtual unsigned int getHeight() const = 0;
+	  [[nodiscard]] virtual unsigned int getWidth() const = 0;
+	  [[nodiscard]] virtual unsigned int getHeight() const = 0;
 
 	  // Window attributes
 	  virtual void setEventCallback(const eventCallbackFunc& callback) = 0;
 	  virtual void setVSync(bool enabled) = 0;
-	  virtual bool isVSync() const = 0;
+	  [[nodiscard]] virtual bool isVSync() const = 0;
 
 	  virtual void toggleCursor() = 0;
 	  virtual int getCursorMode() = 0;
 
-	  virtual void* getNativeWindow() const = 0;
+	  [[nodiscard]] virtual void* getNativeWindow() const = 0;
 
 	  static scope_ptr<Window> create(const WindowProps& props = WindowProps());
   };

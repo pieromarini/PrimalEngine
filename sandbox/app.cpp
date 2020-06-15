@@ -7,11 +7,10 @@
 class Sandbox : public primal::Application {
   public:
 	Sandbox() {
-	  // pushLayer(new Sandbox2D());
 	  pushLayer(new Sandbox3D());
 	}
 
-	~Sandbox() { }
+	~Sandbox() override = default;
 };
 
 primal::Application* primal::createApplication() {

@@ -15,18 +15,18 @@ namespace primal {
 
 	  void onUpdate() override;
 
-	  inline unsigned int getWidth() const override { return m_data.width; }
-	  inline unsigned int getHeight() const override { return m_data.height; }
+	  [[nodiscard]] inline unsigned int getWidth() const override { return m_data.width; }
+	  [[nodiscard]] inline unsigned int getHeight() const override { return m_data.height; }
 
 	  // Window attributes
 	  inline void setEventCallback(const eventCallbackFunc& callback) override { m_data.eventCallback = callback; }
 	  void setVSync(bool enabled) override;
-	  bool isVSync() const override;
+	  [[nodiscard]] bool isVSync() const override;
 
 	  void toggleCursor() override;
 	  int getCursorMode() override;
 
-	  inline void* getNativeWindow() const override { return m_window; }
+	  [[nodiscard]] inline void* getNativeWindow() const override { return m_window; }
 
 	private:
 	  void init(const WindowProps& props);

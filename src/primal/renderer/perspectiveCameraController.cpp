@@ -7,7 +7,7 @@
 namespace primal {
 
   PerspectiveCameraController::PerspectiveCameraController(float aspectRatio, bool rotation)
-	: m_aspectRatio(aspectRatio), m_camera(m_cameraPosition, {0.0f, 1.0f, 0.0f}, m_aspectRatio, m_zoomLevel, -90.0f, 0.0f), m_rotation(rotation) { }
+	: m_aspectRatio(aspectRatio), m_camera({0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, m_aspectRatio, m_zoomLevel, -90.0f, 0.0f), m_rotation(rotation) { }
 
   void PerspectiveCameraController::onUpdate(Timestep ts) {
 	PRIMAL_PROFILE_FUNCTION();

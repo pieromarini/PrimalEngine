@@ -12,12 +12,13 @@ namespace primal {
 	  OpenGLTexture2D(const std::string& path, const std::string& type);
 	  ~OpenGLTexture2D() override;
 
-	  uint32_t getWidth() const override { return m_width;  }
-	  uint32_t getHeight() const override { return m_height; }
+	  [[nodiscard]] uint32_t getWidth() const override { return m_width;  }
+	  [[nodiscard]] uint32_t getHeight() const override { return m_height; }
 
 	  void setData(void* data, uint32_t size) override;
 
 	  void bind(uint32_t slot = 0) const override;
+	  void unbind(uint32_t slot) const override;
 	private:
 	  uint32_t m_width, m_height;
 	  GLenum m_internalFormat, m_dataFormat;

@@ -20,7 +20,7 @@ namespace primal {
 
   void Model::loadModel(const std::string path) {
 	Assimp::Importer import;
-	const aiScene *scene = import.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);	
+	const aiScene *scene = import.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);
 
 	if(!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
 	  PRIMAL_CORE_ERROR("[ASSIMP] {0}", import.GetErrorString());
@@ -30,7 +30,7 @@ namespace primal {
 	m_directory = path.substr(0, path.find_last_of('/'));
 
 	processNode(scene->mRootNode, scene);
-  }  
+  }
 
   // NOTE: Resursively processes all meshes
   void Model::processNode(aiNode *node, const aiScene *scene) {
@@ -47,11 +47,10 @@ namespace primal {
 
 
   Mesh Model::processMesh(aiMesh *mesh, const aiScene *scene) {
-	// data to fill
 	std::vector<Vertex> vertices;
 	std::vector<unsigned int> indices;
 	ref_ptr<Material> material;
-	// Walk through each of the mesh's vertices
+
 	for(unsigned int i = 0; i < mesh->mNumVertices; ++i) {
 	  Vertex vertex{};
 	  glm::vec3 vec;
@@ -95,16 +94,16 @@ namespace primal {
 	  vertices.push_back(vertex);
 	}
 
+	// indices
 	for(std::size_t i = 0; i < mesh->mNumFaces; ++i) {
 	  aiFace face = mesh->mFaces[i];
 	  for(std::size_t j = 0; j < face.mNumIndices; ++j)
 		indices.push_back(face.mIndices[j]);
 	}
 
+	// materials
 	if (mesh->mMaterialIndex >= 0) {
 	  aiMaterial* aiMat = scene->mMaterials[mesh->mMaterialIndex];    
-
-	  // NOTE: rvalue created moves into Material instance?
 	  material = Material::create(loadMaterialTextures(aiMat));
 	}
 
@@ -135,7 +134,18 @@ namespace primal {
 	  for(std::size_t i = 0; i < mat->GetTextureCount(type); ++i) {
 		aiString texturePath;
 		mat->GetTexture(type, i, &texturePath);
+
+		// NOTE: Normalize texture paths. Handle '\' for windows filesystems.
+		// Remove '../' and '..\' from paths. (No relative paths)
 		fullPath = m_directory + "/" + texturePath.C_Str();
+		std::replace(fullPath.begin(), fullPath.end(), '\\', '/');
+		
+		if (auto idx = fullPath.find("..\\", 0); idx != std::string::npos) {
+		  fullPath.replace(idx, 3, "");
+		}
+		if (auto idx = fullPath.find("../", 0); idx != std::string::npos) {
+		  fullPath.replace(idx, 3, "");
+		}
 
 		textures.emplace_back(Texture2D::create(fullPath, typeName));
 	  }

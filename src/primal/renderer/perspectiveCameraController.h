@@ -16,10 +16,10 @@ namespace primal {
 	  void onUpdate(Timestep ts);
 	  void onEvent(Event& e);
 
-	  PerspectiveCamera& getCamera() { return m_camera; }
-	  const PerspectiveCamera& getCamera() const { return m_camera; }
+	  [[nodiscard]] PerspectiveCamera& getCamera() { return m_camera; }
+	  [[nodiscard]] const PerspectiveCamera& getCamera() const { return m_camera; }
 
-	  float getZoomLevel() const { return m_zoomLevel; }
+	  [[nodiscard]] float getZoomLevel() const { return m_zoomLevel; }
 	  void setZoomLevel(float level) { m_zoomLevel = level; }
 
 	private:
@@ -35,7 +35,7 @@ namespace primal {
 
 	  glm::vec3 m_cameraPosition = { 0.0f, 0.0f, 0.0f };
 	  float m_cameraRotation = 0.0f; // degrees, anti-clockwise direction
-	  float m_cameraTranslationSpeed = 20.0f;
-	  float m_cameraRotationSpeed = 180.0f;
+	  float m_cameraTranslationSpeed = 30.0f;
+	  float m_cameraRotationSpeed = 30.0f;
   };
 }

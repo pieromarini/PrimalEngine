@@ -28,3 +28,6 @@ cmake_uninstall.cmake
 # Build folders
 build/
 target/
+
+# Renderdoc capture/debugging settings
+*.cap

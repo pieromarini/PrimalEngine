@@ -8,21 +8,21 @@ namespace primal {
 	public:
 	  PerspectiveCamera(glm::vec3 position, glm::vec3 up, float aspectRatio, float zoom, float yaw, float pitch);
 
-	  void setProjection(float fov, float aspectRatio, float near, float far);
+	  void setProjection(float zoom, float aspectRatio, float near, float far);
 
-	  const glm::vec3& getPosition() const { return m_position; }
+	  [[nodiscard]] const glm::vec3& getPosition() const { return m_position; }
 	  void setPosition(const glm::vec3& position) { m_position = position; recalculateVectors(); }
 
-	  float getRotation() const { return m_rotation; }
+	  [[nodiscard]] float getRotation() const { return m_rotation; }
 	  void setRotation(float rotation) { m_rotation = rotation; recalculateVectors(); }
 	  void setRotation(float mouseX, float mouseY);
 
-	  const glm::mat4& getProjectionMatrix() const { return m_projectionMatrix; }
-	  const glm::mat4& getViewMatrix() const { return m_viewMatrix; }
-	  const glm::mat4& getViewProjectionMatrix() const { return m_viewProjectionMatrix; }
-	  const glm::vec3& getFrontVector() const { return m_front; }
-	  const glm::vec3& getRightVector() const { return m_right; }
-	  const glm::vec3& getUpVector() const { return m_up; }
+	  [[nodiscard]] const glm::mat4& getProjectionMatrix() const { return m_projectionMatrix; }
+	  [[nodiscard]] const glm::mat4& getViewMatrix() const { return m_viewMatrix; }
+	  [[nodiscard]] const glm::mat4& getViewProjectionMatrix() const { return m_viewProjectionMatrix; }
+	  [[nodiscard]] const glm::vec3& getFrontVector() const { return m_front; }
+	  [[nodiscard]] const glm::vec3& getRightVector() const { return m_right; }
+	  [[nodiscard]] const glm::vec3& getUpVector() const { return m_up; }
 	private:
 	  void recalculateVectors();
 

@@ -16,9 +16,9 @@ class Sandbox3D : public primal::Layer {
 
   private:
 	primal::PerspectiveCameraController m_cameraController;
-	primal::ref_ptr<primal::Model> m_modelTest;
-	primal::ref_ptr<primal::Texture2D> m_modelTexture;
-
+	primal::ref_ptr<primal::Model> m_modelHouse;
 	primal::ref_ptr<primal::Model> m_modelNanosuit;
-	primal::ref_ptr<primal::Texture2D> m_modelTextureNanosuit;
+	primal::ref_ptr<primal::Model> m_modelTree;
+
+	double m_lastFrameTime{0};
 };

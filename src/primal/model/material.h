@@ -7,8 +7,8 @@
 
 /*
  * Material.h
- * Materials hold a pointer to each type of texture.
- * They can also hold additional properties (shininess).
+ * Materials hold pointer to a number of textures
+ * They can also hold additional material-specific properties (shininess).
  */
 
 namespace primal {
@@ -19,6 +19,7 @@ namespace primal {
 	  static ref_ptr<Material> create(std::vector<ref_ptr<Texture2D>> textures);
 
 	  std::vector<ref_ptr<Texture2D>> m_textures;
+	  // TODO: extract this data from imported models.
 	  float m_shininess{0.5f};
   };
 

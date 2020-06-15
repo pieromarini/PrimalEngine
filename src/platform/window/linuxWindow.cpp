@@ -41,6 +41,7 @@ namespace primal {
 	PRIMAL_PROFILE_FUNCTION();
 
 	// NOTE: Require 4.6 version.
+	// TODO: multiplatform solution
 	auto e = setenv("MESA_GL_VERSION_OVERRIDE", "4.6", true);
 	PRIMAL_CORE_ASSERT(e == 0, "Couldn't override OpenGL Version to 4.6");
 

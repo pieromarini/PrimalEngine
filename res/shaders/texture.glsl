@@ -34,11 +34,10 @@ struct Material {
     sampler2D texture_normal1;
     sampler2D texture_height1;
     float shininess;
-}; 
+};
 
 struct DirectionalLight {
     vec3 direction;
-	
     vec3 ambient;
     vec3 diffuse;
     vec3 specular;

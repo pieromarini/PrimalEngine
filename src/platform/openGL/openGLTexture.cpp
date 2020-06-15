@@ -2,6 +2,7 @@
 
 #include "openGLTexture.h"
 #include "primal/core/application.h"
+#include "primal/core/log.h"
 
 namespace primal {
 
@@ -35,7 +36,7 @@ namespace primal {
 
 	unsigned char* data = SOIL_load_image(m_path.c_str(), &width, &height, &channels, SOIL_LOAD_AUTO);
 
-	PRIMAL_CORE_ASSERT(data, "Failed to load image at " + m_path);
+	PRIMAL_CORE_ASSERT(data, "Failed to load image at " + m_path + "\n\t[SOIL] Error: " + SOIL_last_result());
 
 	m_width = width;
 	m_height = height;
@@ -86,5 +87,9 @@ namespace primal {
 	PRIMAL_PROFILE_FUNCTION();
 
 	glBindTextureUnit(slot, m_id);
+  }
+
+  void OpenGLTexture2D::unbind(uint32_t slot) const {
+	glBindTextureUnit(slot, 0);
   }
 }

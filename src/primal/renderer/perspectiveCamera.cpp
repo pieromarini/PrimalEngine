@@ -20,7 +20,7 @@ namespace primal {
 
 	PRIMAL_PROFILE_FUNCTION();
 
-	m_projectionMatrix = glm::perspective(zoom, aspectRatio, 0.1f, 100.0f);
+	setProjection(zoom, aspectRatio, 0.1f, 100.0f);
 
 	recalculateVectors();
   }

@@ -24,6 +24,7 @@ namespace primal {
 
 	  static glm::vec3 lightDirection;
 	  static glm::vec3 pointLightPosition;
+	  static glm::vec3 pointLightPosition2;
 
   };
 

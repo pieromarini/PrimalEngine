@@ -25,7 +25,7 @@ namespace primal {
 	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
 	glDebugMessageCallback(openGLMessageCallback, nullptr);
 
-	glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_FALSE);
+	glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_FALSE);
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -48,7 +48,6 @@ namespace primal {
   void OpenGLRendererAPI::drawIndexed(const ref_ptr<VertexArray>& vertexArray) {
 	vertexArray->bind();
 	glDrawElements(GL_TRIANGLES, vertexArray->getIndexBuffer()->getCount(), GL_UNSIGNED_INT, nullptr);
-	glBindTexture(GL_TEXTURE_2D, 0);
 	vertexArray->unbind();
   }
 
