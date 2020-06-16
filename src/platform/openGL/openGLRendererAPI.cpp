@@ -45,6 +45,14 @@ namespace primal {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   }
 
+  void OpenGLRendererAPI::clearColor() {
+	glClear(GL_COLOR_BUFFER_BIT);
+  }
+
+  void OpenGLRendererAPI::clearDepth() {
+	glClear(GL_DEPTH_BUFFER_BIT);
+  }
+
   void OpenGLRendererAPI::drawIndexed(const ref_ptr<VertexArray>& vertexArray) {
 	vertexArray->bind();
 	glDrawElements(GL_TRIANGLES, vertexArray->getIndexBuffer()->getCount(), GL_UNSIGNED_INT, nullptr);

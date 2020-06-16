@@ -12,6 +12,9 @@ namespace primal {
 	  void setClearColor(const glm::vec4& color) override;
 	  void clear() override;
 
+	  void clearColor() override;
+	  void clearDepth() override;
+
 	  void drawIndexed(const ref_ptr<VertexArray>& vertexArray) override;
 	  void draw(const ref_ptr<VertexArray>& vertexArray) override;
 

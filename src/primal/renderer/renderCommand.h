@@ -24,6 +24,14 @@ namespace primal {
 		s_rendererAPI->clear();
 	  }
 
+	  inline static void clearColor() {
+		s_rendererAPI->clearColor();
+	  }
+
+	  inline static void clearDepth() {
+		s_rendererAPI->clearDepth();
+	  }
+
 	  inline static void drawIndexed(const ref_ptr<VertexArray>& vertexArray) {
 		s_rendererAPI->drawIndexed(vertexArray);
 	  }

@@ -17,6 +17,9 @@ namespace primal {
 	  virtual void setClearColor(const glm::vec4& color) = 0;
 	  virtual void clear() = 0;
 
+	  virtual void clearColor() = 0;
+	  virtual void clearDepth() = 0;
+
 	  virtual void drawIndexed(const ref_ptr<VertexArray>& vertexArray) = 0;
 	  virtual void draw(const ref_ptr<VertexArray>& vertexArray) = 0;
 
