@@ -39,7 +39,7 @@ namespace primal {
 
   void OpenGLFramebuffer::addDepthAttachment() {
 	glCreateTextures(GL_TEXTURE_2D, 1, &m_depthTexture);
-	glTextureStorage2D(m_depthTexture, 1, GL_DEPTH_COMPONENT16, m_width, m_height);
+	glTextureStorage2D(m_depthTexture, 1, GL_DEPTH_COMPONENT32, m_width, m_height);
 
 	glTextureParameteri(m_depthTexture, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTextureParameteri(m_depthTexture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);

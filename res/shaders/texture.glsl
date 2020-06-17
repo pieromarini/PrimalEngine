@@ -1,4 +1,4 @@
-// Textured Shader with Ambient / Diffuse / Specular Phong Lighting
+// Main shader
 
 #type vertex
 #version 330 core
@@ -23,7 +23,7 @@ void main() {
     Normal = transpose(inverse(mat3(u_Transform))) * a_Normal;
 	TexCoords = a_TexCoords;
 	FragPosLightSpace = u_LightSpaceMatrix * vec4(FragPos, 1.0);
-	gl_Position = u_ViewProjection * u_Transform * vec4(a_Position, 1.0);
+	gl_Position = u_ViewProjection * vec4(FragPos, 1.0);
 }
 
 #type fragment
@@ -76,7 +76,7 @@ uniform sampler2D u_ShadowMap;
 
 vec3 CalcDirectionalLight(DirectionalLight light, vec3 normal, vec3 viewDir);  
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir);  
-float CalcShadows(vec4 fragPosLightSapce, vec3 lightDir);
+float CalcShadows(vec4 fragPosLightSapce, vec3 lightDirection);
 
 void main() {
 	vec3 norm = normalize(Normal);
@@ -93,8 +93,8 @@ void main() {
 vec3 CalcDirectionalLight(DirectionalLight light, vec3 normal, vec3 viewDir) {
 	vec3 color = texture(u_Material.texture_diffuse1, TexCoords).rgb;
 
-    vec3 lightDir = normalize(-light.direction);
-    float diff = max(dot(normal, lightDir), 0.0);
+    vec3 lightDir = normalize(light.direction - FragPos);
+    float diff = max(dot(lightDir, normal), 0.0);
 
 	vec3 halfwayDir = normalize(lightDir + viewDir);
     float spec = pow(max(dot(normal, halfwayDir), 0.0), u_Material.shininess);
@@ -131,7 +131,7 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir) {
     return (ambient + diffuse + specular);
 }
 
-float CalcShadows(vec4 fragPosLightSpace, vec3 lightDir) {
+float CalcShadows(vec4 fragPosLightSpace, vec3 lightDirection) {
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
     projCoords = projCoords * 0.5 + 0.5;
 
@@ -139,7 +139,7 @@ float CalcShadows(vec4 fragPosLightSpace, vec3 lightDir) {
     float currentDepth = projCoords.z;
 
     vec3 normal = normalize(Normal);
-    float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);
+    float bias = max(0.05 * (1.0 - dot(normal, lightDirection)), 0.005);
 
     float shadow = 0.0;
     vec2 texelSize = 1.0 / textureSize(u_ShadowMap, 0);

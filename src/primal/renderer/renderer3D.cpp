@@ -99,7 +99,7 @@ namespace primal {
 
 	// Base material data.
 	s_data->textureShader->setInt("u_Material.diffuse", 0);
-	s_data->textureShader->setInt("u_Material.specular", 1);
+	s_data->textureShader->setInt("u_Material.specular", 0);
 	s_data->textureShader->setFloat("u_Material.shininess", 1.0f);
 
 	s_data->textureShader->setFloat3("u_DirLight.direction", lightDirection);
@@ -111,7 +111,7 @@ namespace primal {
 	s_data->textureShader->setFloat3("u_PointLights[0].position", pointLightPosition);
 	s_data->textureShader->setFloat3("u_PointLights[0].ambient", { 1.0f, 1.0f, 1.0f });
 	s_data->textureShader->setFloat3("u_PointLights[0].diffuse", { 1.0f, 1.0f, 1.0f });
-	s_data->textureShader->setFloat3("u_PointLights[0].specular", { 0.5f, 0.5f, 0.5f });
+	s_data->textureShader->setFloat3("u_PointLights[0].specular", { 0.2f, 0.2f, 0.2f });
 	s_data->textureShader->setFloat("u_PointLights[0].constant", 1.0f);
 	s_data->textureShader->setFloat("u_PointLights[0].linear", 0.09);
 	s_data->textureShader->setFloat("u_PointLights[0].quadratic", 0.032);
@@ -119,7 +119,7 @@ namespace primal {
 	s_data->textureShader->setFloat3("u_PointLights[1].position", pointLightPosition2);
 	s_data->textureShader->setFloat3("u_PointLights[1].ambient", { 0.5f, 0.1f, 0.2f });
 	s_data->textureShader->setFloat3("u_PointLights[1].diffuse", { 0.5f, 0.1f, 0.2f });
-	s_data->textureShader->setFloat3("u_PointLights[1].specular", { 0.8f, 0.8f, 0.8f });
+	s_data->textureShader->setFloat3("u_PointLights[1].specular", { 0.2f, 0.2f, 0.2f });
 	s_data->textureShader->setFloat("u_PointLights[1].constant", 1.0f);
 	s_data->textureShader->setFloat("u_PointLights[1].linear", 0.09);
 	s_data->textureShader->setFloat("u_PointLights[1].quadratic", 0.032);
@@ -132,8 +132,6 @@ namespace primal {
   }
 
   void Renderer3D::beginShadowMap() {
-
-	// Shadow map camera view settings
 	auto lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, 8.5f);
 	auto lightView = glm::lookAt(lightDirection, { 0, 0, 0 }, { 0, 1, 0 });
 	s_data->lightSpaceMatrix = lightProjection * lightView;
