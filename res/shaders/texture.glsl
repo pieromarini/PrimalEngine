@@ -79,7 +79,9 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
 float CalcShadows(vec4 fragPosLightSapce, vec3 lightDirection);
 
 void main() {
-	vec3 norm = normalize(Normal);
+	vec3 norm = texture(u_Material.texture_normal1, TexCoords).rgb;
+	norm = Normal * 2.0 - 1.0;
+	norm = normalize(norm);
     vec3 viewDir = normalize(u_ViewPos - FragPos);
 
     vec3 result = CalcDirectionalLight(u_DirLight, norm, viewDir);
