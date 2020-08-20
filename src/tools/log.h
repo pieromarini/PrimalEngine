@@ -1,13 +1,12 @@
 #ifndef LOG_H
 #define LOG_H
 
-#include "core/core.h"
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
 
 namespace primal {
 
-  class PRIMAL_API Log {
+  class Log {
 	public:
 	  static void init();
 

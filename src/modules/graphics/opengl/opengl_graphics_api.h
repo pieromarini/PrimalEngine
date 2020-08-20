@@ -1,7 +1,7 @@
 #ifndef OPENGL_GRAPHICSAPI_H
 #define OPENGL_GRAPHICSAPI_H
 
-#include "graphics_api.h"
+#include "modules/graphics/graphics_api.h"
 
 namespace primal {
 

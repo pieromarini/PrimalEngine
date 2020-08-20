@@ -3,7 +3,7 @@
 
 #include <glm/glm.hpp>
 
-#include "core/memory.h"
+#include "core/memory/ptr.h"
 
 namespace primal {
 

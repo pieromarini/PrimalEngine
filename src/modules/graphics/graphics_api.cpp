@@ -1,8 +1,7 @@
 #include "graphics_api.h"
-#include "graphics_manager.h"
 #include "tools/log.h"
 
-#include "opengl_graphics_api.h"
+#include "opengl/opengl_graphics_api.h"
 
 namespace primal {
 

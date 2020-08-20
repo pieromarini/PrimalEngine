@@ -1,6 +1,8 @@
 #ifndef CORE_H
 #define CORE_H
 
+#include "tools/log.h"
+
 // Temporary for local testing.
 // NOTE: Will be defined inside the CMake build system with add_compile_definitions
 #define PRIMAL_PLATFORM_LINUX

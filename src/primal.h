@@ -7,4 +7,6 @@
 #include "core/core.h"
 #include "core/time.h"
 
+#include "application.h"
+
 #endif

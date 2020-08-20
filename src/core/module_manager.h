@@ -1,7 +1,7 @@
 #ifndef MODULEMANAGER_H
 #define MODULEMANAGER_H
 
-#include "core/memory.h"
+#include "core/memory/ptr.h"
 #include "modules/graphics/graphics_manager.h"
 
 namespace primal {
