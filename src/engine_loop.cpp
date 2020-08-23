@@ -3,6 +3,7 @@
 #include "engine_loop.h"
 #include "modules/graphics/graphics_module.h"
 #include "modules/graphics/window_module.h"
+#include "input/input_module.h"
 
 namespace primal {
   
@@ -15,17 +16,20 @@ namespace primal {
   EngineLoop::EngineLoop() {
 	m_windowModule = new WindowModule();
 	m_graphicsModule = new GraphicsModule();
+	m_inputModule = new InputModule();
   }
 
   // TODO: each module will call it's own destructor. (after implementing the stack allocator)
   EngineLoop::~EngineLoop() {
 	delete m_graphicsModule;
 	delete m_windowModule;
+	delete m_inputModule;
   }
 
   void EngineLoop::init() {
 	m_windowModule->init();
 	m_graphicsModule->init(m_windowModule->m_windowHandle);
+	m_inputModule->init(m_windowModule->m_windowHandle);
 
 	m_isRunning = true;
 	startGameClock();
@@ -54,11 +58,13 @@ namespace primal {
   }
 
   void EngineLoop::variableUpdate(const float deltaTime) const {
+	m_inputModule->update(deltaTime);
 	m_windowModule->update(deltaTime);
 	m_graphicsModule->update(deltaTime);
   }
 
   void EngineLoop::shutdown() {
+	m_inputModule->shutdown();
 	m_graphicsModule->shutdown();
 	m_windowModule->shutdown();
   }

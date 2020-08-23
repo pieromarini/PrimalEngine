@@ -24,6 +24,7 @@ namespace primal {
 
 	  class GraphicsModule* m_graphicsModule;
 	  class WindowModule* m_windowModule;
+	  class InputModule* m_inputModule;
 
 	  void init();
 
