@@ -9,6 +9,8 @@
 #include "component.h"
 #include "tools/log.h"
 #include "transform.h"
+#include "scene_manager.h"
+#include "scene.h"
 #include "core/math/vector3.h"
 
 namespace primal {
@@ -102,6 +104,7 @@ namespace primal {
 	  };
 
 	  friend class GraphicsModule;
+	  friend class Scene;
 
 	  std::vector<std::type_index> m_componentTypes;
 	  std::vector<class Component*> m_components;
@@ -129,7 +132,7 @@ namespace primal {
   template<typename T, bool isActive, typename... Args>
   T* Entity::addComponent(Args&&... args) {
 	if constexpr (!std::is_base_of<class Component, T>::value) {
-	  PRIMAL_CORE_ERROR("Entity::AddComponent => {0} is not a derived class from Component class", typeid(T).name());
+	  PRIMAL_CORE_ERROR("Entity::addComponent => {0} is not a derived class from Component class", typeid(T).name());
 	} else {
 	  std::type_index typeIndex{typeid(T)};
 	  if (std::any_of(
@@ -139,7 +142,7 @@ namespace primal {
 		  std::any_of(
 			std::execution::par, m_componentTypes.begin(), m_componentTypes.end(),
 			[typeIndex](std::type_index type) { return type == typeIndex; })) {
-		PRIMAL_CORE_ERROR("Entity::AddComponent => Adding multiple excluded components {0}", typeIndex.name());
+		PRIMAL_CORE_ERROR("Entity::addComponent => Adding multiple excluded components {0}", typeIndex.name());
 	  }
 	  auto component = new T(std::forward<Args>(args)...);
 	  (Entity *&)(component->entity) = this;
@@ -160,7 +163,7 @@ namespace primal {
 
   template<typename T, typename... Args>
   T* Entity::addComponent(Args&&... args) {
-	return AddComponent<T, true>(std::forward<Args>(args)...);
+	return addComponent<T, true>(std::forward<Args>(args)...);
   }
 
   template<typename T>
@@ -203,9 +206,8 @@ namespace primal {
   template<typename T>
   inline T* Entity::getComponentInChildren() {
 	T* component = nullptr;
-	for (auto it = transform->begin(); it != transform->end() && !component; ++it) {
-	  // Debug. could break;
-	  component = it->getComponent<T>();
+	for (auto& child : *transform) {
+	  component = child->entity->getComponent<T>();
 	}
 	return component;
   }
@@ -214,9 +216,9 @@ namespace primal {
   inline std::vector<T*> Entity::getComponentsInChildren() {
 	std::vector<T*> components;
 
-	for (auto it = transform->begin(); it != transform->end(); ++it) {
+	for (auto& child : *transform) {
 	  std::vector<T*> c;
-	  c = it->getComponents<T>();
+	  c = child->entity->getComponents<T>();
 	  components.insert(components.end(), c.begin(), c.end());
 	}
 	return components;

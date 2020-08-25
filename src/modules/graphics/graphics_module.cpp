@@ -6,7 +6,7 @@ namespace primal {
   Unique<GraphicsAPI> GraphicsModule::s_renderingAPI = GraphicsAPI::create(PrimalConfig::renderingAPI);
 
   void GraphicsModule::init(GLFWwindow* window) {
-
+	m_windowHandle = window; 
   }
 
   void GraphicsModule::update(float deltatime) {

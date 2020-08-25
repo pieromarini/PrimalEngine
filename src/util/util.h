@@ -10,7 +10,7 @@ namespace primal::util {
 	}
 
 	template<typename T, typename S>
-	bool operator()(std::pair<T, S>& a, const std::pair<T, S>& b) const {
+	bool operator()(const std::pair<T, S>& a, const std::pair<T, S>& b) const {
 	  return (a.first == b.first && a.second == b.second);
 	}
   };

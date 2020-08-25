@@ -171,7 +171,7 @@ namespace primal {
 	Transform* targetTransform = transform;
 	if (transform == nullptr) {
 	  targetTransform =
-		SceneManager::Instance().loadedScene->sceneRoot->transform;
+		SceneManager::instance().loadedScene->sceneRoot->transform;
 	}
 	if (m_parent == targetTransform) {
 	  PRIMAL_CORE_WARN("You are trying to set {0}'s m_parent to ({1}), who is already its m_parent.", getName(), targetTransform->getName());

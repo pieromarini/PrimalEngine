@@ -1,7 +1,6 @@
 #include "entity.h"
 #include "component.h"
-#include "scene.h"
-#include "scene_manager.h"
+#include "layers.h"
 
 namespace primal {
 
@@ -129,7 +128,7 @@ namespace primal {
 	for (auto child : removingChildren) {
 	  entity->transform->removeChild(child);
 	}
-	entity->transform->parent = nullptr;
+	entity->transform->m_parent = nullptr;
   }
 
   void Entity::destroyImmediately(Entity* entity) {

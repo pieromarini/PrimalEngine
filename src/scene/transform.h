@@ -25,13 +25,14 @@ namespace primal {
 	  void setLocalPos(const math::Vector3& newLocalPos);
 
 	  void translateWorld(const math::Vector3& delta);
-
 	  void translateLocal(const math::Vector3& delta);
 
 	  math::Quaternion getWorldRot();
 	  [[nodiscard]] math::Quaternion getLocalRot() const;
+
 	  math::Vector3 getWorldEulerAngles();
 	  [[nodiscard]] math::Vector3 getLocalEulerAngles() const;
+
 	  void setWorldRot(const math::Quaternion& newWorldRot);
 	  void setWorldRot(const math::Vector3& worldEulers);
 	  void setLocalRot(const math::Quaternion& newLocalRot);
@@ -108,7 +109,7 @@ namespace primal {
 	  math::Matrix4 m_worldToLocalMatrix{};
 
 	  // union
-	  math::Vector3 m_axis[3];
+	  std::array<math::Vector3, 3> m_axis;
 	  math::Vector3& m_left = m_axis[0];
 	  math::Vector3& m_up = m_axis[1];
 	  math::Vector3& m_forward = m_axis[2];

@@ -5,7 +5,7 @@
 #include "matrix3.h"
 
 #include "vector3.h"
-#include "utils.h"
+#include "core/math/util.h"
 
 namespace primal::math {
 

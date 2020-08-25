@@ -21,7 +21,7 @@ namespace primal {
 
 	  void initRenderConfig();
 
-	  // Window* m_windowHandle
+	  GLFWwindow* m_windowHandle;
 
 	  static Unique<GraphicsAPI> s_renderingAPI;
   };

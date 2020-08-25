@@ -53,7 +53,7 @@ namespace primal::math {
   float Vector3::min() const { return Util::min({ x, y, z }); }
 
   bool Vector3::fuzzyEqual(const Vector3& lhs, const Vector3& rhs) {
-	return Util::abs(lhs.x - rhs.x) < Util::EPSILON && Util::Abs(lhs.y - rhs.y) < Util::EPSILON && Util::Abs(lhs.z - rhs.z) < Util::EPSILON;
+	return Util::abs(lhs.x - rhs.x) < Util::EPSILON && Util::abs(lhs.y - rhs.y) < Util::EPSILON && Util::abs(lhs.z - rhs.z) < Util::EPSILON;
   }
   float Vector3::dot(const Vector3& lhs, const Vector3& rhs) {
 	return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
@@ -83,10 +83,10 @@ namespace primal::math {
   }
 
   Vector3 Vector3::slerp(const Vector3& start, const Vector3& end, float time) {
-	float dot = dot(start, end);
-	dot = dot < -1.f ? -1.f : (dot > 1.f ? 1.f : dot);
-	float theta = acosf(dot) * time;
-	Vector3 relativeVector = end - start * dot;
+	float dotV = dot(start, end);
+	dotV = dotV < -1.f ? -1.f : (dotV > 1.f ? 1.f : dotV);
+	float theta = acosf(dotV) * time;
+	Vector3 relativeVector = end - start * dotV;
 	return start * cosf(theta) + relativeVector * sinf(theta);
   }
   Vector3 Vector3::fromString(const std::string_view str) {
@@ -99,7 +99,7 @@ namespace primal::math {
   }
 
   float Vector3::angleDeg(const Vector3& a, const Vector3& b) {
-	return AngleRad(a, b) * Util::RAD2DEG;
+	return angleRad(a, b) * Util::RAD2DEG;
   }
 
   float Vector3::angleRad(const Vector3& a, const Vector3& b) {

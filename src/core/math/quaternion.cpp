@@ -182,7 +182,7 @@ namespace primal::math {
 	  const Vector3& upDirection) {
 	// Normalize inputs
 	Vector3 forward = forwardDirection.normalized();
-	Vector3 upwards = upDirection.Normalized();
+	Vector3 upwards = upDirection.normalized();
 	// Don't allow zero vectors
 	if (Vector3::fuzzyEqual(forward, Vector3::zero) || Vector3::fuzzyEqual(upwards, Vector3::zero)) {
 	  x = 0.f;
@@ -194,7 +194,7 @@ namespace primal::math {
 	if (1 - Util::abs(Vector3::dot(forward, upwards)) < Util::EPSILON)
 	  setFromToRotation(Vector3::forward, forward);
 	// Get orthogonal vectors
-	Vector3 right = Vector3::cross(upwards, forward).Normalized();
+	Vector3 right = Vector3::cross(upwards, forward).normalized();
 	upwards = Vector3::cross(forward, right);
 	// Calculate rotation
 	float radicand = right.x + upwards.y + forward.z;

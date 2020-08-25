@@ -20,6 +20,7 @@ namespace primal::math {
 		  float x, y, z, w;
 		};
 		float xyzw[ELEMENT_COUNT];
+		float xyz[3];
 	  };
 
 	  Vector4() : x{ 0 }, y{ 0 }, z{ 0 }, w{ 0 } {}

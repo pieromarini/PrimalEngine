@@ -1,7 +1,10 @@
-#include "input_module.h"
-
-#include "GLFW/glfw3.h"
 #include <cmath>
+#include <GLFW/glfw3.h>
+
+#include "GLFWInput.h"
+#include "input_module.h"
+#include "input.h"
+
 
 namespace primal {
 
@@ -19,12 +22,12 @@ namespace primal {
   Delegate<int, int> InputModule::gamepadConnectionCallbacks;
 
   // GLFW
-  Delegate<GLFWwindow*> windowCloseGLFWCallbacks;
-  Delegate<GLFWwindow*, int, int> windowSizeGLFWCallbacks;
-  Delegate<GLFWwindow*, int, int, int> mouseButtonGLFWCallbacks;
-  Delegate<GLFWwindow*, int, int, int, int> keyGLFWCallbacks;
-  Delegate<GLFWwindow*, double, double> scrollGLFWCallbacks;
-  Delegate<GLFWwindow*, uint32_t> charGLFWCallbacks;
+  Delegate<GLFWwindow*> InputModule::windowCloseGLFWCallbacks;
+  Delegate<GLFWwindow*, int, int> InputModule::windowSizeGLFWCallbacks;
+  Delegate<GLFWwindow*, int, int, int> InputModule::mouseButtonGLFWCallbacks;
+  Delegate<GLFWwindow*, int, int, int, int> InputModule::keyGLFWCallbacks;
+  Delegate<GLFWwindow*, double, double> InputModule::scrollGLFWCallbacks;
+  Delegate<GLFWwindow*, uint32_t> InputModule::charGLFWCallbacks;
 
   GLFWwindow* InputModule::m_windowHandle{ nullptr };
 

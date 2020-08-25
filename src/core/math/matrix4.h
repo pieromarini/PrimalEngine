@@ -92,9 +92,9 @@ namespace primal::math {
 	  static Matrix4 rotateY(float radians);
 	  static Matrix4 rotateZ(float radians);
 	  static Matrix4 rotate(const class Vector3& rotation);
-	  static Matrix4 transform(const class Vector3& translation, const class Vector3& rotation, const class Vector3& scale);
+	  static Matrix4 transform(const class Vector3& translation, const class Vector3& rotation, const class Vector3& scaleValue);
 
-	  static bool FuzzyEqual(const Matrix4& lhs, const Matrix4& rhs);
+	  static bool fuzzyEqual(const Matrix4& lhs, const Matrix4& rhs);
   };
 
 }

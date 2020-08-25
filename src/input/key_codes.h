@@ -1,3 +1,6 @@
+#ifndef KEYCODES_H
+#define KEYCODES_H
+
 #include <cstdint>
 
 namespace primal {
@@ -165,3 +168,5 @@ namespace primal {
 	ALL,
   };
 } 
+
+#endif

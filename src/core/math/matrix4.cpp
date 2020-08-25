@@ -3,7 +3,10 @@
 #include <utility>
 
 #include "matrix4.h"
+#include "matrix3.h"
+#include "quaternion.h"
 #include "vector4.h"
+#include "vector3.h"
 #include "util.h"
 
 namespace primal::math {
@@ -220,7 +223,7 @@ namespace primal::math {
 		  data[15] * rhs.w};
   }
 
-  float Matrix4::Determinant() const {
+  float Matrix4::determinant() const {
 	float m11 = data[5] * data[10] * data[15] - data[5] * data[11] * data[14] -
 	  data[9] * data[6] * data[15] + data[9] * data[7] * data[14] +
 	  data[13] * data[6] * data[11] - data[13] * data[7] * data[10];
@@ -345,7 +348,7 @@ namespace primal::math {
 	if (row < 0 || row > ROW_COUNT - 1)
 	  throw std::out_of_range{"Matrix4::getRow => Row index out of range."};
 	return { data[row << 2], data[(row << 2) + 1], data[(row << 2) + 2],
-		data[(row << 2) + 3]) };
+		data[(row << 2) + 3] };
   }
 
   void Matrix4::setRow(const int row, const Vector4& rowData) {
@@ -461,13 +464,13 @@ namespace primal::math {
   }
 
   Matrix4 Matrix4::transform(const Vector3& translation, const Vector3& rotation,
-	  const Vector3& scale) {
-	return translate(translation) * rotate(rotation) * scale(scale);
+	  const Vector3& scaleValue) {
+	return translate(translation) * rotate(rotation) * scale(scaleValue);
   }
 
   bool Matrix4::fuzzyEqual(const Matrix4& lhs, const Matrix4& rhs) {
 	for (int i = 0; i < ELEMENT_COUNT; ++i) {
-	  if (abs(lhs.data[i] - rhs.data[i]) > FLT_EPSILON) {
+	  if (abs(lhs.data[i] - rhs.data[i]) > Util::EPSILON) {
 		return false;
 	  }
 	}
