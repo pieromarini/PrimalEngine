@@ -1,5 +1,9 @@
 #include "graphics_module.h"
 #include "core/config.h"
+#include "components/mesh_component.h"
+#include "scene/entity.h"
+
+// #include "renderer/renderer.h"
 
 namespace primal {
 
@@ -7,10 +11,18 @@ namespace primal {
 
   void GraphicsModule::init(GLFWwindow* window) {
 	m_windowHandle = window; 
+	MeshComponent::graphicsModule = this;
   }
 
   void GraphicsModule::update(float deltatime) {
-	// TODO: iterate components and render them individually (light, mesh, camera, etc)
+	// NOTE: Submit component data to renderer.
+	for (const auto& mesh : meshComponents) {
+	  auto isTransformDirty = mesh->entity->getAttribute(Entity::EntityAttributes::IS_TRANSFORM_DIRTY);
+	  if (isTransformDirty) {
+		mesh->update();
+		// Renderer::drawMesh(mesh);
+	  }
+	}
   }
 
   void GraphicsModule::shutdown() {

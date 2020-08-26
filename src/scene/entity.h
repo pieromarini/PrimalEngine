@@ -96,15 +96,15 @@ namespace primal {
 
 	  const bool isStatic;
 
+	  friend class GraphicsModule;
+	  friend class Scene;
+
 	private:
 	  enum class EntityAttributes {
 		IS_ACTIVE,
 		NEED_DESTROY,
 		IS_TRANSFORM_DIRTY
 	  };
-
-	  friend class GraphicsModule;
-	  friend class Scene;
 
 	  std::vector<std::type_index> m_componentTypes;
 	  std::vector<class Component*> m_components;

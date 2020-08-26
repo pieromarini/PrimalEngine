@@ -40,6 +40,12 @@ namespace primal {
 	  virtual void onUnload() {}
 	  [[nodiscard]] bool isSceneLoaded() const;
 
+	  friend class Entity;
+	  friend class EngineLoop;
+	  friend class SceneManager;
+
+	  class Entity* addEntity(std::string name, class Entity* parent, bool entityStatic = false);
+
 	protected:
 	  std::list<class Entity*> m_entities;
 	  std::queue<class Component*> m_componentsToStart;
@@ -49,8 +55,6 @@ namespace primal {
 	  std::list<class Entity*> m_entitesToRemove;
 	  void addComponentToStart(class Component* component);
 	  void startComponents();
-
-	  class Entity* addEntity(std::string name, class Entity* parent, bool entityStatic = false);
 
 	  void unload();
 	  void update();
@@ -62,10 +66,6 @@ namespace primal {
 
 	  // TODO: Implement a PoolAllocator for entites to live in.
 	  // ie: PoolAllocator<Entity> m_pool;
-
-	  friend class Entity;
-	  friend class EngineLoop;
-	  friend class SceneManager;
   };
 
 }

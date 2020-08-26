@@ -1,8 +1,12 @@
+#ifndef VECTOR2_H
+#define VECTOR2_H
+
 #include <string>
 
 #include "core/math/util.h"
 
 namespace primal::math {
+
   class Vector2 {
 	public:
 	  static const Vector2 zero;
@@ -115,3 +119,5 @@ namespace primal::math {
   };
 
 }
+
+#endif

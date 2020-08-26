@@ -3,6 +3,7 @@
 
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
+#include <list>
 
 #include "graphics_api.h"
 
@@ -22,6 +23,8 @@ namespace primal {
 	  void initRenderConfig();
 
 	  GLFWwindow* m_windowHandle;
+
+	  std::list<class MeshComponent*> meshComponents;
 
 	  static Unique<GraphicsAPI> s_renderingAPI;
   };

@@ -101,11 +101,14 @@ namespace primal {
 
   std::string Entity::getEntityIDString() const {
 	// TODO: implement
+	return "";
   }
 
   Entity* create(std::string name, class Entity* parent, bool entityStatic) {
-	// TODO: implement. need scene manager.
+	return SceneManager::instance().loadedScene->addEntity(name, parent, entityStatic);
   }
+
+
 
   void Entity::destroy(Entity* entity) {
 	if (entity->getAttribute(EntityAttributes::NEED_DESTROY)) {
@@ -142,11 +145,11 @@ namespace primal {
   }
 
   Entity* Entity::getEntityByName(const std::string& name) {
-	// return SceneManager::instance().loadedScene->getEntityByName(name);
+	return SceneManager::instance().loadedScene->getEntityByName(name);
   }
 
   std::list<Entity*> Entity::getEntitiesByName(const std::string& name) {
-	// return SceneManager::instance().loadedScene->getEntitiesByName(name);
+	return SceneManager::instance().loadedScene->getEntitiesByName(name);
   }
 
   void Entity::setActive(bool isActive) {
