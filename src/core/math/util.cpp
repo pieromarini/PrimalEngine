@@ -13,6 +13,7 @@ namespace primal::math {
   const float Util::EPSILON = std::numeric_limits<float>::epsilon();
   const float Util::DEG2RAD = Util::PI / 180.f;
   const float Util::RAD2DEG = 180.f * static_cast<float>(M_1_PI);
+  const float Util::TAU = static_cast<float>(M_PI * 2);
 
   float Util::abs(float number) { return number < 0 ? -number : number; }
 

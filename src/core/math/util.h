@@ -11,6 +11,7 @@ namespace primal::math {
 	  static const float EPSILON;
 	  static const float DEG2RAD;
 	  static const float RAD2DEG;
+	  static const float TAU;
 
 	  static float abs(float number);
 	  static int abs(int number);

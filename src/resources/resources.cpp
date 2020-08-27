@@ -1,13 +1,16 @@
 #include "resources.h"
 
 #include "tools/log.h"
+#include "resources/shader_loader.h"
+#include "resources/mesh_loader.h"
+#include "resources/texture_loader.h"
 
-namespace primal {
+namespace primal::renderer {
 
   std::map<StringId, Shader*> Resources::m_shaders{};
   std::map<StringId, Texture> Resources::m_textures{};
   std::map<StringId, TextureCube> Resources::m_texturesCube{};
-  std::map<StringId, Mesh*> Resources::m_meshes{};
+  std::map<StringId, Entity*> Resources::m_meshes{};
 
   void Resources::init() {
 	// TODO: init default resources.
@@ -51,7 +54,7 @@ namespace primal {
 
 	auto texture = TextureLoader::loadTexture(path, target, format, srgb);
 
-	if (texture.width > 0) {
+	if (texture.m_width > 0) {
 	  m_textures.insert({ id, texture });
 	  return &m_textures[id];
 	}
@@ -65,9 +68,9 @@ namespace primal {
 	  return &m_textures[id];
 	}
 
-	auto texture = TextureLoader::loadHDRTexture(path, target, format, srgb);
+	auto texture = TextureLoader::loadHDRTexture(path);
 
-	if (texture.width > 0) {
+	if (texture.m_width > 0) {
 	  m_textures.insert({ id, texture });
 	  return &m_textures[id];
 	}
@@ -90,7 +93,7 @@ namespace primal {
 	  return &m_texturesCube[id];
 	}
 
-	auto texture = TextureLoader::loadTextureCube(name, vsPath, fsPath, defines);
+	auto texture = TextureLoader::loadTextureCube(folder);
 	m_texturesCube.insert({ id, texture });
 	return &m_texturesCube[id];
   }
@@ -104,7 +107,7 @@ namespace primal {
 	PRIMAL_CORE_WARN("Texture cube resource {0} not found", name);
   }
 
-  Mesh* Resources::loadMesh(Renderer* renderer, std::string name, std::string path) {
+  Entity* Resources::loadMesh(Renderer* renderer, std::string name, std::string path) {
 	auto id = SID(name.data());
 	if (m_meshes.find(id) != m_meshes.end()) {
 	  return m_meshes[id];
@@ -115,7 +118,7 @@ namespace primal {
 	return m_meshes[id];
   }
 
-  Mesh* Resources::getMesh(std::string name) {
+  Entity* Resources::getMesh(std::string name) {
 	auto id = SID(name.data());
 	if (m_meshes.find(id) != m_meshes.end()) {
 	  return m_meshes[id];

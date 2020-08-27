@@ -12,9 +12,7 @@ struct aiMesh;
 struct aiMaterial;
 struct aiString;
 
-namespace primal {
-
-  using namespace primal::renderer;
+namespace primal::renderer {
 
   class Renderer;
 

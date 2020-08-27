@@ -13,7 +13,7 @@
 #include "renderer/renderer.h"
 
 
-namespace primal {
+namespace primal::renderer {
 
   std::vector<Mesh*> MeshLoader::m_meshStore = std::vector<Mesh*>();
 
