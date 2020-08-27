@@ -2,10 +2,9 @@
 
 namespace primal {
 
-  Camera::Camera() {
-  }
+  Camera::Camera() {}
 
-  Camera::Camera(math::Vector3 position, math::Vector3 forward, math::Vector3 up) : Position(position), Forward(forward), Up(up) {
+  Camera::Camera(math::vec3 position, math::vec3 forward, math::vec3 up) : Position(position), Forward(forward), Up(up) {
 	updateView();
   }
 
