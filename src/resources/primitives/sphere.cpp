@@ -1,7 +1,7 @@
 #include "sphere.h"
+#include "core/math/trigonometry/conversions.h"
 
 #include <cmath>
-#include "core/math/util.h"
 
 namespace primal {
 
@@ -12,9 +12,9 @@ namespace primal {
 	  for (unsigned int x = 0; x <= xSegments; ++x) {
 		float xSegment = (float)x / (float)ySegments;
 		float ySegment = (float)y / (float)ySegments;
-		float xPos = std::cos(xSegment * math::Util::TAU) * std::sin(ySegment * math::Util::PI);
-		float yPos = std::cos(ySegment * math::Util::PI);
-		float zPos = std::sin(xSegment * math::Util::TAU) * std::sin(ySegment * math::Util::PI);
+		float xPos = std::cos(xSegment * math::PI * 2) * std::sin(ySegment * math::PI);
+		float yPos = std::cos(ySegment * math::PI);
+		float zPos = std::sin(xSegment * math::PI * 2) * std::sin(ySegment * math::PI);
 
 		m_positions.emplace_back(xPos, yPos, zPos);
 		m_uv.emplace_back(xSegment, ySegment);

@@ -10,6 +10,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
+# Intel Threading Library.
+find_package(TBB COMPONENTS tbbmalloc tbbmalloc_proxy tbb_preview)
+
 include(cmake/BasicSettings.cmake)
 
 # Project Options as an interface library.
@@ -77,11 +80,6 @@ add_subdirectory("${GLFW_DIR}")
 target_include_directories(${ENGINE_LIB} PRIVATE "${GLFW_DIR}/include")
 target_compile_definitions(${ENGINE_LIB} PRIVATE "GLFW_INCLUDE_NONE")
 
-# [LIB] glm
-set(GLM_DIR "${LIB_DIR}/glm")
-add_subdirectory("${GLM_DIR}")
-target_include_directories(${ENGINE_LIB} PRIVATE "${GLM_DIR}")
-
 # [LIB] GLAD
 set(GLAD_DIR "${LIB_DIR}/glad")
 add_library(glad "${GLAD_DIR}/src/glad.c")
@@ -139,12 +137,12 @@ endif()
 target_include_directories(${ENGINE_LIB} PRIVATE "${SPDLOG_DIR}/include")
 
 # Engine Library Linking
-target_link_libraries(${ENGINE_LIB} glfw "${GLFW_LIBRARIES}" soil glad "${CMAKE_DL_LIBS}" imgui assimp spdlog::spdlog)
+target_link_libraries(${ENGINE_LIB} glfw "${GLFW_LIBRARIES}" soil glad "${CMAKE_DL_LIBS}" imgui assimp spdlog::spdlog tbb)
 
 # [EXEC] Main Executable Linking
 set(EXEC_NAME "sandbox")
 add_executable(${EXEC_NAME} ${sandbox_sources})
-target_include_directories(${EXEC_NAME} PRIVATE ${SANDBOX_DIR} ${GLM_DIR} ${SOURCES_DIR})
+target_include_directories(${EXEC_NAME} PRIVATE ${SANDBOX_DIR} ${SOURCES_DIR})
 target_link_libraries(${EXEC_NAME} PRIVATE ${ENGINE_LIB} project_options project_warnings)
 
 execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/res ${PROJECT_BINARY_DIR}/res RESULT_VARIABLE exitcode)

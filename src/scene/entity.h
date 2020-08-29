@@ -11,7 +11,7 @@
 #include "transform.h"
 #include "scene_manager.h"
 #include "scene.h"
-#include "core/math/vector3.h"
+#include "core/math/linear_algebra/vector.h"
 
 namespace primal {
 
@@ -85,9 +85,9 @@ namespace primal {
 	  std::vector<T*> getComponentsInDescendant();
 	  */
 
-	  void setTransform(const math::Vector3& worldPos = math::Vector3::zero,
-					    const math::Vector3& worldEulerAngles = math::Vector3::zero,
-						const math::Vector3& localScale = math::Vector3::one);
+	  void setTransform(const math::vec3& worldPos = { 0.0, 0.0, 0.0 },
+					    const math::vec3& worldEulerAngles = { 0.0, 0.0, 0.0 },
+						const math::vec3& localScale = { 1.0, 1.0, 1.0 });
 
 	  void setLayer(int layer);
 	  void setLayer(std::string layer);

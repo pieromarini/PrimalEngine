@@ -1,5 +1,6 @@
 #include "pbr.h"
 
+#include "modules/graphics/graphics_module.h"
 #include "renderer.h"
 #include "render_target.h"
 #include "pbr_capture.h"
@@ -13,7 +14,8 @@
 #include "shading/material.h"
 #include "shading/texture.h"
 #include "shading/texture_cube.h"
-#include "components/camera_component.h"
+#include "components/camera.h"
+#include "components/mesh_component.h"
 
 namespace primal::renderer {
 
@@ -37,11 +39,11 @@ namespace primal::renderer {
 	m_PBRPrefilterCapture->cull = false;
 
 	m_PBRCaptureCube = new Cube();
-	m_sceneEnvCube = Entity::create("Environment Cube", nullptr);
-	m_sceneEnvCube->addComponent<MeshComponent>(m_PBRCaptureCube, m_PBRHdrToCubemap, m_sceneEnvCube->transform);
+	m_sceneEnvCube = primal::Entity::create("Environment Cube", nullptr);
+	m_sceneEnvCube->addComponent<primal::MeshComponent>(m_PBRCaptureCube, m_PBRHdrToCubemap, m_sceneEnvCube->transform, -99999, 99999);
 
 	// - brdf integration
-	m_renderer->blit(nullptr, m_renderTargetBRDFLUT, m_PBRIntegrateBRDF);
+	m_renderer->Blit(nullptr, m_renderTargetBRDFLUT, m_PBRIntegrateBRDF);
 
 	// capture
 	m_probeCaptureShader = Resources::loadShader("pbr:capture", "shaders/capture.vs", "shaders/capture.fs");
@@ -71,8 +73,8 @@ namespace primal::renderer {
 	delete m_PBRIntegrateBRDF;
 	delete m_skyCapture;
 	for (int i = 0; i < m_captureProbes.size(); ++i) {
-	  delete m_captureProbes[i]->irradiance;
-	  delete m_captureProbes[i]->prefiltered;
+	  delete m_captureProbes[i]->Irradiance;
+	  delete m_captureProbes[i]->Prefiltered;
 	  delete m_captureProbes[i];
 	}
 	delete m_probeDebugSphere;
@@ -82,9 +84,9 @@ namespace primal::renderer {
 	m_skyCapture = capture;
   }
 
-  void PBR::AddIrradianceProbe(PBRCapture* capture, math::Vector3 position, float radius) {
-	capture->position = position;
-	capture->dadius = radius;
+  void PBR::AddIrradianceProbe(PBRCapture* capture, math::vec3 position, float radius) {
+	capture->Position = position;
+	capture->Radius = radius;
 	m_captureProbes.push_back(capture);
   }
 
@@ -99,10 +101,10 @@ namespace primal::renderer {
 
   PBRCapture* PBR::ProcessEquirectangular(Texture* envMap) {
 	// convert HDR radiance image to HDR environment cubemap
-	m_sceneEnvCube->material = m_PBRHdrToCubemap;
-	m_PBRHdrToCubemap->SetTexture("environment", envMap, 0);
+	m_sceneEnvCube->getComponent<MeshComponent>()->m_material = m_PBRHdrToCubemap;
+	m_PBRHdrToCubemap->setTexture("environment", envMap, 0);
 	TextureCube hdrEnvMap;
-	hdrEnvMap.DefaultInitialize(128, 128, GL_RGB, GL_FLOAT);
+	hdrEnvMap.defaultInitialize(128, 128, GL_RGB, GL_FLOAT);
 	m_renderer->renderToCubemap(m_sceneEnvCube, &hdrEnvMap);
 
 	return ProcessCube(&hdrEnvMap);
@@ -113,23 +115,23 @@ namespace primal::renderer {
 
 	// irradiance
 	captureProbe->Irradiance = new TextureCube;
-	captureProbe->Irradiance->DefaultInitialize(32, 32, GL_RGB, GL_FLOAT);
-	m_PBRIrradianceCapture->SetTextureCube("environment", capture, 0);
-	m_sceneEnvCube->material = m_PBRIrradianceCapture;
-	m_renderer->renderToCubemap(m_sceneEnvCube, captureProbe->Irradiance, math::Vector3(0.0f), 0);
+	captureProbe->Irradiance->defaultInitialize(32, 32, GL_RGB, GL_FLOAT);
+	m_PBRIrradianceCapture->setTextureCube("environment", capture, 0);
+	m_sceneEnvCube->getComponent<MeshComponent>()->m_material = m_PBRIrradianceCapture;
+	m_renderer->renderToCubemap(m_sceneEnvCube, captureProbe->Irradiance, math::vec3(0.0f), 0);
 	// prefilter
 	if (prefilter) {
 	  captureProbe->Prefiltered = new TextureCube;
 	  ;
-	  captureProbe->Prefiltered->FilterMin = GL_LINEAR_MIPMAP_LINEAR;
-	  captureProbe->Prefiltered->DefaultInitialize(128, 128, GL_RGB, GL_FLOAT, true);
-	  m_PBRPrefilterCapture->SetTextureCube("environment", capture, 0);
-	  m_sceneEnvCube->material = m_PBRPrefilterCapture;
+	  captureProbe->Prefiltered->m_filterMin = GL_LINEAR_MIPMAP_LINEAR;
+	  captureProbe->Prefiltered->defaultInitialize(128, 128, GL_RGB, GL_FLOAT, true);
+	  m_PBRPrefilterCapture->setTextureCube("environment", capture, 0);
+	  m_sceneEnvCube->getComponent<MeshComponent>()->m_material = m_PBRPrefilterCapture;
 	  // calculate prefilter for multiple roughness levels
 	  unsigned int maxMipLevels = 5;
 	  for (unsigned int i = 0; i < maxMipLevels; ++i) {
-		m_PBRPrefilterCapture->SetFloat("roughness", (float)i / (float)(maxMipLevels - 1));
-		m_renderer->renderToCubemap(m_sceneEnvCube, captureProbe->Prefiltered, math::Vector3(0.0f), i);
+		m_PBRPrefilterCapture->setFloat("roughness", (float)i / (float)(maxMipLevels - 1));
+		m_renderer->renderToCubemap(m_sceneEnvCube, captureProbe->Prefiltered, math::vec3(0.0f), i);
 	  }
 	}
 	return captureProbe;
@@ -139,7 +141,7 @@ namespace primal::renderer {
 	return m_skyCapture;
   }
 
-  std::vector<PBRCapture*> PBR::GetIrradianceProbes(math::Vector3 queryPos, float queryRadius) {
+  std::vector<PBRCapture*> PBR::GetIrradianceProbes(math::vec3 queryPos, float queryRadius) {
 	// retrieve all irradiance probes in proximity to queryPos and queryRadius
 	std::vector<PBRCapture*> capturesProximity;
 	for (int i = 0; i < m_captureProbes.size(); ++i) {
@@ -162,17 +164,17 @@ namespace primal::renderer {
 	m_probeDebugShader->setVector("CamPos", m_renderer->GetCamera()->Position);
 
 	// first render the sky capture
-	m_probeDebugShader->setVector("Position", math::Vector3(0.0f, 2.0, 0.0f));
-	m_skyCapture->Prefiltered->Bind(0);
+	m_probeDebugShader->setVector("Position", math::vec3(0.0f, 2.0, 0.0f));
+	m_skyCapture->Prefiltered->bind(0);
 	m_renderer->renderMesh(m_probeDebugSphere, m_probeDebugShader);
 
 	// then do the same for each capture probe (at their respective location)
 	for (int i = 0; i < m_captureProbes.size(); ++i) {
 	  m_probeDebugShader->setVector("Position", m_captureProbes[i]->Position);
 	  if (m_captureProbes[i]->Prefiltered) {
-		m_captureProbes[i]->Prefiltered->Bind(0);
+		m_captureProbes[i]->Prefiltered->bind(0);
 	  } else {
-		m_captureProbes[i]->Irradiance->Bind(0);
+		m_captureProbes[i]->Irradiance->bind(0);
 	  }
 	  m_renderer->renderMesh(m_probeDebugSphere, m_probeDebugShader);
 	}

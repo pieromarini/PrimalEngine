@@ -38,7 +38,7 @@ namespace primal {
 	glViewport(x, y, width, height);
   }
 
-  void OpenGLGraphicsAPI::setClearColor(const glm::vec4& color) {
+  void OpenGLGraphicsAPI::setClearColor(const math::vec4& color) {
 	glClearColor(color.r, color.g, color.b, color.a);
   }
 

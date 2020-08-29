@@ -11,7 +11,9 @@ namespace primal {
 
   GraphicsModule* MeshComponent::graphicsModule{ nullptr };
 
-  MeshComponent::MeshComponent(Mesh* mesh, Material* material, Transform* transform, math::Vector3 boxMin, math::Vector3 boxMax): m_mesh{ mesh }, m_material{ material }, m_transform(transform), m_boxMin{ boxMin }, m_boxMax{ boxMax } { }
+  MeshComponent::MeshComponent(renderer::Mesh* mesh, renderer::Material* material, Transform* transform, math::vec3 boxMin, math::vec3 boxMax): m_mesh{ mesh }, m_material{ material }, m_transform(transform), m_boxMin{ boxMin }, m_boxMax{ boxMax } { }
+
+  MeshComponent::MeshComponent(renderer::Mesh* mesh, Transform* transform, math::vec3 boxMin, math::vec3 boxMax): m_mesh{ mesh }, m_material{ nullptr }, m_transform(transform), m_boxMin{ boxMin }, m_boxMax{ boxMax } { }
 
   void MeshComponent::onEnable() {
 	PRIMAL_CORE_INFO("Created mesh component");
@@ -23,6 +25,10 @@ namespace primal {
 
   void MeshComponent::onDestroy() {
 	PRIMAL_CORE_INFO("Destroyed mesh component");
+  }
+
+  void MeshComponent::update() {
+
   }
 
 }

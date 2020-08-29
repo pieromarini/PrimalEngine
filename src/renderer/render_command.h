@@ -1,20 +1,20 @@
 #ifndef RENDER_COMMAND_H
 #define RENDER_COMMAND_H
 
-#include "core/math/matrix4.h"
-#include "core/math/vector3.h"
+#include "core/math/linear_algebra/matrix.h"
+#include "core/math/linear_algebra/vector.h"
 
 namespace primal::renderer {
   class Mesh;
   class Material;
 
   struct RenderCommand {
-	math::Matrix4 transform;
-	math::Matrix4 prevTransform;
+	math::mat4 transform;
+	math::mat4 prevTransform;
 	Mesh* mesh;
 	Material* material;
-	math::Vector3 boxMin;
-	math::Vector3 boxMax;
+	math::vec3 boxMin;
+	math::vec3 boxMax;
   };
 
 }

@@ -9,8 +9,8 @@ namespace primal::math {
 	Only defined in 3-dimensional space.
   */
   struct plane {
-	vec3 Normal;
-	float Distance;
+	vec3 normal;
+	float distance;
 
 	plane(const float a, const float b, const float c, const float d);
 	plane(const vec3& normal, const vec3& point);

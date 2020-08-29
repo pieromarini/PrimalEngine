@@ -3,8 +3,11 @@
 
 #include "renderer.h"
 
+#include "resources/primitives/sphere.h"
 #include "scene/scene.h"
-#include "components/camera_component.h"
+#include "components/camera.h"
+#include "components/mesh_component.h"
+#include "renderer/shading/material.h"
 
 #include "resources/mesh.h"
 #include "resources/primitives/cube.h"
@@ -106,12 +109,12 @@ namespace primal::renderer {
 	glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_GlobalUBO);
 
 	// default PBR pre-compute (get a more default oriented HDR map for this)
-	Texture* hdrMap = Resources::loadHDR("sky env", "textures/backgrounds/alley.hdr");
-	PBRCapture* envBridge = m_PBR->processEquirectangular(hdrMap);
-	setSkyCapture(envBridge);
+	Texture* hdrMap = Resources::loadHDRTexture("sky env", "textures/backgrounds/alley.hdr");
+	PBRCapture* envBridge = m_PBR->ProcessEquirectangular(hdrMap);
+	SetSkyCapture(envBridge);
   }
 
-  void Renderer::setRenderSize(unsigned int width, unsigned int height) {
+  void Renderer::SetRenderSize(unsigned int width, unsigned int height) {
 	m_RenderSize.x = width;
 	m_RenderSize.y = height;
 
@@ -123,11 +126,11 @@ namespace primal::renderer {
 	m_PostProcessor->updateRenderSize(width, height);
   }
 
-  math::vec2 Renderer::getRenderSize() {
+  math::vec2 Renderer::GetRenderSize() {
 	return m_RenderSize;
   }
 
-  void Renderer::setTarget(RenderTarget* renderTarget, GLenum target) {
+  void Renderer::SetTarget(RenderTarget* renderTarget, GLenum target) {
 	m_CurrentRenderTargetCustom = renderTarget;
 	if (renderTarget != nullptr) {
 	  if (std::find(m_RenderTargetsCustom.begin(), m_RenderTargetsCustom.end(), renderTarget) == m_RenderTargetsCustom.end()) {
@@ -136,40 +139,40 @@ namespace primal::renderer {
 	}
   }
 
-  Camera* Renderer::getCamera() {
+  Camera* Renderer::GetCamera() {
 	return m_Camera;
   }
 
-  void Renderer::setCamera(Camera* camera) {
+  void Renderer::SetCamera(Camera* camera) {
 	m_Camera = camera;
   }
 
-  PostProcessor* Renderer::getPostProcessor() {
+  PostProcessor* Renderer::GetPostProcessor() {
 	return m_PostProcessor;
   }
 
-  Material* Renderer::createMaterial(std::string base) {
-	return m_MaterialLibrary->createMaterial(base);
+  Material* Renderer::CreateMaterial(std::string base) {
+	return m_MaterialLibrary->CreateMaterial(base);
   }
 
-  Material* Renderer::createCustomMaterial(Shader* shader) {
-	return m_MaterialLibrary->createCustomMaterial(shader);
+  Material* Renderer::CreateCustomMaterial(Shader* shader) {
+	return m_MaterialLibrary->CreateCustomMaterial(shader);
   }
 
-  Material* Renderer::createPostProcessingMaterial(Shader* shader) {
-	return m_MaterialLibrary->createPostProcessingMaterial(shader);
+  Material* Renderer::CreatePostProcessingMaterial(Shader* shader) {
+	return m_MaterialLibrary->CreatePostProcessingMaterial(shader);
   }
 
-  void Renderer::pushRender(Mesh* mesh, Material* material, math::Matrix4 transform, math::Matrix4 prevFrameTransform) {
+  void Renderer::PushRender(Mesh* mesh, Material* material, math::mat4 transform, math::mat4 prevFrameTransform) {
 	// get current render target
 	RenderTarget* target = getCurrentRenderTarget();
 	// don't render right away but push to the command buffer for later rendering.
 	m_CommandBuffer->push(mesh, material, transform, prevFrameTransform, math::vec3(-99999.0f), math::vec3(99999.0f), target);
   }
 
-  void Renderer::pushRender(Entity* node) {
+  void Renderer::PushRender(Entity* node) {
 	// update transform(s) before pushing node to render command buffer
-	node->updateTransform(true);
+	// node->updateTransform(true);
 
 	// get current render target
 	RenderTarget* target = getCurrentRenderTarget();
@@ -177,36 +180,39 @@ namespace primal::renderer {
 	// command buffer together with a calculated transform matrix.
 	std::stack<Entity*> nodeStack;
 	nodeStack.push(node);
-	for (unsigned int i = 0; i < node->getChildCount(); ++i)
-	  nodeStack.push(node->getChildByIndex(i));
+
+	// TODO: use iterators
+	for (unsigned int i = 0; i < node->transform->getChildCount(); ++i)
+	  nodeStack.push(node->transform->getChild(i)->entity);
+
 	while (!nodeStack.empty()) {
 	  Entity* node = nodeStack.top();
 	  nodeStack.pop();
 	  // only push render command if the child isn't a container node.
-	  if (node->mesh) {
-		math::vec3 boxMinWorld = node->getWorldPosition() + (node->getWorldScale() * node->boxMin);
-		math::vec3 boxMaxWorld = node->getWorldPosition() + (node->getWorldScale() * node->boxMax);
-		m_CommandBuffer->push(node->mesh, node->material, node->getTransform(), node->getPrevTransform(), boxMinWorld, boxMaxWorld, target);
+	  if (node->getComponent<MeshComponent>()->m_mesh) {
+		math::vec3 boxMinWorld = node->transform->getWorldPos() + (node->transform->getWorldScale() * node->getComponent<MeshComponent>()->m_boxMin);
+		math::vec3 boxMaxWorld = node->transform->getWorldPos() + (node->transform->getWorldScale() * node->getComponent<MeshComponent>()->m_boxMax);
+		// m_CommandBuffer->push(node->getComponent<MeshComponent>()->m_mesh, node->getComponent<MeshComponent>()->m_material, node->transform, node->getPrevTransform(), boxMinWorld, boxMaxWorld, target);
 	  }
-	  for (unsigned int i = 0; i < node->getChildCount(); ++i)
-		nodeStack.push(node->getChildByIndex(i));
+	  for (unsigned int i = 0; i < node->transform->getChildCount(); ++i)
+		nodeStack.push(node->transform->getChild(i)->entity);
 	}
   }
 
-  void Renderer::pushPostProcessor(Material* postProcessor) {
+  void Renderer::PushPostProcessor(Material* postProcessor) {
 	// we only care about the material, mesh as NDC quad is pre-defined.
 	m_CommandBuffer->push(nullptr, postProcessor);
   }
 
-  void Renderer::addLight(DirectionalLight* light) {
+  void Renderer::AddLight(DirectionalLight* light) {
 	m_DirectionalLights.push_back(light);
   }
 
-  void Renderer::addLight(PointLight* light) {
+  void Renderer::AddLight(PointLight* light) {
 	m_PointLights.push_back(light);
   }
 
-  void Renderer::renderPushedCommands() {
+  void Renderer::RenderPushedCommands() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	/* 
@@ -250,7 +256,7 @@ namespace primal::renderer {
 	for (unsigned int i = 0; i < deferredRenderCommands.size(); ++i) {
 	  renderCustomCommand(&deferredRenderCommands[i], nullptr, false);
 	}
-	m_GLCache.SetPolygonMode(GL_FILL);
+	m_GLCache.setPolygonMode(GL_FILL);
 
 	//attachments[0] = GL_NONE; // disable for next pass (shadow map generation)
 	attachments[1] = GL_NONE;
@@ -267,17 +273,17 @@ namespace primal::renderer {
 	  unsigned int shadowRtIndex = 0;
 	  for (int i = 0; i < m_DirectionalLights.size(); ++i) {
 		DirectionalLight* light = m_DirectionalLights[i];
-		if (light->CastShadows) {
-		  m_MaterialLibrary->dirShadowShader->Use();
+		if (light->castShadows) {
+		  m_MaterialLibrary->dirShadowShader->use();
 
 		  glBindFramebuffer(GL_FRAMEBUFFER, m_ShadowRenderTargets[shadowRtIndex]->m_id);
-		  glViewport(0, 0, m_ShadowRenderTargets[shadowRtIndex]->Width, m_ShadowRenderTargets[shadowRtIndex]->Height);
+		  glViewport(0, 0, m_ShadowRenderTargets[shadowRtIndex]->m_width, m_ShadowRenderTargets[shadowRtIndex]->m_height);
 		  glClear(GL_DEPTH_BUFFER_BIT);
 
-		  math::Matrix4 lightProjection = math::orthographic(-20.0f, 20.0f, 20.0f, -20.0f, -15.0f, 20.0f);
-		  math::Matrix4 lightView = math::lookAt(-light->Direction * 10.0f, math::vec3(0.0), math::vec3::UP);
-		  m_DirectionalLights[i]->LightSpaceViewProjection = lightProjection * lightView;
-		  m_DirectionalLights[i]->ShadowMapRT = m_ShadowRenderTargets[shadowRtIndex];
+		  math::mat4 lightProjection = math::orthographic(-20.0f, 20.0f, 20.0f, -20.0f, -15.0f, 20.0f);
+		  math::mat4 lightView = math::lookAt(-light->direction * 10.0f, math::vec3(0.0), math::vec3::UP);
+		  m_DirectionalLights[i]->lightSpaceViewProjection = lightProjection * lightView;
+		  m_DirectionalLights[i]->shadowMapRT = m_ShadowRenderTargets[shadowRtIndex];
 		  for (int j = 0; j < shadowRenderCommands.size(); ++j) {
 			renderShadowCastCommand(&shadowRenderCommands[j], lightProjection, lightView);
 		  }
@@ -293,7 +299,7 @@ namespace primal::renderer {
 	m_PostProcessor->processPreLighting(this, m_GBuffer, m_Camera);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, m_CustomTarget->m_id);
-	glViewport(0, 0, m_CustomTarget->Width, m_CustomTarget->Height);
+	glViewport(0, 0, m_CustomTarget->m_width, m_CustomTarget->m_height);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 	// 4. Render deferred shader for each light (full quad for directional, spheres for point lights)
@@ -318,11 +324,11 @@ namespace primal::renderer {
 	  m_GLCache.setCullFace(GL_FRONT);
 	  for (auto it = m_PointLights.begin(); it != m_PointLights.end(); ++it) {
 		// only render point lights if within frustum
-		if (m_Camera->frustum.intersect((*it)->Position, (*it)->Radius)) {
+		if (m_Camera->Frustum.intersect((*it)->position, (*it)->radius)) {
 		  renderDeferredPointLight(*it);
 		}
 	  }
-	  m_GLCache.SetCullFace(GL_BACK);
+	  m_GLCache.setCullFace(GL_BACK);
 	}
 
 	m_GLCache.setDepthTest(true);
@@ -333,7 +339,7 @@ namespace primal::renderer {
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, m_GBuffer->m_id);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_CustomTarget->m_id);// write to default framebuffer
 	glBlitFramebuffer(
-		0, 0, m_GBuffer->Width, m_GBuffer->Height, 0, 0, m_RenderSize.x, m_RenderSize.y, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+		0, 0, m_GBuffer->m_width, m_GBuffer->m_height, 0, 0, m_RenderSize.x, m_RenderSize.y, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 
 	// 6. custom forward render pass
 	// push default render target to the end of the render target buffer s.t. we always render
@@ -342,14 +348,14 @@ namespace primal::renderer {
 	for (unsigned int targetIndex = 0; targetIndex < m_RenderTargetsCustom.size(); ++targetIndex) {
 	  RenderTarget* renderTarget = m_RenderTargetsCustom[targetIndex];
 	  if (renderTarget) {
-		glViewport(0, 0, renderTarget->Width, renderTarget->Height);
+		glViewport(0, 0, renderTarget->m_width, renderTarget->m_height);
 		glBindFramebuffer(GL_FRAMEBUFFER, renderTarget->m_id);
 		if (renderTarget->HasDepthAndStencil)
 		  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		else
 		  glClear(GL_COLOR_BUFFER_BIT);
-		m_Camera->SetPerspective(m_Camera->FOV,
-			(float)renderTarget->Width / (float)renderTarget->Height,
+		m_Camera->setPerspective(m_Camera->FOV,
+			(float)renderTarget->m_width / (float)renderTarget->m_height,
 			0.1,
 			100.0f);
 	  } else {
@@ -357,38 +363,38 @@ namespace primal::renderer {
 		// we'll use for post-processing.
 		glViewport(0, 0, m_RenderSize.x, m_RenderSize.y);
 		glBindFramebuffer(GL_FRAMEBUFFER, m_CustomTarget->m_id);
-		m_Camera->SetPerspective(m_Camera->FOV, m_RenderSize.x / m_RenderSize.y, 0.1, 100.0f);
+		m_Camera->setPerspective(m_Camera->FOV, m_RenderSize.x / m_RenderSize.y, 0.1, 100.0f);
 	  }
 
 	  // sort all render commands and retrieve the sorted array
-	  std::vector<RenderCommand> renderCommands = m_CommandBuffer->GetCustomRenderCommands(renderTarget);
+	  std::vector<RenderCommand> renderCommands = m_CommandBuffer->getCustomRenderCommands(renderTarget);
 
 	  // terate over all the render commands and execute
-	  m_GLCache.SetPolygonMode(Wireframe ? GL_LINE : GL_FILL);
+	  m_GLCache.setPolygonMode(Wireframe ? GL_LINE : GL_FILL);
 	  for (unsigned int i = 0; i < renderCommands.size(); ++i) {
 		renderCustomCommand(&renderCommands[i], nullptr);
 	  }
-	  m_GLCache.SetPolygonMode(GL_FILL);
+	  m_GLCache.setPolygonMode(GL_FILL);
 	}
 
 	// 7. alpha material pass
 	glViewport(0, 0, m_RenderSize.x, m_RenderSize.y);
 	glBindFramebuffer(GL_FRAMEBUFFER, m_CustomTarget->m_id);
-	std::vector<RenderCommand> alphaRenderCommands = m_CommandBuffer->GetAlphaRenderCommands(true);
+	std::vector<RenderCommand> alphaRenderCommands = m_CommandBuffer->getAlphaRenderCommands(true);
 	for (unsigned int i = 0; i < alphaRenderCommands.size(); ++i) {
 	  renderCustomCommand(&alphaRenderCommands[i], nullptr);
 	}
 
 	// render light mesh (as visual cue), if requested
 	for (auto it = m_PointLights.begin(); it != m_PointLights.end(); ++it) {
-	  if ((*it)->RenderMesh) {
-		m_MaterialLibrary->debugLightMaterial->SetVector("lightColor", (*it)->Color * (*it)->Intensity * 0.25f);
+	  if ((*it)->renderMesh) {
+		m_MaterialLibrary->debugLightMaterial->setVector("lightColor", (*it)->color * (*it)->intensity * 0.25f);
 
 		RenderCommand command;
 		command.material = m_MaterialLibrary->debugLightMaterial;
 		command.mesh = m_DebugLightMesh;
-		math::Matrix4 model;
-		math::translate(model, (*it)->Position);
+		math::mat4 model;
+		math::translate(model, (*it)->position);
 		math::scale(model, math::vec3(0.25f));
 		command.transform = model;
 
@@ -397,52 +403,52 @@ namespace primal::renderer {
 	}
 
 	// 8. post-processing stage after all lighting calculations
-	m_PostProcessor->ProcessPostLighting(this, m_GBuffer, m_CustomTarget, m_Camera);
+	m_PostProcessor->processPostLighting(this, m_GBuffer, m_CustomTarget, m_Camera);
 
 	// 9. render debug visuals
 	glViewport(0, 0, m_RenderSize.x, m_RenderSize.y);
 	glBindFramebuffer(GL_FRAMEBUFFER, m_CustomTarget->m_id);
 	if (LightVolumes) {
-	  m_GLCache.SetPolygonMode(GL_LINE);
-	  m_GLCache.SetCullFace(GL_FRONT);
+	  m_GLCache.setPolygonMode(GL_LINE);
+	  m_GLCache.setCullFace(GL_FRONT);
 	  for (auto it = m_PointLights.begin(); it != m_PointLights.end(); ++it) {
-		m_MaterialLibrary->debugLightMaterial->SetVector("lightColor", (*it)->Color);
+		m_MaterialLibrary->debugLightMaterial->setVector("lightColor", (*it)->color);
 
 		RenderCommand command;
 		command.material = m_MaterialLibrary->debugLightMaterial;
 		command.mesh = m_DebugLightMesh;
-		math::Matrix4 model;
-		math::translate(model, (*it)->Position);
-		math::scale(model, math::vec3((*it)->Radius));
+		math::mat4 model;
+		math::translate(model, (*it)->position);
+		math::scale(model, math::vec3((*it)->radius));
 		command.transform = model;
 
 		renderCustomCommand(&command, nullptr);
 	  }
-	  m_GLCache.SetPolygonMode(GL_FILL);
-	  m_GLCache.SetCullFace(GL_BACK);
+	  m_GLCache.setPolygonMode(GL_FILL);
+	  m_GLCache.setCullFace(GL_BACK);
 	}
 	if (RenderProbes) {
 	  m_PBR->RenderProbes();
 	}
 
 	// 10. custom post-processing pass
-	std::vector<RenderCommand> postProcessingCommands = m_CommandBuffer->GetPostProcessingRenderCommands();
+	std::vector<RenderCommand> postProcessingCommands = m_CommandBuffer->getPostProcessingRenderCommands();
 	for (unsigned int i = 0; i < postProcessingCommands.size(); ++i) {
 	  // ping-pong between render textures
 	  bool even = i % 2 == 0;
-	  Blit(even ? m_CustomTarget->GetColorTexture(0) : m_PostProcessTarget1->GetColorTexture(0),
+	  Blit(even ? m_CustomTarget->getColorTexture(0) : m_PostProcessTarget1->getColorTexture(0),
 		  even ? m_PostProcessTarget1 : m_CustomTarget,
 		  postProcessingCommands[i].material);
 	}
 
 	// 11. final post-processing steps, blitting to default framebuffer
-	m_PostProcessor->Blit(this, postProcessingCommands.size() % 2 == 0 ? m_CustomTarget->GetColorTexture(0) : m_PostProcessTarget1->GetColorTexture(0));
+	m_PostProcessor->blit(this, postProcessingCommands.size() % 2 == 0 ? m_CustomTarget->getColorTexture(0) : m_PostProcessTarget1->getColorTexture(0));
 
 	// store view projection as previous view projection for next frame's motion blur
 	m_PrevViewProjection = m_Camera->Projection * m_Camera->View;
 
 	// clear the command buffer s.t. the next frame/call can start from an empty slate again.
-	m_CommandBuffer->Clear();
+	m_CommandBuffer->clear();
 
 	// clear render state
 	m_RenderTargetsCustom.clear();
@@ -455,7 +461,7 @@ namespace primal::renderer {
 	  std::string textureUniformName) {
 	// if a destination target is given, bind to its framebuffer
 	if (dst) {
-	  glViewport(0, 0, dst->Width, dst->Height);
+	  glViewport(0, 0, dst->m_width, dst->m_height);
 	  glBindFramebuffer(GL_FRAMEBUFFER, dst->m_id);
 	  if (dst->HasDepthAndStencil)
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -474,7 +480,7 @@ namespace primal::renderer {
 	}
 	// if a source render target is given, use its color buffer as input to material shader.
 	if (src) {
-	  material->SetTexture(textureUniformName, src, 0);
+	  material->setTexture(textureUniformName, src, 0);
 	}
 	// render screen-space material to quad which will be displayed in dst's buffers.
 	RenderCommand command;
@@ -498,9 +504,10 @@ namespace primal::renderer {
   void Renderer::BakeProbes(Entity* scene) {
 	if (!scene) {
 	  // if no scene node was provided, use root node (capture all)
-	  scene = Scene::Root;
+	  scene = primal::SceneManager::instance().loadedScene->sceneRoot;
 	}
-	scene->UpdateTransform();
+	// scene->updateTransform();
+
 	// build a command list of nodes within the reflection probe's capture box/radius.
 	CommandBuffer commandBuffer(this);
 	std::vector<Material*> materials;
@@ -511,38 +518,39 @@ namespace primal::renderer {
 	while (!sceneStack.empty()) {
 	  Entity* node = sceneStack.top();
 	  sceneStack.pop();
-	  if (node->mesh != nullptr) {
-		auto samplerUniforms = *(node->material->GetSamplerUniforms());
+	  if (node->getComponent<MeshComponent>()->m_mesh != nullptr) {
+		auto samplerUniforms = *(node->getComponent<MeshComponent>()->m_material->getSamplerUniforms());
 		if (samplerUniforms.find("TexAlbedo") != samplerUniforms.end()) {
-		  materials.push_back(new Material(m_PBR->m_ProbeCaptureShader));
-		  materials[materials.size() - 1]->SetTexture("TexAlbedo", samplerUniforms["TexAlbedo"].texture, 0);
+		  materials.push_back(new Material(m_PBR->m_probeCaptureShader));
+		  materials[materials.size() - 1]->setTexture("TexAlbedo", samplerUniforms["TexAlbedo"].texture, 0);
 		  if (samplerUniforms.find("TexNormal") != samplerUniforms.end()) {
-			materials[materials.size() - 1]->SetTexture("TexNormal", samplerUniforms["TexNormal"].texture, 1);
+			materials[materials.size() - 1]->setTexture("TexNormal", samplerUniforms["TexNormal"].texture, 1);
 		  }
 		  if (samplerUniforms.find("TexMetallic") != samplerUniforms.end()) {
-			materials[materials.size() - 1]->SetTexture("TexMetallic", samplerUniforms["TexMetallic"].texture, 2);
+			materials[materials.size() - 1]->setTexture("TexMetallic", samplerUniforms["TexMetallic"].texture, 2);
 		  }
 		  if (samplerUniforms.find("TexRoughness") != samplerUniforms.end()) {
-			materials[materials.size() - 1]->SetTexture("TexRoughness", samplerUniforms["TexRoughness"].texture, 3);
+			materials[materials.size() - 1]->setTexture("TexRoughness", samplerUniforms["TexRoughness"].texture, 3);
 		  }
-		  commandBuffer.Push(node->mesh, materials[materials.size() - 1], node->GetTransform());
+		  // NOTE: check if getLocalToWorldMatrix is correct.
+		  commandBuffer.push(node->getComponent<MeshComponent>()->m_mesh, materials[materials.size() - 1], node->transform->getLocalToWorldMatrix());
 		} else if (samplerUniforms.find("background") != samplerUniforms.end()) {// we have a background scene node, add those as well
-		  materials.push_back(new Material(m_PBR->m_ProbeCaptureBackgroundShader));
-		  materials[materials.size() - 1]->SetTextureCube("background", samplerUniforms["background"].textureCube, 0);
-		  materials[materials.size() - 1]->DepthCompare = node->material->DepthCompare;
-		  commandBuffer.Push(node->mesh, materials[materials.size() - 1], node->GetTransform());
+		  materials.push_back(new Material(m_PBR->m_probeCaptureBackgroundShader));
+		  materials[materials.size() - 1]->setTextureCube("background", samplerUniforms["background"].textureCube, 0);
+		  materials[materials.size() - 1]->depthCompare = node->getComponent<MeshComponent>()->m_material->depthCompare;
+		  commandBuffer.push(node->getComponent<MeshComponent>()->m_mesh, materials[materials.size() - 1], node->transform->getLocalToWorldMatrix());
 		}
 	  }
-	  for (unsigned int i = 0; i < node->GetChildCount(); ++i)
-		sceneStack.push(node->GetChildByIndex(i));
+	  for (unsigned int i = 0; i < node->transform->getChildCount(); ++i)
+		sceneStack.push(node->transform->getChild(i)->entity);
 	}
-	commandBuffer.Sort();
-	std::vector<RenderCommand> renderCommands = commandBuffer.GetCustomRenderCommands(nullptr);
+	commandBuffer.sort();
+	std::vector<RenderCommand> renderCommands = commandBuffer.getCustomRenderCommands(nullptr);
 
 	m_PBR->ClearIrradianceProbes();
 	for (int i = 0; i < m_ProbeSpatials.size(); ++i) {
 	  TextureCube renderResult;
-	  renderResult.DefaultInitialize(32, 32, GL_RGB, GL_FLOAT);
+	  renderResult.defaultInitialize(32, 32, GL_RGB, GL_FLOAT);
 
 	  renderToCubemap(renderCommands, &renderResult, m_ProbeSpatials[i].xyz);
 
@@ -554,111 +562,112 @@ namespace primal::renderer {
 	  delete materials[i];
 	}
   }
-  // ------------------------------------------------------------------------
+
   void Renderer::renderCustomCommand(RenderCommand* command, Camera* customCamera, bool updateGLSettings) {
 	Material* material = command->material;
 	Mesh* mesh = command->mesh;
 
 	// update global GL blend state based on material
 	if (updateGLSettings) {
-	  m_GLCache.SetBlend(material->Blend);
-	  if (material->Blend) {
-		m_GLCache.SetBlendFunc(material->BlendSrc, material->BlendDst);
+	  m_GLCache.setBlend(material->blend);
+	  if (material->blend) {
+		m_GLCache.setBlendFunc(material->blendSrc, material->blendDst);
 	  }
-	  m_GLCache.SetDepthFunc(material->DepthCompare);
-	  m_GLCache.SetDepthTest(material->DepthTest);
-	  m_GLCache.SetCull(material->Cull);
-	  m_GLCache.SetCullFace(material->CullFace);
+	  m_GLCache.setDepthFunc(material->depthCompare);
+	  m_GLCache.setDepthTest(material->depthTest);
+	  m_GLCache.setCull(material->cull);
+	  m_GLCache.setCullFace(material->cullFace);
 	}
 
 	// default uniforms that are always configured regardless of shader configuration (see them
 	// as a default set of shader uniform variables always there); with UBO
-	material->GetShader()->Use();
+	material->getShader()->use();
 	if (customCamera)// pass custom camera specific uniform
 	{
-	  material->GetShader()->SetMatrix("projection", customCamera->Projection);
-	  material->GetShader()->SetMatrix("view", customCamera->View);
-	  material->GetShader()->SetVector("CamPos", customCamera->Position);
+	  material->getShader()->setMatrix("projection", customCamera->Projection);
+	  material->getShader()->setMatrix("view", customCamera->View);
+	  material->getShader()->setVector("CamPos", customCamera->Position);
 	}
-	material->GetShader()->SetMatrix("model", command->transform);
-	material->GetShader()->SetMatrix("prevModel", command->prevTransform);
+	material->getShader()->setMatrix("model", command->transform);
+	material->getShader()->setMatrix("prevModel", command->prevTransform);
 
-	material->GetShader()->SetBool("ShadowsEnabled", Shadows);
-	if (Shadows && material->Type == MATERIAL_CUSTOM && material->ShadowReceive) {
+	material->getShader()->setBool("ShadowsEnabled", Shadows);
+	if (Shadows && material->type == MATERIAL_CUSTOM && material->shadowReceive) {
 	  for (int i = 0; i < m_DirectionalLights.size(); ++i) {
-		if (m_DirectionalLights[i]->ShadowMapRT != nullptr) {
-		  material->GetShader()->SetMatrix("lightShadowViewProjection" + std::to_string(i + 1), m_DirectionalLights[i]->LightSpaceViewProjection);
-		  m_DirectionalLights[i]->ShadowMapRT->GetDepthStencilTexture()->Bind(10 + i);
+		if (m_DirectionalLights[i]->shadowMapRT != nullptr) {
+		  material->getShader()->setMatrix("lightShadowViewProjection" + std::to_string(i + 1), m_DirectionalLights[i]->lightSpaceViewProjection);
+		  m_DirectionalLights[i]->shadowMapRT->getDepthStencilTexture()->bind(10 + i);
 		}
 	  }
 	}
 
 	// bind/active uniform sampler/texture objects
-	auto* samplers = material->GetSamplerUniforms();
+	auto* samplers = material->getSamplerUniforms();
 	for (auto it = samplers->begin(); it != samplers->end(); ++it) {
-	  if (it->second.Type == SHADER_TYPE_SAMPLERCUBE)
-		it->second.textureCube->Bind(it->second.Unit);
+	  if (it->second.type == SHADER_TYPE_SAMPLERCUBE)
+		it->second.textureCube->bind(it->second.unit);
 	  else
-		it->second.texture->Bind(it->second.Unit);
+		it->second.texture->bind(it->second.unit);
 	}
 
 	// set uniform state of material
-	auto* uniforms = material->GetUniforms();
+	auto* uniforms = material->getUniforms();
 	for (auto it = uniforms->begin(); it != uniforms->end(); ++it) {
-	  switch (it->second.Type) {
+	  switch (it->second.type) {
 		case SHADER_TYPE_BOOL:
-		  material->GetShader()->SetBool(it->first, it->second.Bool);
+		  material->getShader()->setBool(it->first, it->second.Bool);
 		  break;
 		case SHADER_TYPE_INT:
-		  material->GetShader()->SetInt(it->first, it->second.Int);
+		  material->getShader()->setInt(it->first, it->second.Int);
 		  break;
 		case SHADER_TYPE_FLOAT:
-		  material->GetShader()->SetFloat(it->first, it->second.Float);
+		  material->getShader()->setFloat(it->first, it->second.Float);
 		  break;
 		case SHADER_TYPE_VEC2:
-		  material->GetShader()->SetVector(it->first, it->second.Vec2);
+		  material->getShader()->setVector(it->first, it->second.Vec2);
 		  break;
 		case SHADER_TYPE_VEC3:
-		  material->GetShader()->SetVector(it->first, it->second.Vec3);
+		  material->getShader()->setVector(it->first, it->second.Vec3);
 		  break;
 		case SHADER_TYPE_VEC4:
-		  material->GetShader()->SetVector(it->first, it->second.Vec4);
+		  material->getShader()->setVector(it->first, it->second.Vec4);
 		  break;
 		case SHADER_TYPE_MAT2:
-		  material->GetShader()->SetMatrix(it->first, it->second.Mat2);
+		  material->getShader()->setMatrix(it->first, it->second.Mat2);
 		  break;
 		case SHADER_TYPE_MAT3:
-		  material->GetShader()->SetMatrix(it->first, it->second.Mat3);
+		  material->getShader()->setMatrix(it->first, it->second.Mat3);
 		  break;
 		case SHADER_TYPE_MAT4:
-		  material->GetShader()->SetMatrix(it->first, it->second.Mat4);
+		  material->getShader()->setMatrix(it->first, it->second.Mat4);
 		  break;
 		default:
-		  Log::Message("Unrecognized Uniform type set.", LOG_ERROR);
+		  PRIMAL_CORE_ERROR("Unrecognized uniform type set");
 		  break;
 	  }
 	}
 
-	renderMesh(mesh, material->GetShader());
+	renderMesh(mesh, material->getShader());
   }
 
   void Renderer::renderToCubemap(Entity* scene, TextureCube* target, math::vec3 position, unsigned int mipLevel) {
-
 	// create a command buffer specifically for this operation (as to not conflict with main
 	// command buffer)
 	CommandBuffer commandBuffer(this);
-	commandBuffer.push(scene->mesh, scene->material, scene->getTransform());
+	commandBuffer.push(scene->getComponent<MeshComponent>()->m_mesh, scene->getComponent<MeshComponent>()->m_material, scene->transform->getLocalToWorldMatrix());
 
 	std::stack<Entity*> childStack;
-	for (unsigned int i = 0; i < scene->getChildCount(); ++i)
-	  childStack.push(scene->getChildByIndex(i));
+	for (unsigned int i = 0; i < scene->transform->getChildCount(); ++i)
+	  childStack.push(scene->transform->getChild(i)->entity);
+
 	while (!childStack.empty()) {
 	  Entity* child = childStack.top();
 	  childStack.pop();
-	  commandBuffer.Push(child->mesh, child->material, child->getTransform());
-	  for (unsigned int i = 0; i < child->getChildCount(); ++i)
-		childStack.push(child->GetChildByIndex(i));
+	  commandBuffer.push(child->getComponent<MeshComponent>()->m_mesh, child->getComponent<MeshComponent>()->m_material, child->transform->getLocalToWorldMatrix());
+	  for (unsigned int i = 0; i < child->transform->getChildCount(); ++i)
+		childStack.push(child->transform->getChild(i)->entity);
 	}
+
 	commandBuffer.sort();
 	std::vector<RenderCommand> renderCommands = commandBuffer.getCustomRenderCommands(nullptr);
 
@@ -677,8 +686,8 @@ namespace primal::renderer {
 	};
 
 	// resize target dimensions based on mip level we're rendering.
-	float width = (float)target->FaceWidth * std::pow(0.5, mipLevel);
-	float height = (float)target->FaceHeight * std::pow(0.5, mipLevel);
+	float width = (float)target->faceWidth * std::pow(0.5, mipLevel);
+	float height = (float)target->faceHeight * std::pow(0.5, mipLevel);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, m_FramebufferCubemap);
 	glBindRenderbuffer(GL_RENDERBUFFER, m_CubemapDepthRBO);
@@ -691,7 +700,7 @@ namespace primal::renderer {
 
 	for (unsigned int i = 0; i < 6; ++i) {
 	  Camera* camera = &faceCameras[i];
-	  camera->SetPerspective(math::Util::deg2Rad(90.0f), width / height, 0.1f, 100.0f);
+	  camera->setPerspective(math::deg2Rad(90.0f), width / height, 0.1f, 100.0f);
 	  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, target->m_id, mipLevel);
 	  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	  for (unsigned int i = 0; i < renderCommands.size(); ++i) {
@@ -704,34 +713,34 @@ namespace primal::renderer {
 
   void Renderer::renderMesh(Mesh* mesh, Shader* shader) {
 	glBindVertexArray(mesh->m_VAO);
-	if (mesh->indices.size() > 0) {
-	  glDrawElements(mesh->topology == TRIANGLE_STRIP ? GL_TRIANGLE_STRIP : GL_TRIANGLES, mesh->Indices.size(), GL_UNSIGNED_INT, 0);
+	if (mesh->m_indices.size() > 0) {
+	  glDrawElements(mesh->topology == TRIANGLE_STRIP ? GL_TRIANGLE_STRIP : GL_TRIANGLES, mesh->m_indices.size(), GL_UNSIGNED_INT, nullptr);
 	} else {
-	  glDrawArrays(mesh->topology == TRIANGLE_STRIP ? GL_TRIANGLE_STRIP : GL_TRIANGLES, 0, mesh->Positions.size());
+	  glDrawArrays(mesh->topology == TRIANGLE_STRIP ? GL_TRIANGLE_STRIP : GL_TRIANGLES, 0, mesh->m_positions.size());
 	}
   }
 
   void Renderer::updateGlobalUBOs() {
 	glBindBuffer(GL_UNIFORM_BUFFER, m_GlobalUBO);
 	// transformation matrices
-	glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(math::Matrix4), &(m_Camera->projection * m_Camera->view)[0][0]); // sizeof(math::Matrix4) = 64 bytes
-	glBufferSubData(GL_UNIFORM_BUFFER, 64, sizeof(math::Matrix4), &m_PrevViewProjection[0][0]);
-	glBufferSubData(GL_UNIFORM_BUFFER, 128, sizeof(math::Matrix4), &m_Camera->projection[0][0]);
-	glBufferSubData(GL_UNIFORM_BUFFER, 192, sizeof(math::Matrix4), &m_Camera->view[0][0]);
-	glBufferSubData(GL_UNIFORM_BUFFER, 256, sizeof(math::Matrix4), &m_Camera->view[0][0]); // TODO: make inv function in math library
+	glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(math::mat4), &(m_Camera->Projection * m_Camera->View)[0][0]); // sizeof(math::mat4) = 64 bytes
+	glBufferSubData(GL_UNIFORM_BUFFER, 64, sizeof(math::mat4), &m_PrevViewProjection[0][0]);
+	glBufferSubData(GL_UNIFORM_BUFFER, 128, sizeof(math::mat4), &m_Camera->Projection[0][0]);
+	glBufferSubData(GL_UNIFORM_BUFFER, 192, sizeof(math::mat4), &m_Camera->View[0][0]);
+	glBufferSubData(GL_UNIFORM_BUFFER, 256, sizeof(math::mat4), &m_Camera->View[0][0]); // TODO: make inv function in math library
 	// scene data
 	glBufferSubData(GL_UNIFORM_BUFFER, 320, sizeof(math::vec4), &m_Camera->Position[0]);
 	// lighting
 	unsigned int stride = 2 * sizeof(math::vec4);
 	for (unsigned int i = 0; i < m_DirectionalLights.size() && i < 4; ++i)// no more than 4 directional lights
 	{
-	  glBufferSubData(GL_UNIFORM_BUFFER, 336 + i * stride, sizeof(math::vec4), &m_DirectionalLights[i]->Direction[0]);
-	  glBufferSubData(GL_UNIFORM_BUFFER, 336 + i * stride + sizeof(math::vec4), sizeof(math::vec4), &m_DirectionalLights[i]->Color[0]);
+	  glBufferSubData(GL_UNIFORM_BUFFER, 336 + i * stride, sizeof(math::vec4), &m_DirectionalLights[i]->direction[0]);
+	  glBufferSubData(GL_UNIFORM_BUFFER, 336 + i * stride + sizeof(math::vec4), sizeof(math::vec4), &m_DirectionalLights[i]->color[0]);
 	}
 	for (unsigned int i = 0; i < m_PointLights.size() && i < 8; ++i)//  constrained to max 8 point lights in forward context
 	{
-	  glBufferSubData(GL_UNIFORM_BUFFER, 464 + i * stride, sizeof(math::vec4), &m_PointLights[i]->Position[0]);
-	  glBufferSubData(GL_UNIFORM_BUFFER, 464 + i * stride + sizeof(math::vec4), sizeof(math::vec4), &m_PointLights[i]->Color[0]);
+	  glBufferSubData(GL_UNIFORM_BUFFER, 464 + i * stride, sizeof(math::vec4), &m_PointLights[i]->position[0]);
+	  glBufferSubData(GL_UNIFORM_BUFFER, 464 + i * stride + sizeof(math::vec4), sizeof(math::vec4), &m_PointLights[i]->color[0]);
 	}
   }
 
@@ -740,13 +749,13 @@ namespace primal::renderer {
   }
 
   void Renderer::renderDeferredAmbient() {
-	PBRCapture* skyCapture = m_PBR->getSkyCapture();
-	auto irradianceProbes = m_PBR->m_CaptureProbes;
+	PBRCapture* skyCapture = m_PBR->GetSkyCapture();
+	auto irradianceProbes = m_PBR->m_captureProbes;
 
 	// if irradiance probes are present, use these as ambient lighting
 	if (IrradianceGI && irradianceProbes.size() > 0) {
 	  skyCapture->Prefiltered->bind(4);
-	  m_PBR->m_RenderTargetBRDFLUT->getColorTexture(0)->bind(5);
+	  m_PBR->m_renderTargetBRDFLUT->getColorTexture(0)->bind(5);
 	  m_PostProcessor->SSAOOutput->bind(6);
 
 	  m_GLCache.setCullFace(GL_FRONT);
@@ -763,7 +772,7 @@ namespace primal::renderer {
 		  irradianceShader->setFloat("probeRadius", probe->Radius);
 		  irradianceShader->setInt("SSAO", m_PostProcessor->SSAO);
 
-		  math::Matrix4 model;
+		  math::mat4 model;
 		  math::translate(model, probe->Position);
 		  math::scale(model, math::vec3(probe->Radius));
 		  irradianceShader->setMatrix("model", model);
@@ -773,9 +782,9 @@ namespace primal::renderer {
 	  }
 	  m_GLCache.setCullFace(GL_BACK);
 	} else {
-	  skyCapture->irradiance->bind(3);
-	  skyCapture->prefiltered->bind(4);
-	  m_PBR->m_RenderTargetBRDFLUT->getColorTexture(0)->bind(5);
+	  skyCapture->Irradiance->bind(3);
+	  skyCapture->Prefiltered->bind(4);
+	  m_PBR->m_renderTargetBRDFLUT->getColorTexture(0)->bind(5);
 	  m_PostProcessor->SSAOOutput->bind(6);
 
 	  Shader* ambientShader = m_MaterialLibrary->deferredAmbientShader;
@@ -789,14 +798,14 @@ namespace primal::renderer {
 	Shader* dirShader = m_MaterialLibrary->deferredDirectionalShader;
 
 	dirShader->use();
-	dirShader->setVector("camPos", m_Camera->position);
+	dirShader->setVector("camPos", m_Camera->Position);
 	dirShader->setVector("lightDir", light->direction);
-	dirShader->setVector("lightColor", light->color.normalize() * light->intensity);
+	dirShader->setVector("lightColor", math::normalize(light->color) * light->intensity);
 	dirShader->setBool("ShadowsEnabled", Shadows);
 
-	if (light->ShadowMapRT) {
+	if (light->shadowMapRT) {
 	  dirShader->setMatrix("lightShadowViewProjection", light->lightSpaceViewProjection);
-	  light->ShadowMapRT->getDepthStencilTexture()->bind(3);
+	  light->shadowMapRT->getDepthStencilTexture()->bind(3);
 	}
 
 	renderMesh(m_NDCPlane, dirShader);
@@ -807,11 +816,11 @@ namespace primal::renderer {
 
 	pointShader->use();
 	pointShader->setVector("camPos", m_Camera->Position);
-	pointShader->setVector("lightPos", light->Position);
-	pointShader->setFloat("lightRadius", light->Radius);
-	pointShader->setVector("lightColor", light->color.normalize() * light->Intensity);
+	pointShader->setVector("lightPos", light->position);
+	pointShader->setFloat("lightRadius", light->radius);
+	pointShader->setVector("lightColor", math::normalize(light->color) * light->intensity);
 
-	math::Matrix4 model;
+	math::mat4 model;
 	math::translate(model, light->position);
 	math::scale(model, math::vec3(light->radius));
 	pointShader->setMatrix("model", model);
@@ -819,7 +828,7 @@ namespace primal::renderer {
 	renderMesh(m_DeferredPointMesh, pointShader);
   }
 
-  void Renderer::renderShadowCastCommand(RenderCommand* command, const math::Matrix4& projection, const math::Matrix4& view) {
+  void Renderer::renderShadowCastCommand(RenderCommand* command, const math::mat4& projection, const math::mat4& view) {
 	Shader* shadowShader = m_MaterialLibrary->dirShadowShader;
 
 	shadowShader->setMatrix("projection", projection);

@@ -1,5 +1,5 @@
 #include "material.h"
-#include "renderer/shading_types.h"
+#include "renderer/shading/shading_types.h"
 
 namespace primal::renderer {
 
@@ -93,22 +93,22 @@ namespace primal::renderer {
 
   // void setVector(std::string name, math::Vector2 value);
 
-  void Material::setVector(std::string name, math::Vector3 value) {
+  void Material::setVector(std::string name, math::vec3 value) {
 	m_uniforms[name].type = SHADER_TYPE_VEC3;
 	m_uniforms[name].Vec3 = value;
   }
-  void Material::setVector(std::string name, math::Vector4 value) {
+  void Material::setVector(std::string name, math::vec4 value) {
 	m_uniforms[name].type = SHADER_TYPE_VEC4;
 	m_uniforms[name].Vec4 = value;
   }
 
   // void setMatrix(std::string name, math::mat2 value);
 
-  void Material::setMatrix(std::string name, math::Matrix3 value) {
+  void Material::setMatrix(std::string name, math::mat3 value) {
 	m_uniforms[name].type = SHADER_TYPE_MAT3;
 	m_uniforms[name].Mat3 = value;
   }
-  void Material::setMatrix(std::string name, math::Matrix4 value) {
+  void Material::setMatrix(std::string name, math::mat4 value) {
 	m_uniforms[name].type = SHADER_TYPE_MAT4;
 	m_uniforms[name].Mat4 = value;
   }

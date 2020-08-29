@@ -8,7 +8,6 @@
 #include "resources.h"
 #include "renderer/shading/texture.h"
 #include "tools/log.h"
-#include "core/math/vector2.h"
 
 #include "renderer/renderer.h"
 
@@ -45,7 +44,7 @@ namespace primal::renderer {
 	auto entity = Entity::create("MeshRoot", nullptr);
 
 	for (uint32_t i = 0; i < aNode->mNumMeshes; ++i) {
-	  math::Vector3 boxMin, boxMax;
+	  math::vec3 boxMin, boxMax;
 	  aiMesh* assimpMesh = aScene->mMeshes[aNode->mMeshes[i]];
 	  aiMaterial* assimpMat = aScene->mMaterials[assimpMesh->mMaterialIndex];
 
@@ -58,12 +57,12 @@ namespace primal::renderer {
 
 	  if (aNode->mNumMeshes == 1) {
 		if (setDefaultMaterial)
-		  entity->addComponent<MeshComponent>(mesh, material, boxMin, boxMax);
+		  entity->addComponent<MeshComponent>(mesh, material, entity->transform, boxMin, boxMax);
 		else
-		  entity->addComponent<MeshComponent>(mesh, boxMin, boxMax);
+		  entity->addComponent<MeshComponent>(mesh, entity->transform, boxMin, boxMax);
 	  } else {
 		auto child = Entity::create("name", nullptr);
-		child->addComponent<MeshComponent>(mesh, material, boxMin, boxMax);
+		child->addComponent<MeshComponent>(mesh, material, child->transform, boxMin, boxMax);
 		entity->transform->addChild(child->transform);
 	  }
 	}
@@ -76,12 +75,12 @@ namespace primal::renderer {
 	return entity;
   }
 
-  Mesh* MeshLoader::parseMesh(aiMesh* aMesh, const aiScene* aScene, math::Vector3& out_Min, math::Vector3& out_Max) {
-	std::vector<math::Vector3> positions;
-	std::vector<math::Vector2> uv;
-	std::vector<math::Vector3> normals;
-	std::vector<math::Vector3> tangents;
-	std::vector<math::Vector3> bitangents;
+  Mesh* MeshLoader::parseMesh(aiMesh* aMesh, const aiScene* aScene, math::vec3& out_Min, math::vec3& out_Max) {
+	std::vector<math::vec3> positions;
+	std::vector<math::vec2> uv;
+	std::vector<math::vec3> normals;
+	std::vector<math::vec3> tangents;
+	std::vector<math::vec3> bitangents;
 	std::vector<unsigned int> indices;
 
 	positions.resize(aMesh->mNumVertices);
@@ -96,18 +95,18 @@ namespace primal::renderer {
 	indices.resize(aMesh->mNumFaces * 3);
 
 	// store min/max point in local coordinates for calculating approximate bounding box.
-	math::Vector3 pMin(99999.0);
-	math::Vector3 pMax(-99999.0);
+	math::vec3 pMin(99999.0);
+	math::vec3 pMax(-99999.0);
 
 	for (unsigned int i = 0; i < aMesh->mNumVertices; ++i) {
-	  positions[i] = math::Vector3(aMesh->mVertices[i].x, aMesh->mVertices[i].y, aMesh->mVertices[i].z);
-	  normals[i] = math::Vector3(aMesh->mNormals[i].x, aMesh->mNormals[i].y, aMesh->mNormals[i].z);
+	  positions[i] = math::vec3(aMesh->mVertices[i].x, aMesh->mVertices[i].y, aMesh->mVertices[i].z);
+	  normals[i] = math::vec3(aMesh->mNormals[i].x, aMesh->mNormals[i].y, aMesh->mNormals[i].z);
 	  if (aMesh->mTextureCoords[0]) {
-		uv[i] = math::Vector2(aMesh->mTextureCoords[0][i].x, aMesh->mTextureCoords[0][i].y);
+		uv[i] = math::vec2(aMesh->mTextureCoords[0][i].x, aMesh->mTextureCoords[0][i].y);
 	  }
 	  if (aMesh->mTangents) {
-		tangents[i] = math::Vector3(aMesh->mTangents[i].x, aMesh->mTangents[i].y, aMesh->mTangents[i].z);
-		bitangents[i] = math::Vector3(aMesh->mBitangents[i].x, aMesh->mBitangents[i].y, aMesh->mBitangents[i].z);
+		tangents[i] = math::vec3(aMesh->mTangents[i].x, aMesh->mTangents[i].y, aMesh->mTangents[i].z);
+		bitangents[i] = math::vec3(aMesh->mBitangents[i].x, aMesh->mBitangents[i].y, aMesh->mBitangents[i].z);
 	  }
 	  if (positions[i].x < pMin.x) pMin.x = positions[i].x;
 	  if (positions[i].y < pMin.y) pMin.y = positions[i].y;
@@ -153,10 +152,10 @@ namespace primal::renderer {
 	std::string diffPath = std::string(file.C_Str());
 	bool alpha = false;
 	if (diffPath.find("_alpha") != std::string::npos) {
-	  material = renderer->createMaterial("alpha discard");
+	  material = renderer->CreateMaterial("alpha discard");
 	  alpha = true;
 	} else {
-	  material = renderer->createMaterial();
+	  material = renderer->CreateMaterial();
 	}
 
 	/* NOTE:

@@ -22,7 +22,7 @@ namespace primal::math {
 	public:
 	  std::array<T, n> data;
 
-	  vector() {}
+	  vector() = default;
 	  vector(const T& v) {
 		  for (auto& el : data) {
 			  el = v;
@@ -68,9 +68,7 @@ namespace primal::math {
 		  };
 	  };
 
-	  vector() {
-		  data = {};
-	  }
+	  vector() = default;
 	  vector(const T& v) {
 		  data = { v, v };
 	  }
@@ -140,9 +138,8 @@ namespace primal::math {
 	  static vector<3, T> FORWARD;
 	  static vector<3, T> BACK;
 
-	  vector() {
-		  data = {};
-	  }
+	  vector() = default;
+
 	  vector(const T& v) {
 		  data = { v, v, v };
 	  }
@@ -246,9 +243,8 @@ namespace primal::math {
 		  };
 	  };
 
-	  vector() {
-		  data = {};
-	  }
+	  vector() = default;
+
 	  vector(const T& v) {
 		  data = { v, v, v, v };
 	  }
@@ -408,6 +404,16 @@ namespace primal::math {
 		  result[i] = lhs[i] / rhs[i];
 	  }
 	  return result;
+  }
+  
+  template<typename T>
+  inline vector<3, T> scale(const vector<3, T>& lhs, const vector<3, T>& rhs) {
+	return { lhs.data[0] * rhs.data[0], lhs.data[1] * rhs.data[1], lhs.data[2] * rhs.data[2] };
+  }
+
+  template<typename T>
+  inline vector<3, T> reverseScale(const vector<3, T>& lhs, const vector<3, T>& rhs) {
+	return { lhs.data[0] / rhs.data[0], lhs.data[1] / rhs.data[1], lhs.data[2] / rhs.data[2] };
   }
 
 }

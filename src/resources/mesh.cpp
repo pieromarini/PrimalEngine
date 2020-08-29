@@ -1,8 +1,9 @@
 #include <glad/glad.h>
 
 #include "mesh.h"
-#include "core/math/vector4.h"
+#include "core/math/linear_algebra/vector.h"
 #include "tools/log.h"
+#include "core/math/linear_algebra/operation.h"
 
 namespace primal::renderer {
 
@@ -10,25 +11,25 @@ namespace primal::renderer {
 
   }
 
-  Mesh::Mesh(std::vector<math::Vector3> positions, std::vector<uint32_t> indices) {
+  Mesh::Mesh(std::vector<math::vec3> positions, std::vector<uint32_t> indices) {
 	m_positions = positions;
 	m_indices = indices;
   }
 
-  Mesh::Mesh(std::vector<math::Vector3> positions, std::vector<math::Vector2> uv, std::vector<uint32_t> indices) {
+  Mesh::Mesh(std::vector<math::vec3> positions, std::vector<math::vec2> uv, std::vector<uint32_t> indices) {
 	m_positions = positions;
 	m_uv = uv;
 	m_indices = indices;
   }
 
-  Mesh::Mesh(std::vector<math::Vector3> positions, std::vector<math::Vector2> uv, std::vector<math::Vector3> normals, std::vector<uint32_t> indices) {
+  Mesh::Mesh(std::vector<math::vec3> positions, std::vector<math::vec2> uv, std::vector<math::vec3> normals, std::vector<uint32_t> indices) {
 	m_positions = positions;
 	m_uv = uv;
 	m_normals = normals;
 	m_indices = indices;
   }
 
-  Mesh::Mesh(std::vector<math::Vector3> positions, std::vector<math::Vector2> uv, std::vector<math::Vector3> normals, std::vector<math::Vector3> tangents, std::vector<math::Vector3> bitangents, std::vector<uint32_t> indices) {
+  Mesh::Mesh(std::vector<math::vec3> positions, std::vector<math::vec2> uv, std::vector<math::vec3> normals, std::vector<math::vec3> tangents, std::vector<math::vec3> bitangents, std::vector<uint32_t> indices) {
 	m_positions = positions;
 	m_uv = uv;
 	m_normals = normals;
@@ -37,19 +38,19 @@ namespace primal::renderer {
 	m_indices = indices;
   }
 
-  void Mesh::setPositions(std::vector<math::Vector3> positions) {
+  void Mesh::setPositions(std::vector<math::vec3> positions) {
 	m_positions = positions;
   }
 
-  void Mesh::setUVs(std::vector<math::Vector2> uv) {
+  void Mesh::setUVs(std::vector<math::vec2> uv) {
 	m_uv = uv;
   }
 
-  void Mesh::setNormals(std::vector<math::Vector3> normals) {
+  void Mesh::setNormals(std::vector<math::vec3> normals) {
 	m_normals = normals;
   }
 
-  void Mesh::setTangents(std::vector<math::Vector3> tangents, std::vector<math::Vector3> bitangents) {
+  void Mesh::setTangents(std::vector<math::vec3> tangents, std::vector<math::vec3> bitangents) {
 	m_tangents = tangents;
 	m_bitangents = bitangents;
   }
@@ -183,7 +184,7 @@ namespace primal::renderer {
 	glBindVertexArray(0);
   }
 
-  void Mesh::fromSDF(std::function<float(math::Vector3)>& sdf, float maxDistance, uint16_t gridResolution) {
+  void Mesh::fromSDF(std::function<float(math::vec3)>& sdf, float maxDistance, uint16_t gridResolution) {
 	PRIMAL_CORE_INFO("Generating 3D mesh from SDF");
 
 	// tables from: http://paulbourke.net/geometry/polygonise/
@@ -450,14 +451,14 @@ namespace primal::renderer {
 	};
 
 	struct MCube {
-	  math::Vector4 LBB;
-	  math::Vector4 RBB;
-	  math::Vector4 RBF;
-	  math::Vector4 LBF;
-	  math::Vector4 LTB;
-	  math::Vector4 RTB;
-	  math::Vector4 RTF;
-	  math::Vector4 LTF;
+	  math::vec4 LBB;
+	  math::vec4 RBB;
+	  math::vec4 RBF;
+	  math::vec4 LBF;
+	  math::vec4 LTB;
+	  math::vec4 RTB;
+	  math::vec4 RTF;
+	  math::vec4 LTF;
 	  MCube() {}
 	  int GetEdgeIndex() {
 		int index = 0;
@@ -472,15 +473,15 @@ namespace primal::renderer {
 		return index;
 	  }
 
-	  math::Vector4& Corners(int i) {
+	  math::vec4& Corners(int i) {
 		return (&LBB)[i];
 	  }
-	  const math::Vector4& Corners(int i) const {
+	  const math::vec4& Corners(int i) const {
 		return (&LBB)[i];
 	  }
 	};
 
-	static auto mLerp = [](const math::Vector4& p1, const math::Vector4& p2) -> math::Vector3 {
+	static auto mLerp = [](const math::vec4& p1, const math::vec4& p2) -> math::vec3 {
 	  const float epsilon = 0.0001f;
 	  if (std::abs(0.0f - p1.w) < epsilon)
 		return { p1.x, p1.y, p1.z };
@@ -489,7 +490,7 @@ namespace primal::renderer {
 	  if (std::abs(p1.w - p2.w) < epsilon)
 		return { p1.x, p1.y, p1.z };
 	  float t = (0.0f - p1.w) / (p2.w - p1.w);
-	  math::Vector3 result({ p1.x + t * (p2.x - p1.x),
+	  math::vec3 result({ p1.x + t * (p2.x - p1.x),
 							 p1.y + t * (p2.y - p1.y),
 							 p1.z + t * (p2.z - p1.z) });
 	  return result;
@@ -503,47 +504,47 @@ namespace primal::renderer {
 	  for (uint16_t y = 0; y < gridSize; ++y) {
 		for (uint16_t x = 0; x < gridSize; ++x) {
 		  float halfCube = cubeScale * 0.5f;
-		  math::Vector3 center({ -scale + x * cubeScale + halfCube,
+		  math::vec3 center({ -scale + x * cubeScale + halfCube,
 								 -scale + y * cubeScale + halfCube,
 								 -scale + z * cubeScale + halfCube });
 
 		  MCube voxel;
-		  math::Vector3 offset;
+		  math::vec3 offset;
 
-		  offset = math::Vector3(-halfCube, -halfCube, -halfCube);
-		  voxel.LBB = math::Vector4(center + offset, 0.0f);
+		  offset = math::vec3(-halfCube, -halfCube, -halfCube);
+		  voxel.LBB = math::vec4(center + offset, 0.0f);
 		  voxel.LBB.w = sdf({ voxel.LBB.x, voxel.LBB.y, voxel.LBB.z } );
 
-		  offset = math::Vector3(halfCube, -halfCube, -halfCube);
-		  voxel.RBB = math::Vector4(center + offset, 0.0f);
+		  offset = math::vec3(halfCube, -halfCube, -halfCube);
+		  voxel.RBB = math::vec4(center + offset, 0.0f);
 		  voxel.RBB.w = sdf({ voxel.RBB.x, voxel.RBB.y, voxel.RBB.z } );
 		  // right-bottom-front
-		  offset = math::Vector3(halfCube, -halfCube, halfCube);
-		  voxel.RBF = math::Vector4(center + offset, 0.0f);
+		  offset = math::vec3(halfCube, -halfCube, halfCube);
+		  voxel.RBF = math::vec4(center + offset, 0.0f);
 		  voxel.RBF.w = sdf({ voxel.RBF.x, voxel.RBF.y, voxel.RBF.z } );
 		  // left-bottom-front
-		  offset = math::Vector3(-halfCube, -halfCube, halfCube);
-		  voxel.LBF = math::Vector4(center + offset, 0.0f);
+		  offset = math::vec3(-halfCube, -halfCube, halfCube);
+		  voxel.LBF = math::vec4(center + offset, 0.0f);
 		  voxel.LBF.w = sdf({ voxel.LBF.x, voxel.LBF.y, voxel.LBF.z } );
 		  // left-top-back
-		  offset = math::Vector3(-halfCube, halfCube, -halfCube);
-		  voxel.LTB = math::Vector4(center + offset, 0.0f);
+		  offset = math::vec3(-halfCube, halfCube, -halfCube);
+		  voxel.LTB = math::vec4(center + offset, 0.0f);
 		  voxel.LTB.w = sdf({ voxel.LTB.x, voxel.LTB.y, voxel.LTB.z } );
 		  // right-top-back
-		  offset = math::Vector3(halfCube, halfCube, -halfCube);
-		  voxel.RTB = math::Vector4(center + offset, 0.0f);
+		  offset = math::vec3(halfCube, halfCube, -halfCube);
+		  voxel.RTB = math::vec4(center + offset, 0.0f);
 		  voxel.RTB.w = sdf({ voxel.RTB.x, voxel.RTB.y, voxel.RTB.z } );
 		  // right-top-front
-		  offset = math::Vector3(halfCube, halfCube, halfCube);
-		  voxel.RTF = math::Vector4(center + offset, 0.0f);
+		  offset = math::vec3(halfCube, halfCube, halfCube);
+		  voxel.RTF = math::vec4(center + offset, 0.0f);
 		  voxel.RTF.w = sdf({ voxel.RTF.x, voxel.RTF.y, voxel.RTF.z } );
 		  // left-top-front
-		  offset = math::Vector3(-halfCube, halfCube, halfCube);
-		  voxel.LTF = math::Vector4(center + offset, 0.0f);
+		  offset = math::vec3(-halfCube, halfCube, halfCube);
+		  voxel.LTF = math::vec4(center + offset, 0.0f);
 		  voxel.LTF.w = sdf({ voxel.LTF.x, voxel.LTF.y, voxel.LTF.z } );
 
 		  // given all calculated data, generate this voxel's vertices
-		  std::vector<math::Vector3> vertList(12);
+		  std::vector<math::vec3> vertList(12);
 
 		  int index = voxel.GetEdgeIndex();
 		  // edge table indexing from: http://paulbourke.net/geometry/polygonise/
@@ -564,15 +565,15 @@ namespace primal::renderer {
 
 		  // generate triangle vertices
 		  for (uint16_t i = 0; triTable[index][i] != -1; i += 3) {
-			math::Vector3 pos1 = vertList[triTable[index][i + 0]];
-			math::Vector3 pos2 = vertList[triTable[index][i + 1]];
-			math::Vector3 pos3 = vertList[triTable[index][i + 2]];
+			math::vec3 pos1 = vertList[triTable[index][i + 0]];
+			math::vec3 pos2 = vertList[triTable[index][i + 1]];
+			math::vec3 pos3 = vertList[triTable[index][i + 2]];
 			m_positions.push_back(pos1);
 			m_positions.push_back(pos2);
 			m_positions.push_back(pos3);
 
 			// calculate per-face normals from position data
-			auto normal = math::Vector3::cross((pos2 - pos1).normalized(), (pos3 - pos1).normalized());
+			auto normal = math::cross(math::normalize(pos2 - pos1), math::normalize(pos3 - pos1));
 			m_normals.push_back(normal);
 			m_normals.push_back(normal);
 			m_normals.push_back(normal);
@@ -580,8 +581,8 @@ namespace primal::renderer {
 			// dirty local-space m_uv mapping approximation (to give some detail to objects)
 			m_uv.push_back({ vertList[triTable[index][i + 0]].x, vertList[triTable[index][i + 0]].y });
 			m_uv.push_back({ vertList[triTable[index][i + 1]].y, vertList[triTable[index][i + 1]].z });
-			auto tmp = math::Vector2{ vertList[triTable[index][i + 2]].x, vertList[triTable[index][i + 2]].y } * 0.5f
-					 + math::Vector2{ vertList[triTable[index][i + 2]].y, vertList[triTable[index][i + 2]].z } * 0.5f;
+			auto tmp = math::vec2{ vertList[triTable[index][i + 2]].x, vertList[triTable[index][i + 2]].y } * 0.5f
+					 + math::vec2{ vertList[triTable[index][i + 2]].y, vertList[triTable[index][i + 2]].z } * 0.5f;
 			m_uv.push_back(tmp);
 		  }
 		}
@@ -595,62 +596,11 @@ namespace primal::renderer {
   }
 
   void Mesh::calculateNormals(bool smooth) {
+	// TODO
   }
 
   void Mesh::calculateTangents() {
-	//tangents.resize(positions.size());
-	//bitangents.resize(positions.size());
-	//for (uint32_t i = 0; i < indices.size() - 2; ++i)
-	//{
-	//    uint32_t index1 = indices[i + 0];
-	//    uint32_t index2 = indices[i + 1];
-	//    uint32_t index3 = indices[i + 2];
-	//
-	//    glm::Vector3 pos1 = positions[index1];
-	//    glm::Vector3 pos2 = positions[index2];
-	//    glm::Vector3 pos3 = positions[index3];
-
-	//    glm::Vector2 uv1 = uv[index1];
-	//    glm::Vector2 uv2 = uv[index2];
-	//    glm::Vector2 uv3 = uv[index3];
-
-	//    // due to winding order getting changed each next triangle (as we render as triangle strip) we
-	//    // change the order of the cross product to account for winding order switch
-	//    glm::Vector3 edge1 = pos2 - pos1;
-	//    glm::Vector3 edge2 = pos3 - pos1;
-	//    glm::Vector2 deltaUV1 = uv2 - uv1;
-	//    glm::Vector2 deltaUV2 = uv3 - uv1;
-
-	//    GLfloat f = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
-
-	//    glm::Vector3 tangent, bitangent;
-	//    tangent.x = f * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
-	//    tangent.y = f * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
-	//    tangent.z = f * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
-	//    /*    if (i % 2 == 0)
-	//    {*/
-	//    bitangent.x = f * (-deltaUV2.x * edge1.x + deltaUV1.x * edge2.x);
-	//    bitangent.y = f * (-deltaUV2.x * edge1.y + deltaUV1.x * edge2.y);
-	//    bitangent.z = f * (-deltaUV2.x * edge1.z + deltaUV1.x * edge2.z);
-	//    //}
-	//    /*    else
-	//    {
-	//    bitangent.x = f * (-deltaUV2.x * edge2.x + deltaUV1.x * edge1.x);
-	//    bitangent.y = f * (-deltaUV2.x * edge2.y + deltaUV1.x * edge1.y);
-	//    bitangent.z = f * (-deltaUV2.x * edge2.z + deltaUV1.x * edge1.z);
-	//    }*/
-	//    tangents[index1] += tangent;
-	//    tangents[index2] += tangent;
-	//    tangents[index3] += tangent;
-	//    bitangents[index1] += bitangent;
-	//    bitangents[index2] += bitangent;
-	//    bitangents[index3] += bitangent;
-	//}
-	//// normalize all tangents/bi-tangents
-	//for (int i = 0; i < tangents.size(); ++i)
-	//{
-	//    tangents[i] = glm::normalize(tangents[i]);
-	//    bitangents[i] = glm::normalize(bitangents[i]);
-	//}
+	// TODO
   }
+
 }

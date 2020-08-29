@@ -13,7 +13,7 @@ namespace primal::math {
 	theta = atan2(cartesian.y, cartesian.x);
   }
 
-  vec3 spherical::ToCartesian() const {
+  vec3 spherical::toCartesian() const {
 	return vec3(
 		rho * sin(phi) * cos(theta),
 		rho * sin(phi) * sin(theta),

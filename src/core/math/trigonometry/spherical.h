@@ -14,7 +14,7 @@ namespace primal::math {
 
 	spherical(const vec3& cartesian);
 
-	vec3 ToCartesian() const;
+	vec3 toCartesian() const;
   };
 
 }

@@ -1,11 +1,13 @@
 #include <random>
 
+#include "core/math/linear_algebra/operation.h"
+#include "imgui.h"
 #include "post_processor.h"
+#include "components/camera.h"
 
 #include "render_target.h"
 #include "resources/resources.h"
-#include "core/math/vector3.h"
-#include "core/math/vector2.h"
+#include "core/math/linear_algebra/vector.h"
 
 namespace primal::renderer {
 
@@ -67,22 +69,22 @@ namespace primal::renderer {
 
 	  std::uniform_real_distribution<float> randomFloats(0.0f, 1.0f);
 	  std::default_random_engine generator;
-	  std::vector<math::Vector3> ssaoKernel;
+	  std::vector<math::vec3> ssaoKernel;
 	  for (int i = 0; i < SSAOKernelSize; ++i) {
-		math::Vector3 sample(
+		math::vec3 sample(
 			randomFloats(generator) * 2.0f - 1.0f,
 			randomFloats(generator) * 2.0f - 1.0f,
 			randomFloats(generator));
-		sample.normalize();
+		math::normalize(sample);
 		sample = sample * randomFloats(generator);
 		float scale = (float)i / (float)SSAOKernelSize;
-		scale = math::Util::lerp(0.1f, 1.0f, scale * scale);
+		scale = math::lerp(0.1f, 1.0f, scale * scale);
 		sample = sample * scale;
 		ssaoKernel.push_back(sample);
 	  }
-	  std::vector<math::Vector3> ssaoNoise;
+	  std::vector<math::vec3> ssaoNoise;
 	  for (unsigned int i = 0; i < 16; i++) {
-		math::Vector3 noise(
+		math::vec3 noise(
 			randomFloats(generator) * 2.0 - 1.0,
 			randomFloats(generator) * 2.0 - 1.0,
 			0.0f);
@@ -159,17 +161,17 @@ namespace primal::renderer {
   void PostProcessor::processPreLighting(Renderer* renderer, RenderTarget* gBuffer, Camera* camera) {
 	// ssao
 	if (SSAO) {
-	  gBuffer->getColorTexture(0)->Bind(0);
-	  gBuffer->getColorTexture(1)->Bind(1);
-	  m_SSAONoise->Bind(2);
+	  gBuffer->getColorTexture(0)->bind(0);
+	  gBuffer->getColorTexture(1)->bind(1);
+	  m_SSAONoise->bind(2);
 
 	  m_SSAOShader->use();
-	  m_SSAOShader->SetVector("renderSize", renderer->GetRenderSize());
-	  m_SSAOShader->SetMatrix("projection", camera->Projection);
-	  m_SSAOShader->SetMatrix("view", camera->View);
+	  m_SSAOShader->setVector("renderSize", renderer->GetRenderSize());
+	  m_SSAOShader->setMatrix("projection", camera->Projection);
+	  m_SSAOShader->setMatrix("view", camera->View);
 
-	  glBindFramebuffer(GL_FRAMEBUFFER, m_SSAORenderTarget->ID);
-	  glViewport(0, 0, m_SSAORenderTarget->Width, m_SSAORenderTarget->Height);
+	  glBindFramebuffer(GL_FRAMEBUFFER, m_SSAORenderTarget->m_id);
+	  glViewport(0, 0, m_SSAORenderTarget->m_width, m_SSAORenderTarget->m_height);
 	  glClear(GL_COLOR_BUFFER_BIT);
 	  renderer->renderMesh(renderer->m_NDCPlane, m_SSAOShader);
 	}
@@ -191,10 +193,10 @@ namespace primal::renderer {
 	// bloom
 	if (Bloom) {
 	  m_BloomShader->use();
-	  output->getColorTexture(0)->Bind(0);
+	  output->getColorTexture(0)->bind(0);
 
-	  glBindFramebuffer(GL_FRAMEBUFFER, m_BloomRenderTarget0->ID);
-	  glViewport(0, 0, m_BloomRenderTarget0->Width, m_BloomRenderTarget0->Height);
+	  glBindFramebuffer(GL_FRAMEBUFFER, m_BloomRenderTarget0->m_id);
+	  glViewport(0, 0, m_BloomRenderTarget0->m_width, m_BloomRenderTarget0->m_height);
 	  glClear(GL_COLOR_BUFFER_BIT);
 	  renderer->renderMesh(renderer->m_NDCPlane, m_BloomShader);
 
@@ -212,11 +214,11 @@ namespace primal::renderer {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 	// bind input texture data
-	source->Bind(0);
-	BloomOutput1->Bind(1);
-	BloomOutput2->Bind(2);
-	BloomOutput3->Bind(3);
-	BloomOutput4->Bind(4);
+	source->bind(0);
+	BloomOutput1->bind(1);
+	BloomOutput2->bind(2);
+	BloomOutput3->bind(3);
+	BloomOutput4->bind(4);
 	renderer->m_GBuffer->getColorTexture(3)->bind(5);
 
 	// set settings
@@ -234,11 +236,11 @@ namespace primal::renderer {
   }
   // --------------------------------------------------------------------------------------------
   Texture* PostProcessor::downsample(Renderer* renderer, Texture* src, RenderTarget* dst) {
-	glViewport(0, 0, dst->Width, dst->Height);
-	glBindFramebuffer(GL_FRAMEBUFFER, dst->ID);
+	glViewport(0, 0, dst->m_width, dst->m_height);
+	glBindFramebuffer(GL_FRAMEBUFFER, dst->m_id);
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	src->Bind(0);
+	src->bind(0);
 	m_DownSampleShader->use();
 	renderer->renderMesh(renderer->m_NDCPlane, m_DownSampleShader);
 
@@ -252,11 +254,11 @@ namespace primal::renderer {
 	// pick pre-defined render targets for blur based on render size
 	RenderTarget* rtHorizontal;
 	RenderTarget* rtVertical;
-	if (dst->Width == m_GaussianRTHalf_H->Width) {
+	if (dst->m_width == m_GaussianRTHalf_H->m_width) {
 	  rtHorizontal = m_GaussianRTHalf_H;
-	} else if (dst->Width == m_GaussianRTQuarter_H->Width) {
+	} else if (dst->m_width == m_GaussianRTQuarter_H->m_width) {
 	  rtHorizontal = m_GaussianRTQuarter_H;
-	} else if (dst->Width == m_GaussianRTEight_H->Width) {
+	} else if (dst->m_width == m_GaussianRTEight_H->m_width) {
 	  rtHorizontal = m_GaussianRTEight_H;
 	} else {
 	  rtHorizontal = m_GaussianRTSixteenth_H;
@@ -264,20 +266,20 @@ namespace primal::renderer {
 	// use destination as vertical render target of ping-pong algorithm
 	rtVertical = dst;
 	// resize viewport to destination dimensions
-	glViewport(0, 0, dst->Width, dst->Height);
+	glViewport(0, 0, dst->m_width, dst->m_height);
 
 	bool horizontal = true;
 	m_OnePassGaussianShader->use();
 	for (int i = 0; i < count; ++i, horizontal = !horizontal) {
 	  m_OnePassGaussianShader->setBool("horizontal", horizontal);
 	  if (i == 0) {
-		src->Bind(0);
+		src->bind(0);
 	  } else if (horizontal) {
-		rtVertical->getColorTexture(0)->Bind(0);
+		rtVertical->getColorTexture(0)->bind(0);
 	  } else if (!horizontal) {
-		rtHorizontal->getColorTexture(0)->Bind(0);
+		rtHorizontal->getColorTexture(0)->bind(0);
 	  }
-	  glBindFramebuffer(GL_FRAMEBUFFER, horizontal ? rtHorizontal->ID : rtVertical->ID);
+	  glBindFramebuffer(GL_FRAMEBUFFER, horizontal ? rtHorizontal->m_id : rtVertical->m_id);
 	  renderer->renderMesh(renderer->m_NDCPlane, m_OnePassGaussianShader);
 	}
 

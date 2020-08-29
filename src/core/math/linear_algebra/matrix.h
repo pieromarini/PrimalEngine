@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <initializer_list>
+#include <stdexcept>
 
 #include "vector.h"
 
@@ -36,7 +37,13 @@ namespace primal::math {
 		  struct {
 			  vector<m, T> col[n];
 		  };
+		  T data[n * m];
 	  };
+
+	  // Identity Matrix
+	  matrix() = default;
+
+	  /*
 	  matrix() {
 		  for (std::size_t col = 0; col < n; ++col) {
 			  for (std::size_t row = 0; row < m; ++row) {
@@ -44,26 +51,55 @@ namespace primal::math {
 			  }
 		  }
 	  }
-	  matrix(const std::initializer_list<T> args) {
-		  assert(args.size() <= m * n);
-		  std::size_t cols = 0, rows = 0;
+	  */
 
-		  for (auto& it : args) {
-			  e[cols][rows++] = it;
-			  if (rows >= m) {
-				  ++cols;
-				  rows = 0;
-			  }
+	  matrix(const std::initializer_list<T> args) {
+		assert(args.size() <= m * n);
+		std::size_t cols = 0, rows = 0;
+
+		for (auto& it : args) {
+		  e[cols][rows++] = it;
+		  if (rows >= m) {
+			++cols;
+			rows = 0;
 		  }
+		}
 	  }
+
+	  // Returns column vector
 	  vector<m, T>& operator[](const std::size_t colIndex) {
-		  assert(colIndex >= 0 && colIndex < n);
-		  return col[colIndex];
+		assert(colIndex >= 0 && colIndex < n);
+		return col[colIndex];
 	  }
 
 	  const vector<m, T>& operator[](const std::size_t colIndex) const {
-		  assert(colIndex >= 0 && colIndex < n);
-		  return col[colIndex];
+		assert(colIndex >= 0 && colIndex < n);
+		return col[colIndex];
+	  }
+
+	  // NOTE: For now, only set diagonal if matrix is 4x4
+	  void setDiagonal(const vec4& diagonal) {
+		assert(n == 4 && m == 4);
+
+		for (auto i = 0; i < n; ++i) {
+		  for (auto j = 0; j < m; ++j) {
+			if (i == j)
+			  e[i][j] = diagonal[i];
+		  }
+		}
+	  }
+
+	  void setCol(const std::size_t colIndex, const vec4& colData) {
+		assert(n == 4 && m == 4);
+
+		for (auto i = 0; i < m; ++i) {
+		  e[colIndex][i] = colData[i]; 
+		}
+	  }
+
+	  void setTopLeftMatrix3(const matrix<3, 3, float>& matrix) {
+		for (auto i = 0; i < 3; ++i)
+		  setCol(i, { matrix[i], e[i][3] });
 	  }
   };
 
@@ -124,15 +160,87 @@ namespace primal::math {
 
   template<std::size_t m, std::size_t n, typename T>
   vector<m, T> operator*(const matrix<m, n, T>& lhs, const vector<n, T>& rhs) {
-	  vector<m, T> result;
-	  for (std::size_t row = 0; row < m; ++row) {
-		  T value = {};
-		  for (std::size_t j = 0; j < n; ++j) {
-			value += lhs[j][row] * rhs[j];
-		  }
-		  result[row] = value;
+	vector<m, T> result;
+	for (std::size_t row = 0; row < m; ++row) {
+	  T value = {};
+	  for (std::size_t j = 0; j < n; ++j) {
+		value += lhs[j][row] * rhs[j];
 	  }
-	  return result;
+	  result[row] = value;
+	}
+	return result;
+  }
+
+  template<std::size_t m, std::size_t n, typename T>
+  matrix<m, n, T> operator*(const matrix<m, n, T>& lhs, float rhs) {
+	matrix<m, n, T> result;
+	for (std::size_t row = 0; row < m; ++row) {
+	  for (std::size_t column = 0; column < n; ++column) {
+		result[row][column] = lhs[row][column] * rhs;
+	  }
+	}
+	return result;
+  }
+
+  inline mat4 inverse(const mat4& mat) {
+	float m11 = mat.data[5] * mat.data[10] * mat.data[15] - mat.data[5] * mat.data[11] * mat.data[14] -
+				mat.data[9] * mat.data[6] * mat.data[15] + mat.data[9] * mat.data[7] * mat.data[14] +
+				mat.data[13] * mat.data[6] * mat.data[11] - mat.data[13] * mat.data[7] * mat.data[10];
+	float m21 = -mat.data[4] * mat.data[10] * mat.data[15] + mat.data[4] * mat.data[11] * mat.data[14] +
+				mat.data[8] * mat.data[6] * mat.data[15] - mat.data[8] * mat.data[7] * mat.data[14] -
+				mat.data[12] * mat.data[6] * mat.data[11] + mat.data[12] * mat.data[7] * mat.data[10];
+	float m31 = mat.data[4] * mat.data[9] * mat.data[15] - mat.data[4] * mat.data[11] * mat.data[13] -
+				mat.data[8] * mat.data[5] * mat.data[15] + mat.data[8] * mat.data[7] * mat.data[13] +
+				mat.data[12] * mat.data[5] * mat.data[11] - mat.data[12] * mat.data[7] * mat.data[9];
+	float m41 = -mat.data[4] * mat.data[9] * mat.data[14] + mat.data[4] * mat.data[10] * mat.data[13] +
+				mat.data[8] * mat.data[5] * mat.data[14] - mat.data[8] * mat.data[6] * mat.data[13] -
+				mat.data[12] * mat.data[5] * mat.data[10] + mat.data[12] * mat.data[6] * mat.data[9];
+	float m12 = -mat.data[1] * mat.data[10] * mat.data[15] + mat.data[1] * mat.data[11] * mat.data[14] +
+				mat.data[9] * mat.data[2] * mat.data[15] - mat.data[9] * mat.data[3] * mat.data[14] -
+				mat.data[13] * mat.data[2] * mat.data[11] + mat.data[13] * mat.data[3] * mat.data[10];
+	float m22 = mat.data[0] * mat.data[10] * mat.data[15] - mat.data[0] * mat.data[11] * mat.data[14] -
+				mat.data[8] * mat.data[2] * mat.data[15] + mat.data[8] * mat.data[3] * mat.data[14] +
+				mat.data[12] * mat.data[2] * mat.data[11] - mat.data[12] * mat.data[3] * mat.data[10];
+	float m32 = -mat.data[0] * mat.data[9] * mat.data[15] + mat.data[0] * mat.data[11] * mat.data[13] +
+				mat.data[8] * mat.data[1] * mat.data[15] - mat.data[8] * mat.data[3] * mat.data[13] -
+				mat.data[12] * mat.data[1] * mat.data[11] + mat.data[12] * mat.data[3] * mat.data[9];
+	float m42 = mat.data[0] * mat.data[9] * mat.data[14] - mat.data[0] * mat.data[10] * mat.data[13] -
+				mat.data[8] * mat.data[1] * mat.data[14] + mat.data[8] * mat.data[2] * mat.data[13] +
+				mat.data[12] * mat.data[1] * mat.data[10] - mat.data[12] * mat.data[2] * mat.data[9];
+	float m13 = mat.data[1] * mat.data[6] * mat.data[15] - mat.data[1] * mat.data[7] * mat.data[14] -
+				mat.data[5] * mat.data[2] * mat.data[15] + mat.data[5] * mat.data[3] * mat.data[14] +
+				mat.data[13] * mat.data[2] * mat.data[7] - mat.data[13] * mat.data[3] * mat.data[6];
+	float m23 = -mat.data[0] * mat.data[6] * mat.data[15] + mat.data[0] * mat.data[7] * mat.data[14] +
+				mat.data[4] * mat.data[2] * mat.data[15] - mat.data[4] * mat.data[3] * mat.data[14] -
+				mat.data[12] * mat.data[2] * mat.data[7] + mat.data[12] * mat.data[3] * mat.data[6];
+	float m33 = mat.data[0] * mat.data[5] * mat.data[15] - mat.data[0] * mat.data[7] * mat.data[13] -
+				mat.data[4] * mat.data[1] * mat.data[15] + mat.data[4] * mat.data[3] * mat.data[13] +
+				mat.data[12] * mat.data[1] * mat.data[7] - mat.data[12] * mat.data[3] * mat.data[5];
+	float m43 = -mat.data[0] * mat.data[5] * mat.data[14] + mat.data[0] * mat.data[6] * mat.data[13] +
+				mat.data[4] * mat.data[1] * mat.data[14] - mat.data[4] * mat.data[2] * mat.data[13] -
+				mat.data[12] * mat.data[1] * mat.data[6] + mat.data[12] * mat.data[2] * mat.data[5];
+	float m14 = -mat.data[1] * mat.data[6] * mat.data[11] + mat.data[1] * mat.data[7] * mat.data[10] +
+				mat.data[5] * mat.data[2] * mat.data[11] - mat.data[5] * mat.data[3] * mat.data[10] -
+				mat.data[9] * mat.data[2] * mat.data[7] + mat.data[9] * mat.data[3] * mat.data[6];
+	float m24 = mat.data[0] * mat.data[6] * mat.data[11] - mat.data[0] * mat.data[7] * mat.data[10] -
+				mat.data[4] * mat.data[2] * mat.data[11] + mat.data[4] * mat.data[3] * mat.data[10] +
+				mat.data[8] * mat.data[2] * mat.data[7] - mat.data[8] * mat.data[3] * mat.data[6];
+	float m34 = -mat.data[0] * mat.data[5] * mat.data[11] + mat.data[0] * mat.data[7] * mat.data[9] +
+				mat.data[4] * mat.data[1] * mat.data[11] - mat.data[4] * mat.data[3] * mat.data[9] -
+				mat.data[8] * mat.data[1] * mat.data[7] + mat.data[8] * mat.data[3] * mat.data[5];
+	float m44 = mat.data[0] * mat.data[5] * mat.data[10] - mat.data[0] * mat.data[6] * mat.data[9] -
+				mat.data[4] * mat.data[1] * mat.data[10] + mat.data[4] * mat.data[2] * mat.data[9] +
+				mat.data[8] * mat.data[1] * mat.data[6] - mat.data[8] * mat.data[2] * mat.data[5];
+
+	float det = mat.data[0] * m11 + mat.data[1] * m21 + mat.data[2] * m31 + mat.data[3] * m41;
+
+	if (det == 0) {
+	  throw std::out_of_range{"Matrix4::Inverse => Cannot do inverse when the determinant is zero."};
+	}
+
+	mat4 ret{ m11, m12, m13, m14, m21, m22, m23, m24,
+			  m31, m32, m33, m34, m41, m42, m43, m44 };
+	return ret * (1.f / det);
   }
 
 }

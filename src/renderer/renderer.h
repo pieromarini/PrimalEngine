@@ -3,10 +3,7 @@
 
 #include <glad/glad.h>
 
-#include "core/math/vector2.h"
-#include "core/math/vector3.h"
-#include "core/math/vector4.h"
-#include "core/math/matrix4.h"
+#include "core/math/math.h"
 
 #include "shading/shader.h"
 #include "command_buffer.h"
@@ -18,13 +15,16 @@
 
 #include "resources/primitives/quad.h"
 
+namespace primal {
+  class Entity;
+  class Camera;
+  class Scene;
+}
+
 namespace primal::renderer {
 
   class Mesh;
   class Material;
-  class Scene;
-  class Entity;
-  class Camera;
   class RenderTarget;
   class MaterialLibrary;
   class PBR;
@@ -47,7 +47,7 @@ namespace primal::renderer {
 	  void init(GLADloadproc loadProcFunc);
 
 	  void SetRenderSize(unsigned int width, unsigned int height);
-	  math::Vector2 GetRenderSize();
+	  math::vec2 GetRenderSize();
 
 	  void SetTarget(RenderTarget* renderTarget, GLenum target = GL_TEXTURE_2D);
 
@@ -61,7 +61,7 @@ namespace primal::renderer {
 	  Material* CreateCustomMaterial(Shader* shader);
 	  Material* CreatePostProcessingMaterial(Shader* shader);
 
-	  void PushRender(Mesh* mesh, Material* material, math::Matrix4 transform = math::Matrix4(), math::Matrix4 prevFrameTransform = math::Matrix4());
+	  void PushRender(Mesh* mesh, Material* material, math::mat4 transform = math::mat4(), math::mat4 prevFrameTransform = math::mat4());
 	  void PushRender(Entity* node);
 	  void PushPostProcessor(Material* postProcessor);
 
@@ -75,7 +75,7 @@ namespace primal::renderer {
 	  // pbr
 	  void SetSkyCapture(PBRCapture* pbrEnvironment);
 	  PBRCapture* GetSkypCature();
-	  void AddIrradianceProbe(math::Vector3 position, float radius);
+	  void AddIrradianceProbe(math::vec3 position, float radius);
 	  void BakeProbes(Entity* scene = nullptr);
 
 	private:
@@ -85,7 +85,7 @@ namespace primal::renderer {
 	  // render state
 	  CommandBuffer* m_CommandBuffer{ nullptr };
 	  GLCache m_GLCache;
-	  math::Vector2 m_RenderSize;
+	  math::vec2 m_RenderSize;
 
 	  // lighting
 	  std::vector<DirectionalLight*> m_DirectionalLights;
@@ -98,7 +98,7 @@ namespace primal::renderer {
 
 	  // camera
 	  Camera* m_Camera{ nullptr };
-	  math::Matrix4 m_PrevViewProjection;
+	  math::mat4 m_PrevViewProjection;
 
 	  // render-targets/post
 	  std::vector<RenderTarget*> m_RenderTargetsCustom;
@@ -112,12 +112,12 @@ namespace primal::renderer {
 
 	  // shadow buffers
 	  std::vector<RenderTarget*> m_ShadowRenderTargets;
-	  std::vector<math::Matrix4> m_ShadowViewProjections;
+	  std::vector<math::mat4> m_ShadowViewProjections;
 
 	  // pbr
 	  PBR* m_PBR;
 	  unsigned int m_PBREnvironmentIndex;
-	  std::vector<math::Vector4> m_ProbeSpatials;
+	  std::vector<math::vec4> m_ProbeSpatials;
 
 	  // ubo
 	  unsigned int m_GlobalUBO;
@@ -128,8 +128,8 @@ namespace primal::renderer {
 	  // renderer-specific logic for rendering a custom (forward-pass) command
 	  void renderCustomCommand(RenderCommand* command, Camera* customCamera, bool updateGLSettings = true);
 	  // renderer-specific logic for rendering a list of commands to a target cubemap
-	  void renderToCubemap(Entity* scene, TextureCube* target, math::Vector3 position = math::Vector3(0.0f), unsigned int mipLevel = 0);
-	  void renderToCubemap(std::vector<RenderCommand>& renderCommands, TextureCube* target, math::Vector3 position = math::Vector3(0.0f), unsigned int mipLevel = 0);
+	  void renderToCubemap(Entity* scene, TextureCube* target, math::vec3 position = math::vec3(0.0f), unsigned int mipLevel = 0);
+	  void renderToCubemap(std::vector<RenderCommand>& renderCommands, TextureCube* target, math::vec3 position = math::vec3(0.0f), unsigned int mipLevel = 0);
 	  // minimal render logic to render a mesh
 	  void renderMesh(Mesh* mesh, Shader* shader);
 	  // updates the global uniform buffer objects
@@ -146,7 +146,7 @@ namespace primal::renderer {
 	  void renderDeferredPointLight(PointLight* light);
 
 	  // render mesh for shadow buffer generation
-	  void renderShadowCastCommand(RenderCommand* command, const math::Matrix4& projection, const math::Matrix4& view);
+	  void renderShadowCastCommand(RenderCommand* command, const math::mat4& projection, const math::mat4& view);
   };
 
 }

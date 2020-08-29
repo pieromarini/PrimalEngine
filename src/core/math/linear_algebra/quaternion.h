@@ -1,6 +1,8 @@
 #ifndef MATH_QUATERNION_H
 #define MATH_QUATERNION_H
 
+#include "core/math/trigonometry/conversions.h"
+#include "core/math/common.h"
 #include "vector.h"
 #include "operation.h"
 
@@ -50,8 +52,21 @@ namespace primal::math {
 	  z = axis.z;
 	}
 
-	vec4 ToAxisAngle();
-	mat3 ToMatrix();
+	void setLookRotation(const vec3& forwardDirection, const vec3& upDirection);
+	void setFromToRotation(const vec3& fromDirection, const vec3& toDirection);
+
+	[[nodiscard]] mat3 getMatrix3() const;
+
+	static quaternion fromEulerAngles(const vec3 eulerAngles);
+	static quaternion fromLookRotation(const vec3& forwardDirection, const vec3& upDirection);
+
+	[[nodiscard]] quaternion getInverse() const { return inverse(*this); }
+
+	[[nodiscard]] vec4 toAxisAngle() const;
+	[[nodiscard]] mat3 toMatrix() const;
+	[[nodiscard]] vec3 getEulerAngles() const;
+
+	[[nodiscard]] quaternion inverse(const quaternion& quaternion) const;
 
 	quaternion operator-();
   };
@@ -106,7 +121,7 @@ namespace primal::math {
 	return quaternion(quat.w, -quat.x, -quat.y, -quat.z);
   }
 
-  inline vec4 quaternion::ToAxisAngle() {
+  inline vec4 quaternion::toAxisAngle() const {
 	vec4 result;
 
 	const float angle = 2.0f * acos(w);
@@ -118,7 +133,33 @@ namespace primal::math {
 	return result;
   }
 
-  inline mat3 quaternion::ToMatrix() {
+  inline vec3 quaternion::getEulerAngles() const {
+	auto copy = *this;
+	auto q = normalize(copy);
+
+	// roll (x-axis rotation)
+	float sinRoll = 2.f * (q.w * q.x + q.y * q.z);
+	float cosRoll = 1.f - 2.f * (q.x * q.x + q.y * q.y);
+	float roll = std::atan2(sinRoll, cosRoll);
+
+	// pitch (y-axis rotation)
+	float sinPitch = 2.f * (q.w * q.y - q.z * q.x);
+	float pitch{};
+	if (std::abs(sinPitch) >= 1)
+	  pitch = PI / 2 * ((sinPitch > 0) - (sinPitch < 0));
+	else
+	  pitch = std::asin(sinPitch);
+
+	// yaw (z-axis rotation)
+	float sinYaw = 2.f * (q.w * q.z + q.x * q.y);
+	float cosYaw = 1.f - 2.f * (q.y * q.y + q.z * q.z);
+	float yaw = std::atan2(sinYaw, cosYaw);
+
+	vec3 angleInDeg{ rad2Deg(roll), rad2Deg(pitch), rad2Deg(yaw) };
+	return angleInDeg;
+  }
+
+  inline mat3 quaternion::toMatrix() const {
 	mat3 mat;
 
 	mat[0][0] = 1.0f - 2.0f * y * y - 2.0f * z * z;
@@ -134,6 +175,99 @@ namespace primal::math {
 	mat[2][2] = 1.0f - 2.0f * x * x - 2.0f * y * y;
 
 	return mat;
+  }
+
+  inline quaternion quaternion::inverse(const quaternion& quaternion) const {
+	float length = quaternion.x * quaternion.x + quaternion.y * quaternion.y +
+	  quaternion.z * quaternion.z + quaternion.w * quaternion.w;
+	return { quaternion.x / -length,
+			 quaternion.y / -length,
+		     quaternion.z / -length,
+			 quaternion.w / length };
+  }
+
+  inline quaternion quaternion::fromEulerAngles(const vec3 eulerAngles) {
+	auto eulerX = deg2Rad(eulerAngles.x);
+	auto eulerY = deg2Rad(eulerAngles.y);
+	auto eulerZ = deg2Rad(eulerAngles.z);
+
+	quaternion roll(std::sin(eulerX * 0.5f), 0, 0, std::cos(eulerX * 0.5f));
+	quaternion pitch(0, std::sin(eulerY * 0.5f), 0, std::cos(eulerY * 0.5f));
+	quaternion yaw(0, 0, std::sin(eulerZ * 0.5f), std::cos(eulerZ * 0.5f));
+
+	auto tmp = roll * pitch * yaw;
+	return normalize(tmp);
+  }
+
+  inline quaternion quaternion::fromLookRotation(const vec3& forwardDirection, const vec3& upDirection) {
+	quaternion ret{};
+	ret.setLookRotation(forwardDirection, upDirection);
+	return ret;
+  }
+
+  inline void quaternion::setFromToRotation(const vec3& fromDirection, const vec3& toDirection) {
+	float dotValue = dot(fromDirection, toDirection);
+	float k = std::sqrt(lengthSquared(fromDirection) * lengthSquared(toDirection));
+	if (std::abs(dotValue / k + 1) < EPSILON) {
+	  vec3 ortho;
+	  if (fromDirection.z < fromDirection.x) {
+		ortho = vec3{fromDirection.y, -fromDirection.x, 0.f};
+	  } else {
+		ortho = vec3{0.f, -fromDirection.z, fromDirection.y};
+	  }
+	  *this = quaternion(normalize(ortho), 0.f);
+	}
+	auto crossValue = cross(fromDirection, toDirection);
+	auto q = quaternion(crossValue, dotValue + k);
+	*this = normalize(q);
+  }
+
+  inline void quaternion::setLookRotation(const vec3& forwardDirection, const vec3& upDirection) {
+	// Normalize inputs
+	auto forward = normalize(forwardDirection);
+	auto upwards = normalize(upDirection);
+
+	if (1 - std::abs(dot(forward, upwards)) < EPSILON)
+	  setFromToRotation(vec3::FORWARD, forward);
+	// Get orthogonal vectors
+	auto right = normalize(cross(upwards, forward));
+	upwards = cross(forward, right);
+	// Calculate rotation
+	float radicand = right.x + upwards.y + forward.z;
+	if (radicand > 0.f) {
+	  w = std::sqrt(1.f + radicand) * 0.5f;
+	  float recip = 1.f / (4.f * w);
+	  x = (upwards.z - forward.y) * recip;
+	  y = (forward.x - right.z) * recip;
+	  z = (right.y - upwards.x) * recip;
+	} else if (right.x >= upwards.y && right.x >= forward.z) {
+	  x = std::sqrt(1.f + right.x - upwards.y - forward.z) * 0.5f;
+	  float recip = 1.f / (4.f * x);
+	  w = (upwards.z - forward.y) * recip;
+	  z = (forward.x + right.z) * recip;
+	  y = (right.y + upwards.x) * recip;
+	} else if (upwards.y > forward.z) {
+	  y = std::sqrt(1.f - right.x + upwards.y - forward.z) * 0.5f;
+	  float recip = 1.f / (4.f * y);
+	  z = (upwards.z + forward.y) * recip;
+	  w = (forward.x - right.z) * recip;
+	  x = (right.y + upwards.x) * recip;
+	} else {
+	  z = std::sqrt(1.f - right.x - upwards.y + forward.z) * 0.5f;
+	  float recip = 1.f / (4.f * z);
+	  y = (upwards.z + forward.y) * recip;
+	  x = (forward.x + right.z) * recip;
+	  w = (right.y - upwards.x) * recip;
+	}
+	*this = normalize(*this);
+  }
+
+  inline mat3 quaternion::getMatrix3() const {
+	return {1 - 2 * y * y - 2 * z * z, 2 * x * y - 2 * z * w,
+			2 * x * z + 2 * y * w,     2 * x * y + 2 * z * w,
+			1 - 2 * x * x - 2 * z * z, 2 * y * z - 2 * x * w,
+			2 * x * z - 2 * y * w,     2 * y * z + 2 * x * w,
+			1 - 2 * x * x - 2 * y * y};
   }
 
 }

@@ -4,8 +4,9 @@
 #include "command_buffer.h"
 
 #include "shading/material.h"
-#include "component/camera_component.h"
+#include "components/camera.h"
 #include "resources/mesh.h"
+#include "renderer.h"
 
 namespace primal::renderer {
 
@@ -17,7 +18,7 @@ namespace primal::renderer {
 	clear();
   }
 
-  void CommandBuffer::push(Mesh* mesh, Material* material, math::Matrix4 transform, math::Matrix4 prevTransform, math::Vector3 boxMin, math::Vector3 boxMax, RenderTarget* target) {
+  void CommandBuffer::push(Mesh* mesh, Material* material, math::mat4 transform, math::mat4 prevTransform, math::vec3 boxMin, math::vec3 boxMax, RenderTarget* target) {
 	RenderCommand command{};
 	command.mesh = mesh;
 	command.material = material;
@@ -55,7 +56,7 @@ namespace primal::renderer {
 
   // custom per-element sort compare function used by the CommandBuffer::Sort() function.
   bool renderSortDeferred(const RenderCommand& a, const RenderCommand& b) {
-	return a.material->GetShader()->ID < b.material->GetShader()->ID;
+	return a.material->getShader()->m_id < b.material->getShader()->m_id;
   }
 
   // sort render state
@@ -82,11 +83,11 @@ namespace primal::renderer {
 	   [...] and so on for each query you want to perform
 	   return false;
 	   */
-	return std::make_tuple(a.material->Blend, a.material->GetShader()->ID) < std::make_tuple(b.material->Blend, b.material->GetShader()->ID);
+	return std::make_tuple(a.material->blend, a.material->getShader()->m_id) < std::make_tuple(b.material->blend, b.material->getShader()->m_id);
   }
 
   bool renderSortShader(const RenderCommand& a, const RenderCommand& b) {
-	return a.material->GetShader()->ID < b.material->GetShader()->ID;
+	return a.material->getShader()->m_id < b.material->getShader()->m_id;
   }
 
   void CommandBuffer::sort() {
@@ -101,7 +102,7 @@ namespace primal::renderer {
 	  std::vector<RenderCommand> commands;
 	  for (auto it = m_deferredRenderCommands.begin(); it != m_deferredRenderCommands.end(); ++it) {
 		RenderCommand command = *it;
-		if (m_renderer->GetCamera()->Frustum.Intersect(command.boxMin, command.boxMax)) {
+		if (m_renderer->GetCamera()->Frustum.intersect(command.boxMin, command.boxMax)) {
 		  commands.push_back(command);
 		}
 	  }
@@ -110,14 +111,14 @@ namespace primal::renderer {
 	  return m_deferredRenderCommands;
 	}
   }
-  // --------------------------------------------------------------------------------------------
-  std::vector<RenderCommand> CommandBuffer::GetCustomRenderCommands(RenderTarget* target, bool cull) {
+
+  std::vector<RenderCommand> CommandBuffer::getCustomRenderCommands(RenderTarget* target, bool cull) {
 	// only cull when on main/null render target
 	if (target == nullptr && cull) {
 	  std::vector<RenderCommand> commands;
 	  for (auto it = m_customRenderCommands[target].begin(); it != m_customRenderCommands[target].end(); ++it) {
 		RenderCommand command = *it;
-		if (m_renderer->GetCamera()->Frustum.Intersect(command.boxMin, command.boxMax)) {
+		if (m_renderer->GetCamera()->Frustum.intersect(command.boxMin, command.boxMax)) {
 		  commands.push_back(command);
 		}
 	  }
@@ -126,13 +127,13 @@ namespace primal::renderer {
 	  return m_customRenderCommands[target];
 	}
   }
-  // --------------------------------------------------------------------------------------------
-  std::vector<RenderCommand> CommandBuffer::GetAlphaRenderCommands(bool cull) {
+
+  std::vector<RenderCommand> CommandBuffer::getAlphaRenderCommands(bool cull) {
 	if (cull) {
 	  std::vector<RenderCommand> commands;
 	  for (auto it = m_alphaRenderCommands.begin(); it != m_alphaRenderCommands.end(); ++it) {
 		RenderCommand command = *it;
-		if (m_renderer->GetCamera()->Frustum.Intersect(command.boxMin, command.boxMax)) {
+		if (m_renderer->GetCamera()->Frustum.intersect(command.boxMin, command.boxMax)) {
 		  commands.push_back(command);
 		}
 	  }
@@ -141,24 +142,24 @@ namespace primal::renderer {
 	  return m_alphaRenderCommands;
 	}
   }
-  // --------------------------------------------------------------------------------------------
-  std::vector<RenderCommand> CommandBuffer::GetPostProcessingRenderCommands() {
+
+  std::vector<RenderCommand> CommandBuffer::getPostProcessingRenderCommands() {
 	return m_postProcessingRenderCommands;
   }
-  // --------------------------------------------------------------------------------------------
-  std::vector<RenderCommand> CommandBuffer::GetShadowCastRenderCommands() {
+
+  std::vector<RenderCommand> CommandBuffer::getShadowCastRenderCommands() {
 	std::vector<RenderCommand> commands;
 	for (auto it = m_deferredRenderCommands.begin(); it != m_deferredRenderCommands.end(); ++it) {
-	  if (it->material->ShadowCast) {
+	  if (it->material->shadowCast) {
 		commands.push_back(*it);
 	  }
 	}
 	for (auto it = m_customRenderCommands[nullptr].begin(); it != m_customRenderCommands[nullptr].end(); ++it) {
-	  if (it->material->ShadowCast) {
+	  if (it->material->shadowCast) {
 		commands.push_back(*it);
 	  }
 	}
 	return commands;
   }
 
-}// namespace primal::renderer
+}

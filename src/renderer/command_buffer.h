@@ -4,8 +4,8 @@
 #include <vector>
 #include <map>
 
-#include "core/math/matrix4.h"
-#include "core/math/vector3.h"
+#include "core/math/linear_algebra/matrix.h"
+#include "core/math/linear_algebra/vector.h"
 #include "render_command.h"
 
 namespace primal::renderer {
@@ -21,7 +21,7 @@ namespace primal::renderer {
 	  ~CommandBuffer();
 
 	  // pushes render state relevant to a single render call to the command buffer.
-	  void push(Mesh* mesh, Material* material, math::Matrix4 transform = {}, math::Matrix4 prevTransform = {}, math::Vector3 boxMin = math::Vector3{-99999.0}, math::Vector3 boxMax = math::Vector3{99999.0}, RenderTarget* target = nullptr);
+	  void push(Mesh* mesh, Material* material, math::mat4 transform = {}, math::mat4 prevTransform = {}, math::vec3 boxMin = math::vec3{-99999.0}, math::vec3 boxMax = math::vec3{99999.0}, RenderTarget* target = nullptr);
 
 	  // clears the command buffer; usually done after issuing all the stored render commands.
 	  void clear();

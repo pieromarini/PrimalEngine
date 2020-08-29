@@ -5,15 +5,15 @@
 namespace primal::math {
 
   plane::plane(const float a, const float b, const float c, const float d) {
-	Normal.x = a;
-	Normal.y = b;
-	Normal.z = c;
-	Distance = d;
+	normal.x = a;
+	normal.y = b;
+	normal.z = c;
+	distance = d;
   }
 
-  plane::plane(const vec3& normal, const vec3& point) {
-	Normal = normal;
-	Distance = -dot(normal, point);
+  plane::plane(const vec3& n, const vec3& point) {
+	normal = n;
+	distance = -dot(normal, point);
   }
 
 }

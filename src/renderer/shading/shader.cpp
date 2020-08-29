@@ -5,7 +5,7 @@
 
 namespace primal::renderer {
 
-  static Shader* create(std::string name, std::string vsCode, std::string fsCode, std::vector<std::string> defines = {}) {
+  Shader* Shader::create(std::string name, std::string vsCode, std::string fsCode, std::vector<std::string> defines) {
 	auto currentAPI = GraphicsAPI::getAPI();
 
 	switch (currentAPI) {

@@ -2,7 +2,7 @@
 #define PBR_CAPTURE_H
 
 #include "shading/texture_cube.h"
-#include "core/math/vector3.h"
+#include "core/math/linear_algebra/vector.h"
 
 namespace primal::renderer {
 
@@ -10,7 +10,7 @@ namespace primal::renderer {
 	TextureCube* Irradiance = nullptr;
 	TextureCube* Prefiltered = nullptr;
 
-	math::Vector3 Position;
+	math::vec3 Position;
 	float Radius;
   };
 

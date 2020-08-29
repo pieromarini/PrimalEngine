@@ -2,7 +2,7 @@
 #define SHADER_H
 
 #include <vector>
-#include "core/math/matrix4.h"
+#include "core/math/linear_algebra/matrix.h"
 #include "shading_types.h"
 
 namespace primal::renderer {
@@ -21,17 +21,17 @@ namespace primal::renderer {
 	  virtual void setBool(std::string location, bool value) = 0;
 	  virtual void setFloat(std::string location, float value) = 0;
 
-	  // virtual void setVector(std::string location, math::Vector2 value) = 0;
-	  virtual void setVector(std::string location, math::Vector3 value) = 0;
-	  virtual void setVector(std::string location, math::Vector4 value) = 0;
+	  virtual void setVector(std::string location, math::vec2 value) = 0;
+	  virtual void setVector(std::string location, math::vec3 value) = 0;
+	  virtual void setVector(std::string location, math::vec4 value) = 0;
 
-	  // virtual void setVectorArray(std::string location, int size, const std::vector<math::vec2>& values) = 0;
-	  virtual void setVectorArray(std::string location, std::size_t size, std::vector<math::Vector3>& values) = 0;
-	  virtual void setVectorArray(std::string location, std::size_t size, std::vector<math::Vector4>& values) = 0;
+	  virtual void setVectorArray(std::string location, std::size_t size, std::vector<math::vec2>& values) = 0;
+	  virtual void setVectorArray(std::string location, std::size_t size, std::vector<math::vec3>& values) = 0;
+	  virtual void setVectorArray(std::string location, std::size_t size, std::vector<math::vec4>& values) = 0;
 
-	  // virtual void setMatrix(std::string location, math::mat2 value) = 0;
-	  virtual void setMatrix(std::string location, math::Matrix3 value) = 0;
-	  virtual void setMatrix(std::string location, math::Matrix4 value) = 0;
+	  virtual void setMatrix(std::string location, math::mat2 value) = 0;
+	  virtual void setMatrix(std::string location, math::mat3 value) = 0;
+	  virtual void setMatrix(std::string location, math::mat4 value) = 0;
 
 	  uint32_t m_id;
 	  std::string m_name;

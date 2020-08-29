@@ -9,24 +9,26 @@
 
 #define DEFINE_COMPONENT(NAME, BASE, UNIQUE) \
   template<bool Unique>                      \
-  class primal::ComponentRegistry<class NAME, BASE, UNIQUE> { \
+  class ComponentRegistry<class NAME, BASE, Unique> { \
 	protected:                                                \
 	  static bool NAME##Registered;                           \
   };                                                          \
-  class NAME : public BASE, public primal::ComponentRegistry<NAME, BASE, UNIQUE> { \
+  class NAME : public BASE, public ComponentRegistry<NAME, BASE, UNIQUE> { \
 	protected:																	   \
 	  static bool isRegistered() { return NAME##Registered; }                      \
 	private:
+
 
 #define DEFINE_COMPONENT_END(NAME, BASE)                                 \
   }                                                                      \
   ;                                                                      \
   template<bool Unique>                                                  \
-  bool primal::ComponentRegistry<NAME, BASE, Unique>::NAME##Registered = \
+  bool ComponentRegistry<NAME, BASE, Unique>::NAME##Registered = \
 	Component::registerComponent(std::type_index(typeid(NAME)), std::type_index(typeid(BASE)), Unique);
 
+
 #define REGISTER_COMPONENT(NAME, BASE, UNIQUE)                           \
-  bool primal::ComponentRegistry<NAME, BASE, UNIQUE>::NAME##Registered = \
+  bool ComponentRegistry<NAME, BASE, UNIQUE>::NAME##Registered = \
 	Component::registerComponent(std::type_index(typeid(NAME)), std::type_index(typeid(BASE)), UNIQUE);
 
 

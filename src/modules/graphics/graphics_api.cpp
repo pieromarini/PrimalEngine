@@ -5,11 +5,12 @@
 
 namespace primal {
 
+  RenderingAPI GraphicsAPI::s_renderingAPI = RenderingAPI::OPENGL;
+
   Unique<GraphicsAPI> GraphicsAPI::create(RenderingAPI api) {
 	switch (api) {
 	  case RenderingAPI::OPENGL:
 		return createUnique<OpenGLGraphicsAPI>();
-
 	  case RenderingAPI::VULKAN:
 	  case RenderingAPI::DIRECTX:
 	  default:

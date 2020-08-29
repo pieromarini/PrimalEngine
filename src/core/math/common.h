@@ -4,10 +4,12 @@
 #include "linear_algebra/vector.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 
 namespace primal::math {
 
+  static constexpr float EPSILON = FLT_EPSILON;
 
   template<typename T>
   inline T lerp(const T& a, const T& b, const float t) {

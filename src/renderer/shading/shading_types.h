@@ -3,10 +3,8 @@
 
 #include <string>
 
-#include "core/math/matrix3.h"
-#include "core/math/matrix4.h"
-#include "core/math/vector3.h"
-#include "core/math/vector4.h"
+#include "core/math/linear_algebra/matrix.h"
+#include "core/math/linear_algebra/vector.h"
 
 namespace primal::renderer {
 
@@ -44,10 +42,12 @@ namespace primal::renderer {
 	  bool Bool;
 	  int Int;
 	  float Float;
-	  math::Vector3 Vec3;
-	  math::Vector4 Vec4;
-	  math::Matrix3 Mat3;
-	  math::Matrix4 Mat4;
+	  math::vec2 Vec2;
+	  math::vec3 Vec3;
+	  math::vec4 Vec4;
+	  math::mat2 Mat2;
+	  math::mat3 Mat3;
+	  math::mat4 Mat4;
 	};
 
 	UniformValue() = default;

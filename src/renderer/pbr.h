@@ -1,8 +1,12 @@
 #ifndef PBR_H
 #define PBR_H
 
-#include "core/math/vector3.h"
+#include "core/math/linear_algebra/vector.h"
 #include <vector>
+
+namespace primal {
+  class Entity;
+}
 
 namespace primal::renderer {
 
@@ -13,7 +17,6 @@ namespace primal::renderer {
   class Texture;
   class TextureCube;
   class PBRCapture;
-  class Entity;
   class Shader;
   class PostProcessor;
 
@@ -26,7 +29,7 @@ namespace primal::renderer {
 	  void SetSkyCapture(PBRCapture* capture);
 
 	  // adds a processed PBR capture to the list of irradiance probes
-	  void AddIrradianceProbe(PBRCapture* capture, math::Vector3 position, float radius);
+	  void AddIrradianceProbe(PBRCapture* capture, math::vec3 position, float radius);
 
 	  // removes all irradiance probe entries from the global GI grid
 	  void ClearIrradianceProbes();
@@ -41,7 +44,7 @@ namespace primal::renderer {
 	  PBRCapture* GetSkyCapture();
 
 	  // retrieve all pushed irradiance probes
-	  std::vector<PBRCapture*> GetIrradianceProbes(math::Vector3 queryPos, float queryRadius);
+	  std::vector<PBRCapture*> GetIrradianceProbes(math::vec3 queryPos, float queryRadius);
 
 	  // renders all reflection/irradiance probes for visualization/debugging.
 	  void RenderProbes();
@@ -71,7 +74,6 @@ namespace primal::renderer {
 	  // debug
 	  Mesh* m_probeDebugSphere;
 	  Shader* m_probeDebugShader;
-
   };
 
 }

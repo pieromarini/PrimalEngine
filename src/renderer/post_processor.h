@@ -1,13 +1,16 @@
 #ifndef POST_PROCESSOR_H
 #define POST_PROCESSOR_H
 
+namespace primal {
+  class Camera;
+}
+
 namespace primal::renderer {
 
   class Texture;
   class RenderTarget;
   class Shader;
   class Renderer;
-  class Camera;
 
   class PostProcessor {
 	public:

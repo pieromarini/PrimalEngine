@@ -104,7 +104,7 @@ namespace primal {
 	return "";
   }
 
-  Entity* create(std::string name, class Entity* parent, bool entityStatic) {
+  Entity* Entity::create(std::string name, class Entity* parent, bool entityStatic) {
 	return SceneManager::instance().loadedScene->addEntity(name, parent, entityStatic);
   }
 
@@ -172,7 +172,7 @@ namespace primal {
 	return !isStatic;
   }
 
-  void Entity::setTransform(const math::Vector3& worldPos, const math::Vector3& worldEulerAngles, const math::Vector3& localScale) {
+  void Entity::setTransform(const math::vec3& worldPos, const math::vec3& worldEulerAngles, const math::vec3& localScale) {
 	setAttribute(EntityAttributes::IS_TRANSFORM_DIRTY, true);
 	transform->setWorldTransform(worldPos, worldEulerAngles, localScale);
   }

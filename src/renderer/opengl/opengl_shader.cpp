@@ -151,43 +151,55 @@ namespace primal::renderer::opengl {
 	  glUniform1f(loc, (int)value);
   }
 
-  // void setVector(std::string location, math::Vector2 value);
+  void OpenGLShader::setVector(std::string location, math::vec2 value) {
+	auto loc = getUniformLocation(location);
+	if (loc >= 0)
+	  glUniform2fv(loc, 1, &value[0]);
+  }
 
-  void OpenGLShader::setVector(std::string location, math::Vector3 value) {
+  void OpenGLShader::setVector(std::string location, math::vec3 value) {
 	auto loc = getUniformLocation(location);
 	if (loc >= 0)
 	  glUniform3fv(loc, 1, &value[0]);
   }
 
-  void OpenGLShader::setVector(std::string location, math::Vector4 value) {
+  void OpenGLShader::setVector(std::string location, math::vec4 value) {
 	auto loc = getUniformLocation(location);
 	if (loc >= 0)
 	  glUniform4fv(loc, 1, &value[0]);
   }
 
-  // void setVectorArray(std::string location, int size, const std::vector<math::vec2>& values);
+  void OpenGLShader::setVectorArray(std::string location, std::size_t size, std::vector<math::vec2>& values) {
+	auto loc = getUniformLocation(location);
+	if (loc >= 0)
+	  glUniform2fv(loc, size, (float*)(&values[0].x));
+  }
 
-  void OpenGLShader::setVectorArray(std::string location, std::size_t size, std::vector<math::Vector3>& values) {
+  void OpenGLShader::setVectorArray(std::string location, std::size_t size, std::vector<math::vec3>& values) {
 	auto loc = getUniformLocation(location);
 	if (loc >= 0)
 	  glUniform3fv(loc, size, (float*)(&values[0].x));
   }
 
-  void OpenGLShader::setVectorArray(std::string location, std::size_t size, std::vector<math::Vector4>& values) {
+  void OpenGLShader::setVectorArray(std::string location, std::size_t size, std::vector<math::vec4>& values) {
 	auto loc = getUniformLocation(location);
 	if (loc >= 0)
 	  glUniform4fv(loc, size, (float*)(&values[0].x));
   }
 
-  // void setMatrix(std::string location, math::mat2 value);
+  void OpenGLShader::setMatrix(std::string location, math::mat2 value) {
+	auto loc = getUniformLocation(location);
+	if (loc >= 0)
+	  glUniformMatrix2fv(loc, 1, GL_FALSE, &value[0][0]);
+  }
 
-  void OpenGLShader::setMatrix(std::string location, math::Matrix3 value) {
+  void OpenGLShader::setMatrix(std::string location, math::mat3 value) {
 	auto loc = getUniformLocation(location);
 	if (loc >= 0)
 	  glUniformMatrix3fv(loc, 1, GL_FALSE, &value[0][0]);
   }
 
-  void OpenGLShader::setMatrix(std::string location, math::Matrix4 value) {
+  void OpenGLShader::setMatrix(std::string location, math::mat4 value) {
 	auto loc = getUniformLocation(location);
 	if (loc >= 0)
 	  glUniformMatrix4fv(loc, 1, GL_FALSE, &value[0][0]);
