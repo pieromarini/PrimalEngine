@@ -1,2 +1,33 @@
-build/
+.DS_Store
+
+# Extra
 imgui.ini
+*.json
+*.plist
+
+# clangd completion with compile-commands
+.clangd
+
+# build/compilation artifacts
+*.o
+*.a
+*.lib
+*.a
+*.out
+
+# Output
+bin/
+lib/
+
+# CMake
+CMakeCache.txt
+CMakeFiles
+cmake_install.cmake
+cmake_uninstall.cmake
+
+# Build folders
+build/
+target/
+
+# Renderdoc capture/debugging settings
+*.cap
