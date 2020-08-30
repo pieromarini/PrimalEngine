@@ -1,3 +1,6 @@
+#ifndef UTILS_H
+#define UTILS_H
+
 #include <functional>
 #include <utility>
 
@@ -16,3 +19,5 @@ namespace primal::util {
   };
 
 }
+
+#endif

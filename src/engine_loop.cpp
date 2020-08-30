@@ -4,6 +4,8 @@
 #include "modules/graphics/graphics_module.h"
 #include "modules/graphics/window_module.h"
 #include "input/input_module.h"
+#include "scene/scene.h"
+#include "scene/scene_manager.h"
 
 namespace primal {
   
@@ -32,6 +34,10 @@ namespace primal {
 	m_inputModule->init(m_windowModule->m_windowHandle);
 
 	m_isRunning = true;
+
+	SceneManager::instance().loadScene("input_scene");
+	SceneManager::instance().loadScene();
+
 	startGameClock();
   }
 
@@ -59,11 +65,27 @@ namespace primal {
 
   void EngineLoop::variableUpdate(const float deltaTime) const {
 	m_inputModule->update(deltaTime);
-	m_windowModule->update(deltaTime);
+
+	SceneManager::instance().loadedScene->update();
+
+	// TODO: Update events here
+
+	SceneManager::instance().loadedScene->lateUpdate();
+
 	m_graphicsModule->update(deltaTime);
+
+	m_windowModule->update(deltaTime);
+
+	// NOTE: load new scene if there is a pending load.
+	if (SceneManager::instance().pendingLoadScene) {
+	  SceneManager::instance().unloadScene();
+	  m_inputModule->clear();
+	  SceneManager::instance().loadScene();
+	}
   }
 
   void EngineLoop::shutdown() {
+	SceneManager::instance().unloadScene();
 	m_inputModule->shutdown();
 	m_graphicsModule->shutdown();
 	m_windowModule->shutdown();

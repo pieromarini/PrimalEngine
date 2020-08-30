@@ -7,10 +7,10 @@
 #include <functional>
 #include "util/sid.h"
 
-template<typename result, typename... T>
-using Func = std::function<result(T...)>;
-
 namespace primal {
+
+  template<typename result, typename... T>
+  using Func = std::function<result(T...)>;
 
   template<typename T>
   class SceneRegistry {
