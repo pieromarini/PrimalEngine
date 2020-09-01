@@ -49,7 +49,7 @@ namespace primal {
   };
 
   template<typename T>
-  bool SceneRegistry<T>::registered = SceneManager::instance().registerScene(T::getSceneName(), T::createMethod());
+  bool SceneRegistry<T>::registered = SceneManager::instance().registerScene(T::getSceneName(), T::createMethod);
 
 }
 

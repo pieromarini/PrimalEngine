@@ -11,5 +11,4 @@ DEFINE_SCENE(InputScene)
 
 DEFINE_SCENE_END
 
-
 #endif

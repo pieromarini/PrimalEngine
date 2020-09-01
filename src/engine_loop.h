@@ -22,6 +22,7 @@ namespace primal {
 	private:
 	  bool m_isRunning;
 
+	  class MemoryManager* m_memoryManager;
 	  class GraphicsModule* m_graphicsModule;
 	  class WindowModule* m_windowModule;
 	  class InputModule* m_inputModule;

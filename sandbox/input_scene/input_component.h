@@ -6,13 +6,13 @@
 using namespace primal;
 
 DEFINE_COMPONENT(InputTestComponent, Component, false)
-private:
-uint64_t handleA, handleB, handleC;
+  public:
+	void onEnable() override;
+	void onDisable() override;
+	void update() override;
 
-public:
-void onEnable() override;
-void onDisable() override;
-void update() override;
+  private:
+	uint64_t handleA, handleB, handleC;
 
 DEFINE_COMPONENT_END(InputTestComponent, Component)
 

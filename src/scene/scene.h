@@ -5,14 +5,14 @@
 #include <queue>
 #include <set>
 #include <string>
+#include "core/memory/memory_manager.h"
 
-// NOTE: create method should use a stack allocator.
 #define DEFINE_SCENE(NAME)                                                \
   class NAME : public primal::Scene, public primal::SceneRegistry<NAME> { \
 	public:                                                               \
-	  bool isRegisteredInSceneManager() const { return registered; };      \
+	  bool isRegisteredInSceneManager() const { return registered; };     \
 	  static inline primal::Func<NAME*> createMethod = []() {             \
-		  return new NAME();                                              \
+		return primal::MemoryManager::newOnStack<NAME>();				  \
 	  };                                                                  \
 	  static std::string getSceneName() { return #NAME; };                \
 	  std::string getName() const override { return #NAME; };             \

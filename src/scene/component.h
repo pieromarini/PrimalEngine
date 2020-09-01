@@ -5,6 +5,7 @@
 #include <list>
 #include <set>
 #include <typeindex>
+#include <typeinfo>
 #include <unordered_map>
 
 #define DEFINE_COMPONENT(NAME, BASE, UNIQUE) \
@@ -13,7 +14,7 @@
 	protected:                                                \
 	  static bool NAME##Registered;                           \
   };                                                          \
-  class NAME : public BASE, public ComponentRegistry<NAME, BASE, UNIQUE> { \
+  class NAME : public BASE, public primal::ComponentRegistry<NAME, BASE, UNIQUE> { \
 	protected:																	   \
 	  static bool isRegistered() { return NAME##Registered; }                      \
 	private:
@@ -23,12 +24,12 @@
   }                                                                      \
   ;                                                                      \
   template<bool Unique>                                                  \
-  bool ComponentRegistry<NAME, BASE, Unique>::NAME##Registered = \
+  bool primal::ComponentRegistry<NAME, BASE, Unique>::NAME##Registered = \
 	Component::registerComponent(std::type_index(typeid(NAME)), std::type_index(typeid(BASE)), Unique);
 
 
 #define REGISTER_COMPONENT(NAME, BASE, UNIQUE)                           \
-  bool ComponentRegistry<NAME, BASE, UNIQUE>::NAME##Registered = \
+  bool primal::ComponentRegistry<NAME, BASE, UNIQUE>::NAME##Registered = \
 	Component::registerComponent(std::type_index(typeid(NAME)), std::type_index(typeid(BASE)), UNIQUE);
 
 

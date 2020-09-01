@@ -92,7 +92,7 @@ namespace primal {
 	inputModule->clear();
   }
 
-  std::pair<double, double> Input::getMousePosition() {
+  math::dvec2 Input::getMousePosition() {
 	return inputModule->getMousePosition();
   }
 }

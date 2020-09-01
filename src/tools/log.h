@@ -19,8 +19,6 @@ namespace primal {
 
 }
 
-// Core log macros
-
 template<typename ...Args>
 constexpr void PRIMAL_CORE_TRACE(Args ...args) {
   primal::Log::getCoreLogger()->trace(args...);

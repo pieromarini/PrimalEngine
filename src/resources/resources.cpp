@@ -37,13 +37,13 @@ namespace primal::renderer {
   }
 
   Shader* Resources::getShader(std::string name) {
-
 	auto id = SID(name.data());
 	if (m_shaders.find(id) != m_shaders.end()) {
 	  return m_shaders[id];
 	}
 
 	PRIMAL_CORE_WARN("Shader resource {0} not found", name);
+	return nullptr;
   }
 
   Texture* Resources::loadTexture(std::string name, std::string path, GLenum target, GLenum format, bool srgb) {
@@ -85,6 +85,7 @@ namespace primal::renderer {
 	}
 
 	PRIMAL_CORE_WARN("Texture resource {0} not found", name);
+	return nullptr;
   }
 
   TextureCube* Resources::loadTextureCube(std::string name, std::string folder) {

@@ -6,8 +6,9 @@ using namespace primal;
 
 void InputScene::load() {
   Entity* cameraEntity{ Entity::create("Camera") };
-  cameraEntity->setTransform(math::vec3{ 0, 5, 10 }, math::vec3{ -15, 0, 0 }, math::vec3{ 1, 1, 1 });
+  auto position = math::vec3{ 0, 5, 10 };
+  cameraEntity->setTransform(position, math::vec3{ -15, 0, 0 }, math::vec3{ 1, 1, 1 });
 
-  cameraEntity->addComponent<CameraComponent>();
+  cameraEntity->addComponent<CameraComponent>(position);
   cameraEntity->addComponent<InputTestComponent>();
 }

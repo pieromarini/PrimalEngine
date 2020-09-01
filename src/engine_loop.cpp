@@ -1,10 +1,12 @@
 #include "core/core.h"
 
 #include "engine_loop.h"
+#include "core/memory/memory_manager.h"
 #include "modules/graphics/graphics_module.h"
 #include "modules/graphics/window_module.h"
 #include "input/input_module.h"
 #include "scene/scene.h"
+#include "tools/log.h"
 #include "scene/scene_manager.h"
 
 namespace primal {
@@ -16,16 +18,21 @@ namespace primal {
 
   // TODO: use stack allocator for modules.
   EngineLoop::EngineLoop() {
-	m_windowModule = new WindowModule();
-	m_graphicsModule = new GraphicsModule();
-	m_inputModule = new InputModule();
+	Log::init();
+
+	m_memoryManager = new MemoryManager{};
+
+	m_windowModule = MemoryManager::newOnStack<WindowModule>();
+	m_graphicsModule = MemoryManager::newOnStack<GraphicsModule>();
+	m_inputModule = MemoryManager::newOnStack<InputModule>();
   }
 
-  // TODO: each module will call it's own destructor. (after implementing the stack allocator)
   EngineLoop::~EngineLoop() {
-	delete m_graphicsModule;
-	delete m_windowModule;
-	delete m_inputModule;
+	m_graphicsModule->~GraphicsModule();
+	m_windowModule->~WindowModule();
+	m_inputModule->~InputModule();
+
+	delete m_memoryManager;
   }
 
   void EngineLoop::init() {
@@ -35,7 +42,8 @@ namespace primal {
 
 	m_isRunning = true;
 
-	SceneManager::instance().loadScene("input_scene");
+	// NOTE: loading test scene.
+	SceneManager::instance().loadScene("InputScene");
 	SceneManager::instance().loadScene();
 
 	startGameClock();
@@ -75,6 +83,8 @@ namespace primal {
 	m_graphicsModule->update(deltaTime);
 
 	m_windowModule->update(deltaTime);
+
+	m_memoryManager->update();
 
 	// NOTE: load new scene if there is a pending load.
 	if (SceneManager::instance().pendingLoadScene) {

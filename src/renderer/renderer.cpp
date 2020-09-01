@@ -705,7 +705,7 @@ namespace primal::renderer {
 	  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	  for (unsigned int i = 0; i < renderCommands.size(); ++i) {
 		// cubemap generation only works w/ custom materials
-		assert(renderCommands[i].material->Type == MATERIAL_CUSTOM);
+		assert(renderCommands[i].material->type == MATERIAL_CUSTOM);
 		renderCustomCommand(&renderCommands[i], camera);
 	  }
 	}

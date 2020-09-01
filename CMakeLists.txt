@@ -84,7 +84,7 @@ target_compile_definitions(${ENGINE_LIB} PRIVATE "GLFW_INCLUDE_NONE")
 set(GLAD_DIR "${LIB_DIR}/glad")
 add_library(glad "${GLAD_DIR}/src/glad.c")
 target_include_directories(glad PRIVATE "${GLAD_DIR}/include")
-target_include_directories(${ENGINE_LIB} PRIVATE "${GLAD_DIR}/include")
+target_include_directories(${ENGINE_LIB} PUBLIC "${GLAD_DIR}/include")
 
 # [LIB] ImGUI
 set(IMGUI_DIR "${LIB_DIR}/imgui")

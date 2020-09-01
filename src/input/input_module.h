@@ -6,6 +6,7 @@
 #include <GLFW/glfw3.h>
 
 #include "core/data_structures/delegate.h"
+#include "core/math/linear_algebra/vector.h"
 #include "util/util.h"
 #include "key_codes.h"
 
@@ -28,7 +29,7 @@ namespace primal {
 
 	  // NOTE: Mouse
 	  // TODO: change return value to Vec2 when math library is ready.
-	  [[nodiscard]] std::pair<double, double> getMousePosition() const;
+	  [[nodiscard]] math::dvec2 getMousePosition() const;
 
 	  [[nodiscard]] bool isMouseButtonPressed(MouseButton mouseButton) const;
 
@@ -123,6 +124,7 @@ namespace primal {
 	  static Delegate<GLFWwindow*, uint32_t> charGLFWCallbacks;
 
 	  friend class EngineLoop;
+	  friend class StackAllocator;
   };
 
 }

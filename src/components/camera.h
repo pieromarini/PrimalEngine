@@ -20,7 +20,6 @@ namespace primal {
 	setters. This camera should only be used in code and not respond to user input; the
 	derived cameras are for user/player interaction.
   */
-  // TODO: This should be a component and be attachable to an entity.
   class Camera {
 	public:
 	  math::mat4 Projection;

@@ -15,7 +15,7 @@ namespace primal::renderer {
 
 namespace primal {
 
-  DEFINE_COMPONENT(MeshComponent, Component, true)
+  DEFINE_COMPONENT(MeshComponent, Component, false)
 
   public:
 	MeshComponent(renderer::Mesh* mesh, renderer::Material* material, class Transform* transform, math::vec3 boxMin, math::vec3 boxMax);
@@ -39,7 +39,6 @@ namespace primal {
   private:
 	static class GraphicsModule* graphicsModule;
 	
-
   DEFINE_COMPONENT_END(MeshComponent, Component)
 
 }

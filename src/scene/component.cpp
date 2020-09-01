@@ -10,7 +10,7 @@ namespace primal {
 	if (isUnique)
 	  uniqueComponents().insert(curr);
 
-	auto children = childrenTypes(); 
+	auto& children = childrenTypes(); 
 
 	if (children.count(curr) > 0) {
 	  children.at(curr).push_front(curr);
@@ -29,12 +29,12 @@ namespace primal {
 
   void Component::flattenComponentList() {
 	if (m_isFlattened)
-	  return;	
+	  return;
 
 	m_isFlattened = true;
-	auto children = childrenTypes();
+	auto& children = childrenTypes();
 
-	std::type_index componentIndex{ typeid(Component) }; 
+	std::type_index componentIndex{ typeid(Component) };
 	auto componentList = &children.at(componentIndex);
 	for (auto& childList : *componentList) {
 	  if (childList != componentIndex) {

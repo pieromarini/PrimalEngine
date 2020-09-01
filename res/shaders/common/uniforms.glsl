@@ -1,10 +1,10 @@
 #ifndef UNIFORMS_H
 #define UNIFORMS_H
+
 // global uniform buffer for shared common set of uniforms among programs
-// see: https://learnopengl.com/#!Advanced-OpenGL/Advanced-GLSL for table of std140 byte offsets
-layout (std140, binding = 0) uniform Global
-{
-    // trtansformations
+
+layout (std140, binding = 0) uniform Global {
+    // transformations
     mat4 viewProjection;
     mat4 prevViewProjection;
     mat4 projection;
@@ -38,4 +38,5 @@ layout (std140, binding = 0) uniform Global
     vec4 pointLight7_Pos;
     vec4 pointLight7_Col;
 };
+
 #endif

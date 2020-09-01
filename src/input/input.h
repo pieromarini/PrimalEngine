@@ -4,6 +4,7 @@
 #include "core/data_structures/delegate.h"
 #include "key_codes.h"
 #include "input_module.h"
+#include "core/math/linear_algebra/vector.h"
 
 namespace primal {
 
@@ -27,7 +28,7 @@ namespace primal {
 	  static void unregisterKeyReleaseCallback(KeyCode key, uint64_t& handle);
 	  static void unregisterKeyReleaseCallback(KeyCode key, ModifierKeys mods, uint64_t& handle);
 
-	  static std::pair<double, double> getMousePosition();
+	  static math::dvec2 getMousePosition();
 
 	  static bool isMouseButtonPressed(MouseButton mouseButton);
 

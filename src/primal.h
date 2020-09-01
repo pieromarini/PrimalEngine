@@ -43,11 +43,10 @@
 #include "renderer/shading/material.h"
 
 #include "components/camera.h"
-#include "components/fly_camera.h"
 #include "components/mesh_component.h"
+#include "components/camera_component.h"
 
 #include "components/directional_light.h"
 #include "components/point_light.h"
-
 
 #endif

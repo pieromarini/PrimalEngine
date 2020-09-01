@@ -62,7 +62,7 @@ namespace primal {
 	return unregisterCallback(keyCodeToGLFWKey(key), mods, handle, &keyReleaseDelegates);
   }
 
-  std::pair<double, double> InputModule::getMousePosition() const {
+  math::dvec2 InputModule::getMousePosition() const {
 	double xPos{};
 	double yPos{};
 	glfwGetCursorPos(m_windowHandle, &xPos, &yPos);

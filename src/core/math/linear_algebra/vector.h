@@ -4,6 +4,7 @@
 #include <array>
 #include <cassert>
 #include <initializer_list>
+#include <ostream>
 
 namespace primal::math {
 /* 
@@ -42,6 +43,8 @@ namespace primal::math {
 		  assert(index >= 0 && index < n);
 		  return data.at(index);
 	  }
+
+	  friend std::ostream& operator<<(std::ostream& out, const vector<n, T>& rhs);
 
 	  vector<n, T> operator-() const;
   };
@@ -287,6 +290,17 @@ namespace primal::math {
   using dvec2 = vector<2, double>;
   using dvec3 = vector<3, double>;
   using dvec4 = vector<4, double>;
+
+  template<std::size_t N, typename T>
+  inline std::ostream& operator<<(std::ostream& out, const vector<N, T>& rhs) {
+	out << "{ ";
+	for (std::size_t i = 0; i < rhs.data.size(); ++i) {
+	  out << rhs.data[i] << ((i + 1) == rhs.data.size() ? "" : ", ");
+	}	
+	out << " }\n";
+
+	return out;
+  }
 
   template<std::size_t n, typename T>
   inline vector<n, T> vector<n, T>::operator-() const {
