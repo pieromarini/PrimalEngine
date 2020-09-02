@@ -14,7 +14,7 @@ namespace primal::renderer {
   PostProcessor::PostProcessor(Renderer* renderer) {
 	// global post-processing shader
 	{
-	  m_PostProcessShader = Resources::loadShader("post process", "shaders/screen_quad.vs", "shaders/post_processing.fs");
+	  m_PostProcessShader = Resources::loadShader("post process", "res/shaders/screen_quad.vs", "res/shaders/post_processing.fs");
 	  m_PostProcessShader->use();
 	  m_PostProcessShader->setInt("TexSrc", 0);
 	  m_PostProcessShader->setInt("TexBloom1", 1);
@@ -34,7 +34,7 @@ namespace primal::renderer {
 	  DownSampledEightOutput = m_DownSampleRTEight->getColorTexture(0);
 	  DownSampledSixteenthOutput = m_DownSampleRTSixteenth->getColorTexture(0);
 
-	  m_DownSampleShader = Resources::loadShader("down sample", "shaders/screen_quad.vs", "shaders/post/down_sample.fs");
+	  m_DownSampleShader = Resources::loadShader("down sample", "res/shaders/screen_quad.vs", "res/shaders/post/down_sample.fs");
 	  m_DownSampleShader->use();
 	  m_DownSampleShader->setInt("TexSrc", 0);
 	}
@@ -52,7 +52,7 @@ namespace primal::renderer {
 	  m_GaussianRTEight_H = new RenderTarget(1, 1, GL_HALF_FLOAT, 1, false);
 	  m_GaussianRTSixteenth_H = new RenderTarget(1, 1, GL_HALF_FLOAT, 1, false);
 
-	  m_OnePassGaussianShader = Resources::loadShader("gaussian blur", "shaders/screen_quad.vs", "shaders/post/blur_guassian.fs");
+	  m_OnePassGaussianShader = Resources::loadShader("gaussian blur", "res/shaders/screen_quad.vs", "res/shaders/post/blur_guassian.fs");
 	  m_OnePassGaussianShader->use();
 	  m_OnePassGaussianShader->setInt("TexSrc", 0);
 	}
@@ -61,7 +61,7 @@ namespace primal::renderer {
 	  m_SSAORenderTarget = new RenderTarget(1280, 720, GL_HALF_FLOAT, 1, false);
 	  SSAOOutput = m_SSAORenderTarget->getColorTexture(0);
 
-	  m_SSAOShader = Resources::loadShader("ssao", "shaders/screen_quad.vs", "shaders/post/ssao.fs");
+	  m_SSAOShader = Resources::loadShader("ssao", "res/shaders/screen_quad.vs", "res/shaders/post/ssao.fs");
 	  m_SSAOShader->use();
 	  m_SSAOShader->setInt("gPositionMetallic", 0);
 	  m_SSAOShader->setInt("gNormalRoughness", 1);
@@ -108,7 +108,7 @@ namespace primal::renderer {
 	  BloomOutput3 = m_BloomRenderTarget3->getColorTexture(0);
 	  BloomOutput4 = m_BloomRenderTarget4->getColorTexture(0);
 
-	  m_BloomShader = Resources::loadShader("bloom", "shaders/screen_quad.vs", "shaders/post/bloom.fs");
+	  m_BloomShader = Resources::loadShader("bloom", "res/shaders/screen_quad.vs", "res/shaders/post/bloom.fs");
 	  m_SSAOShader->use();
 	  m_SSAOShader->setInt("HDRScene", 0);
 	}

@@ -1,4 +1,5 @@
 #include <stdexcept>
+#include <glad/glad.h>
 
 #include "window_module.h"
 #include "application.h"
@@ -68,6 +69,15 @@ namespace primal {
 
 	glfwSwapInterval(0);
 	glfwSetInputMode(m_windowHandle, GLFW_CURSOR, windowConfig.windowShowCursor ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_HIDDEN);
+
+	// TEMP
+	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+	  PRIMAL_CORE_CRITICAL("Failed to initialize GLAD.");
+	} else {
+	  PRIMAL_CORE_INFO("Glad Initialized.");
+	  PRIMAL_CORE_INFO("Version - Major: {0} Minor: {1}", std::to_string(GLVersion.major), std::to_string(GLVersion.minor));
+	  PRIMAL_CORE_INFO("Driver: {0} Renderer: {1}", std::string{ (char*) glGetString(GL_VENDOR) }, std::string{ (char*)glGetString(GL_RENDERER) });
+	}
   }
 
   void WindowModule::setFullscreen(bool fullscreen) {

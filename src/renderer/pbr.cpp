@@ -23,10 +23,10 @@ namespace primal::renderer {
 	m_renderer = renderer;
 
 	m_renderTargetBRDFLUT = new RenderTarget(128, 128, GL_HALF_FLOAT, 1, true);
-	Shader* hdrToCubemap = Resources::loadShader("pbr:hdr_to_cubemap", "shaders/pbr/cube_sample.vs", "shaders/pbr/spherical_to_cube.fs");
-	Shader* irradianceCapture = Resources::loadShader("pbr:irradiance", "shaders/pbr/cube_sample.vs", "shaders/pbr/irradiance_capture.fs");
-	Shader* prefilterCapture = Resources::loadShader("pbr:prefilter", "shaders/pbr/cube_sample.vs", "shaders/pbr/prefilter_capture.fs");
-	Shader* integrateBrdf = Resources::loadShader("pbr:integrate_brdf", "shaders/screen_quad.vs", "shaders/pbr/integrate_brdf.fs");
+	Shader* hdrToCubemap = Resources::loadShader("pbr:hdr_to_cubemap", "res/shaders/pbr/cube_sample.vs", "res/shaders/pbr/spherical_to_cube.fs");
+	Shader* irradianceCapture = Resources::loadShader("pbr:irradiance", "res/shaders/pbr/cube_sample.vs", "res/shaders/pbr/irradiance_capture.fs");
+	Shader* prefilterCapture = Resources::loadShader("pbr:prefilter", "res/shaders/pbr/cube_sample.vs", "res/shaders/pbr/prefilter_capture.fs");
+	Shader* integrateBrdf = Resources::loadShader("pbr:integrate_brdf", "res/shaders/screen_quad.vs", "res/shaders/pbr/integrate_brdf.fs");
 	m_PBRHdrToCubemap = new Material(hdrToCubemap);
 	m_PBRIrradianceCapture = new Material(irradianceCapture);
 	m_PBRPrefilterCapture = new Material(prefilterCapture);
@@ -46,19 +46,19 @@ namespace primal::renderer {
 	m_renderer->Blit(nullptr, m_renderTargetBRDFLUT, m_PBRIntegrateBRDF);
 
 	// capture
-	m_probeCaptureShader = Resources::loadShader("pbr:capture", "shaders/capture.vs", "shaders/capture.fs");
+	m_probeCaptureShader = Resources::loadShader("pbr:capture", "res/shaders/capture.vs", "res/shaders/capture.fs");
 	m_probeCaptureShader->use();
 	m_probeCaptureShader->setInt("TexAlbedo", 0);
 	m_probeCaptureShader->setInt("TexNormal", 1);
 	m_probeCaptureShader->setInt("TexMetallic", 2);
 	m_probeCaptureShader->setInt("TexRoughness", 3);
-	m_probeCaptureBackgroundShader = Resources::loadShader("pbr:capture background", "shaders/capture_background.vs", "shaders/capture_background.fs");
+	m_probeCaptureBackgroundShader = Resources::loadShader("pbr:capture background", "res/shaders/capture_background.vs", "res/shaders/capture_background.fs");
 	m_probeCaptureBackgroundShader->use();
 	m_probeCaptureBackgroundShader->setInt("background", 0);
 
 	// debug render
 	m_probeDebugSphere = new Sphere(32, 32);
-	m_probeDebugShader = Resources::loadShader("pbr:probe_render", "shaders/pbr/probe_render.vs", "shaders/pbr/probe_render.fs");
+	m_probeDebugShader = Resources::loadShader("pbr:probe_render", "res/shaders/pbr/probe_render.vs", "res/shaders/pbr/probe_render.fs");
 	m_probeDebugShader->use();
 	m_probeDebugShader->setInt("PrefilterMap", 0);
   }

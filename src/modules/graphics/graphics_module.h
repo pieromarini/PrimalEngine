@@ -6,6 +6,7 @@
 #include <list>
 
 #include "graphics_api.h"
+#include "renderer/renderer.h"
 
 namespace primal {
 
@@ -22,6 +23,7 @@ namespace primal {
 
 	  void initRenderConfig();
 
+	  renderer::Renderer* m_renderer;
 	  GLFWwindow* m_windowHandle;
 
 	  std::list<class MeshComponent*> meshComponents;

@@ -15,10 +15,11 @@ namespace primal {
 
 	std::string vsDirectory = vsPath.substr(0, vsPath.find_last_of("/\\"));
 	std::string fsDirectory = fsPath.substr(0, fsPath.find_last_of("/\\"));
+
 	std::string vsSource = readShader(vsFile, name, vsPath);
 	std::string fsSource = readShader(fsFile, name, fsPath);
 
-	auto shader = Shader::create(name, vsPath, fsPath, defines);
+	auto shader = Shader::create(name, vsSource, fsSource, defines);
 
 	vsFile.close();
 	fsFile.close();
@@ -29,21 +30,22 @@ namespace primal {
   std::string ShaderLoader::readShader(std::ifstream& file, const std::string& name, std::string path) {
 	std::string directory = path.substr(0, path.find_last_of("/\\"));
 	std::string source, line;
-	while (std::getline(file, line)) {
 
+	while (std::getline(file, line)) {
 	  if (line.substr(0, 8) == "#include") {
 		std::string includePath = directory + "/" + line.substr(9);
 		std::ifstream includeFile(includePath);
 		if (includeFile.is_open()) {
-
 		  source += readShader(includeFile, name, includePath);
 		} else {
 		  PRIMAL_CORE_ERROR("Shader {0}: include: {1} failed to open", name, includePath);
 		}
 		includeFile.close();
-	  } else
+	  } else {
 		source += line + "\n";
+	  }
 	}
+
 	return source;
   }
 

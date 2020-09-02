@@ -1,9 +1,10 @@
 #include "graphics_module.h"
 #include "core/config.h"
 #include "components/mesh_component.h"
+#include "core/core.h"
+#include "resources/resources.h"
 #include "scene/entity.h"
 
-// #include "renderer/renderer.h"
 
 namespace primal {
 
@@ -12,6 +13,13 @@ namespace primal {
   void GraphicsModule::init(GLFWwindow* window) {
 	m_windowHandle = window; 
 	MeshComponent::graphicsModule = this;
+
+	renderer::Resources::init();
+
+	s_renderingAPI->init();
+
+	m_renderer = new renderer::Renderer();
+	m_renderer->init();
   }
 
   void GraphicsModule::update(float deltatime) {
@@ -20,13 +28,13 @@ namespace primal {
 	  auto isTransformDirty = mesh->entity->getAttribute(Entity::EntityAttributes::IS_TRANSFORM_DIRTY);
 	  if (isTransformDirty) {
 		mesh->update();
-		// Renderer::drawMesh(mesh);
 	  }
 	}
   }
 
   void GraphicsModule::shutdown() {
-
+	delete m_renderer;
+	renderer::Resources::clean();
   }
 
   void GraphicsModule::initRenderConfig() {

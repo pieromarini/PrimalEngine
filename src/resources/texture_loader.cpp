@@ -1,6 +1,7 @@
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 #include "texture_loader.h"
-#include "SOIL/SOIL.h"
-#include "SOIL/stb_image_aug.h"
 #include "tools/log.h"
 
 namespace primal {
@@ -9,13 +10,18 @@ namespace primal {
 	Texture texture;
 	texture.m_target = m_target;
 	texture.m_internalFormat = m_internalFormat;
+
 	if (texture.m_internalFormat == GL_RGB || texture.m_internalFormat == GL_SRGB)
 	  texture.m_internalFormat = srgb ? GL_SRGB : GL_RGB;
+
 	if (texture.m_internalFormat == GL_RGBA || texture.m_internalFormat == GL_SRGB_ALPHA)
 	  texture.m_internalFormat = srgb ? GL_SRGB_ALPHA : GL_RGBA;
+	
+	stbi_set_flip_vertically_on_load(true);
 
 	int width, height, nrComponents;
-	unsigned char* data = SOIL_load_image(path.c_str(), &width, &height, &nrComponents, 0);
+	unsigned char* data = stbi_load(path.c_str(), &width, &height, &nrComponents, 0);
+
 	if (data) {
 	  GLenum format;
 	  if (nrComponents == 1)
@@ -29,12 +35,14 @@ namespace primal {
 		texture.generate(width, texture.m_internalFormat, format, GL_UNSIGNED_BYTE, data);
 	  else if (m_target == GL_TEXTURE_2D)
 		texture.generate(width, height, texture.m_internalFormat, format, GL_UNSIGNED_BYTE, data);
-	  SOIL_free_image_data(data);
+
+	  stbi_image_free(data);
 	} else {
 	  PRIMAL_CORE_WARN("Texture failed to load at path {0}", path);
-	  SOIL_free_image_data(data);
+	  stbi_image_free(data);
 	  return texture;
 	}
+
 	texture.m_width = width;
 	texture.m_height = height;
 
@@ -78,7 +86,7 @@ namespace primal {
 	std::vector<std::string> faces = { top, bottom, left, right, front, back };
 	for (unsigned int i = 0; i < faces.size(); ++i) {
 	  int width, height, nrComponents;
-	  unsigned char* data = SOIL_load_image(faces[i].c_str(), &width, &height, &nrComponents, 0);
+	  unsigned char* data = stbi_load(faces[i].c_str(), &width, &height, &nrComponents, 0);
 
 	  if (data) {
 		GLenum format;
@@ -88,7 +96,7 @@ namespace primal {
 		  format = GL_RGBA;
 
 		texture.generateFace(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, width, height, format, GL_UNSIGNED_BYTE, data);
-		SOIL_free_image_data(data);
+		stbi_image_free(data);
 	  } else {
 		PRIMAL_CORE_WARN("Cube texture at path {0} failed to load", faces[i]);
 		stbi_image_free(data);

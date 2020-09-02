@@ -80,6 +80,14 @@ add_subdirectory("${GLFW_DIR}")
 target_include_directories(${ENGINE_LIB} PRIVATE "${GLFW_DIR}/include")
 target_compile_definitions(${ENGINE_LIB} PRIVATE "GLFW_INCLUDE_NONE")
 
+# [LIB] stb_image
+set(STBIMAGE_DIR "${LIB_DIR}/stb_image")
+add_library(stb_image STATIC
+	${STBIMAGE_DIR}/stb_image.h
+)
+set_target_properties(stb_image PROPERTIES LINKER_LANGUAGE CXX)
+target_include_directories(${ENGINE_LIB} PRIVATE "${STBIMAGE_DIR}")
+
 # [LIB] GLAD
 set(GLAD_DIR "${LIB_DIR}/glad")
 add_library(glad "${GLAD_DIR}/src/glad.c")
@@ -137,7 +145,7 @@ endif()
 target_include_directories(${ENGINE_LIB} PRIVATE "${SPDLOG_DIR}/include")
 
 # Engine Library Linking
-target_link_libraries(${ENGINE_LIB} glfw "${GLFW_LIBRARIES}" soil glad "${CMAKE_DL_LIBS}" imgui assimp spdlog::spdlog tbb)
+target_link_libraries(${ENGINE_LIB} glfw "${GLFW_LIBRARIES}" soil glad "${CMAKE_DL_LIBS}" imgui assimp spdlog::spdlog tbb stb_image)
 
 # [EXEC] Main Executable Linking
 set(EXEC_NAME "sandbox")

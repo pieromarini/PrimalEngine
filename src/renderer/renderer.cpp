@@ -55,7 +55,7 @@ namespace primal::renderer {
 	delete m_PBR;
   }
 
-  void Renderer::init(GLADloadproc loadProcFunc) {
+  void Renderer::init() {
 	// initialize render items
 	m_CommandBuffer = new CommandBuffer(this);
 
@@ -109,7 +109,7 @@ namespace primal::renderer {
 	glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_GlobalUBO);
 
 	// default PBR pre-compute (get a more default oriented HDR map for this)
-	Texture* hdrMap = Resources::loadHDRTexture("sky env", "textures/backgrounds/alley.hdr");
+	Texture* hdrMap = Resources::loadHDRTexture("sky env", "res/textures/backgrounds/alley.hdr");
 	PBRCapture* envBridge = m_PBR->ProcessEquirectangular(hdrMap);
 	SetSkyCapture(envBridge);
   }
@@ -454,11 +454,8 @@ namespace primal::renderer {
 	m_RenderTargetsCustom.clear();
 	m_CurrentRenderTargetCustom = nullptr;
   }
-  // ------------------------------------------------------------------------
-  void Renderer::Blit(Texture* src,
-	  RenderTarget* dst,
-	  Material* material,
-	  std::string textureUniformName) {
+
+  void Renderer::Blit(Texture* src, RenderTarget* dst, Material* material, std::string textureUniformName) {
 	// if a destination target is given, bind to its framebuffer
 	if (dst) {
 	  glViewport(0, 0, dst->m_width, dst->m_height);
@@ -488,19 +485,19 @@ namespace primal::renderer {
 	command.mesh = m_NDCPlane;
 	renderCustomCommand(&command, nullptr);
   }
-  // ------------------------------------------------------------------------
+
   void Renderer::SetSkyCapture(PBRCapture* pbrEnvironment) {
 	m_PBR->SetSkyCapture(pbrEnvironment);
   }
-  // ------------------------------------------------------------------------
+
   PBRCapture* Renderer::GetSkypCature() {
 	return m_PBR->GetSkyCapture();
   }
-  // ------------------------------------------------------------------------
+
   void Renderer::AddIrradianceProbe(math::vec3 position, float radius) {
 	m_ProbeSpatials.push_back(math::vec4(position, radius));
   }
-  // ------------------------------------------------------------------------
+
   void Renderer::BakeProbes(Entity* scene) {
 	if (!scene) {
 	  // if no scene node was provided, use root node (capture all)
@@ -544,6 +541,7 @@ namespace primal::renderer {
 	  for (unsigned int i = 0; i < node->transform->getChildCount(); ++i)
 		sceneStack.push(node->transform->getChild(i)->entity);
 	}
+
 	commandBuffer.sort();
 	std::vector<RenderCommand> renderCommands = commandBuffer.getCustomRenderCommands(nullptr);
 
@@ -582,16 +580,18 @@ namespace primal::renderer {
 	// default uniforms that are always configured regardless of shader configuration (see them
 	// as a default set of shader uniform variables always there); with UBO
 	material->getShader()->use();
-	if (customCamera)// pass custom camera specific uniform
-	{
+
+	if (customCamera) {
 	  material->getShader()->setMatrix("projection", customCamera->Projection);
 	  material->getShader()->setMatrix("view", customCamera->View);
 	  material->getShader()->setVector("CamPos", customCamera->Position);
 	}
+
 	material->getShader()->setMatrix("model", command->transform);
 	material->getShader()->setMatrix("prevModel", command->prevTransform);
 
 	material->getShader()->setBool("ShadowsEnabled", Shadows);
+
 	if (Shadows && material->type == MATERIAL_CUSTOM && material->shadowReceive) {
 	  for (int i = 0; i < m_DirectionalLights.size(); ++i) {
 		if (m_DirectionalLights[i]->shadowMapRT != nullptr) {

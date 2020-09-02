@@ -16,6 +16,7 @@ namespace primal::renderer::opengl {
 	auto fs = glCreateShader(GL_FRAGMENT_SHADER);
 
 	m_id = glCreateProgram();
+
 	int status;
 	char log[1024];
 
@@ -72,13 +73,13 @@ namespace primal::renderer::opengl {
 	glGetShaderiv(vs, GL_COMPILE_STATUS, &status);
 	if (!status) {
 	  glGetShaderInfoLog(vs, 1024, NULL, log);
-	  PRIMAL_CORE_ERROR("Vertex shader compilation error at: {0}", name);
+	  PRIMAL_CORE_ERROR("Vertex shader compilation error at: {0} -> {1}\nError: {2}", name, vsCode, log);
 	}
 
 	glGetShaderiv(fs, GL_COMPILE_STATUS, &status);
 	if (!status) {
 	  glGetShaderInfoLog(fs, 1024, NULL, log);
-	  PRIMAL_CORE_ERROR("Fragment shader compilation error at: {0}", name);
+	  PRIMAL_CORE_ERROR("Fragment shader compilation error at: {0} -> {1}\nError: {2}", name, fsCode, log);
 	}
 
 	glAttachShader(m_id, vs);

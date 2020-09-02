@@ -44,7 +44,7 @@ namespace primal::renderer {
 	  Renderer();
 	  ~Renderer();
 
-	  void init(GLADloadproc loadProcFunc);
+	  void init();
 
 	  void SetRenderSize(unsigned int width, unsigned int height);
 	  math::vec2 GetRenderSize();

@@ -16,8 +16,7 @@ namespace primal {
 	return instance;
   }
 
-  // TODO: use stack allocator for modules.
-  EngineLoop::EngineLoop() {
+  EngineLoop::EngineLoop() : m_isRunning{ false } {
 	Log::init();
 
 	m_memoryManager = new MemoryManager{};
