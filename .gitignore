@@ -31,3 +31,5 @@ target/
 
 # Renderdoc capture/debugging settings
 *.cap
+
+.cache
