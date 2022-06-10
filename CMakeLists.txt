@@ -75,25 +75,17 @@ target_include_directories(${ENGINE_LIB} PRIVATE "${SOURCES_DIR}")
 
 # [LIB] GLFW
 set(GLFW_DIR "${LIB_DIR}/glfw")
-set(GLFW_BUILD_EXAMPLES
-    OFF
-    CACHE INTERNAL "Build the GLFW example programs")
-set(GLFW_BUILD_TESTS
-    OFF
-    CACHE INTERNAL "Build the GLFW test programs")
-set(GLFW_BUILD_DOCS
-    OFF
-    CACHE INTERNAL "Build the GLFW documentation")
-set(GLFW_INSTALL
-    OFF
-    CACHE INTERNAL "Generate installation target")
 add_subdirectory("${GLFW_DIR}")
-target_include_directories(${ENGINE_LIB} PRIVATE "${GLFW_DIR}/include")
-target_compile_definitions(${ENGINE_LIB} PRIVATE "GLFW_INCLUDE_NONE")
+set(GLFW_BUILD_EXAMPLES OFF)
+set(GLFW_BUILD_TESTS OFF)
+set(GLFW_BUILD_DOCS OFF)
+set(GLFW_INSTALL OFF)
+target_include_directories(${ENGINE_LIB} PUBLIC "${GLFW_DIR}/include")
+target_compile_definitions(${ENGINE_LIB} PUBLIC "GLFW_INCLUDE_NONE")
 
 # [LIB] Vulkan
 find_package(Vulkan REQUIRED)
-target_include_directories(${ENGINE_LIB} PRIVATE "${Vulkan_INCLUDE_DIRS}")
+target_include_directories(${ENGINE_LIB} PUBLIC "${Vulkan_INCLUDE_DIRS}")
 # TODO: Vulkan_GLSLC_EXECUTABLE -> GLSL SPIR-V compiler
 # Vulkan_GLSLANG_VALIDATOR_EXECUTABLE -> glslangValidator
 
@@ -120,13 +112,13 @@ if(BUILD_SHARED_LIBS)
   # NOTE: Need to enable PIC so we can build the shared library correctly.
   set_target_properties(imgui PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
-target_include_directories(imgui PRIVATE "${IMGUI_DIR}" "${GLFW_DIR}/include")
-target_include_directories(${ENGINE_LIB} PRIVATE "${IMGUI_DIR}")
+target_include_directories(imgui PUBLIC "${IMGUI_DIR}" "${GLFW_DIR}/include")
+target_include_directories(${ENGINE_LIB} PUBLIC "${IMGUI_DIR}")
 
 # [LIB] SOIL
 set(SOIL_DIR "${LIB_DIR}/SOIL")
 add_subdirectory("${SOIL_DIR}")
-target_include_directories(${ENGINE_LIB} PRIVATE "${SOIL_DIR}/include")
+target_include_directories(${ENGINE_LIB} PUBLIC "${SOIL_DIR}/include")
 
 # [LIB] ASSIMP
 set(ASSIMP_DIR "${LIB_DIR}/assimp")
@@ -140,7 +132,7 @@ set(ASSIMP_NO_EXPORT OFF)
 set(ASSIMP_WARNINGS_AS_ERRORS OFF)
 set(ASSIMP_UBSAN OFF)
 set(ASSIMP_ASAN OFF)
-target_include_directories(${ENGINE_LIB} PRIVATE "${ASSIMP_DIR}/include")
+target_include_directories(${ENGINE_LIB} PUBLIC "${ASSIMP_DIR}/include")
 
 # [LIB] spdlog
 set(SPDLOG_DIR "${LIB_DIR}/spdlog")
@@ -150,7 +142,7 @@ if(BUILD_SHARED_LIBS)
   set(SPDLOG_BUILD_TEXTS OFF)
   set_target_properties(spdlog PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
-target_include_directories(${ENGINE_LIB} PRIVATE "${SPDLOG_DIR}/include")
+target_include_directories(${ENGINE_LIB} PUBLIC "${SPDLOG_DIR}/include")
 
 # Engine Library Linking
 target_link_libraries(
@@ -168,9 +160,9 @@ target_link_libraries(
 # [EXEC] Main Executable Linking
 set(EXEC_NAME "sandbox")
 add_executable(${EXEC_NAME} ${sandbox_sources})
-target_include_directories(${EXEC_NAME} PRIVATE ${SANDBOX_DIR} ${SOURCES_DIR})
-target_link_libraries(${EXEC_NAME} PRIVATE ${ENGINE_LIB} project_options
-                                           project_warnings)
+target_include_directories(${EXEC_NAME} PUBLIC ${SANDBOX_DIR} ${SOURCES_DIR})
+target_link_libraries(${EXEC_NAME} PUBLIC ${ENGINE_LIB} project_options
+                                          project_warnings)
 
 execute_process(
   COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/res

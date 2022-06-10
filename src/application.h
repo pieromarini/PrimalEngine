@@ -3,7 +3,7 @@
 #include <iostream>
 #include <memory>
 
-#include "window.h"
+#include "primal_window.h"
 #include "renderer.h"
 
 namespace primal {

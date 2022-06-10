@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <vulkan/vulkan.hpp>
 
-#include "window.h"
+#include "primal_window.h"
 #include "platform/vulkan/validation.h"
 
 namespace primal {
