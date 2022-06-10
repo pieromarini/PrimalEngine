@@ -24,11 +24,12 @@ bool Window::shouldClose() {
 }
 
 void Window::processEvents() {
+	glfwPollEvents();
 }
 
 std::vector<const char*> Window::getGLFWExtensions(const bool enableValidationLayers) {
 	uint32_t glfwExtensionCount = 0;
-	const char** glfwExtensions;
+	const char** glfwExtensions{};
 	glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
 	std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);

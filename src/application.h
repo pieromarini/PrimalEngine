@@ -21,7 +21,7 @@ class Application {
 		m_window->init();
 		m_renderer->init();
 
-		while (!m_window->shouldClose()) {
+		while (!(m_window->shouldClose())) {
 			m_window->processEvents();
 
 			m_renderer->render();
