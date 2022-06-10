@@ -9,7 +9,7 @@ project(
   DESCRIPTION "C++ Game Engine"
   LANGUAGES C CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
@@ -20,7 +20,7 @@ include(cmake/BasicSettings.cmake)
 
 # Project Options as an interface library.
 add_library(project_options INTERFACE)
-target_compile_features(project_options INTERFACE cxx_std_17)
+target_compile_features(project_options INTERFACE cxx_std_20)
 
 # Project Compile flags as an interface library.
 add_library(project_warnings INTERFACE)
@@ -91,11 +91,11 @@ add_subdirectory("${GLFW_DIR}")
 target_include_directories(${ENGINE_LIB} PRIVATE "${GLFW_DIR}/include")
 target_compile_definitions(${ENGINE_LIB} PRIVATE "GLFW_INCLUDE_NONE")
 
-# [LIB] GLAD
-set(GLAD_DIR "${LIB_DIR}/glad")
-add_library(glad "${GLAD_DIR}/src/glad.c")
-target_include_directories(glad PRIVATE "${GLAD_DIR}/include")
-target_include_directories(${ENGINE_LIB} PUBLIC "${GLAD_DIR}/include")
+# [LIB] Vulkan
+find_package(Vulkan REQUIRED)
+target_include_directories(${ENGINE_LIB} PRIVATE "${Vulkan_INCLUDE_DIRS}")
+# TODO: Vulkan_GLSLC_EXECUTABLE -> GLSL SPIR-V compiler
+# Vulkan_GLSLANG_VALIDATOR_EXECUTABLE -> glslangValidator
 
 # [LIB] ImGUI
 set(IMGUI_DIR "${LIB_DIR}/imgui")
@@ -106,15 +106,16 @@ add_library(
   ${IMGUI_DIR}/imgui.cpp
   ${IMGUI_DIR}/imgui_demo.cpp
   ${IMGUI_DIR}/imgui_draw.cpp
-  ${IMGUI_DIR}/examples/imgui_impl_glfw.h
-  ${IMGUI_DIR}/examples/imgui_impl_glfw.cpp
-  ${IMGUI_DIR}/examples/imgui_impl_opengl3.h
-  ${IMGUI_DIR}/examples/imgui_impl_opengl3.cpp
+  ${IMGUI_DIR}/backends/imgui_impl_glfw.h
+  ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+  ${IMGUI_DIR}/backends/imgui_impl_vulkan.h
+  ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
   ${IMGUI_DIR}/imgui_internal.h
   ${IMGUI_DIR}/imgui_widgets.cpp
   ${IMGUI_DIR}/imstb_rectpack.h
   ${IMGUI_DIR}/imstb_textedit.h
   ${IMGUI_DIR}/imstb_truetype.h)
+
 if(BUILD_SHARED_LIBS)
   # NOTE: Need to enable PIC so we can build the shared library correctly.
   set_target_properties(imgui PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -129,12 +130,16 @@ target_include_directories(${ENGINE_LIB} PRIVATE "${SOIL_DIR}/include")
 
 # [LIB] ASSIMP
 set(ASSIMP_DIR "${LIB_DIR}/assimp")
+add_subdirectory("${ASSIMP_DIR}")
 set(ASSIMP_BUILD_SAMPLES OFF)
 set(ASSIMP_BUILD_TESTS OFF)
 set(ASSIMP_BUILD_ASSIMP_TOOLS OFF)
-set(ASSIMP_NO_EXPORT OFF)
 set(ASSIMP_INSTALL OFF)
-add_subdirectory("${ASSIMP_DIR}")
+set(ASSIMP_BUILD_ASSIMP_VIEW OFF)
+set(ASSIMP_NO_EXPORT OFF)
+set(ASSIMP_WARNINGS_AS_ERRORS OFF)
+set(ASSIMP_UBSAN OFF)
+set(ASSIMP_ASAN OFF)
 target_include_directories(${ENGINE_LIB} PRIVATE "${ASSIMP_DIR}/include")
 
 # [LIB] spdlog
@@ -153,7 +158,7 @@ target_link_libraries(
   glfw
   "${GLFW_LIBRARIES}"
   soil
-  glad
+  "${Vulkan_LIBRARY}"
   "${CMAKE_DL_LIBS}"
   imgui
   assimp
