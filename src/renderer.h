@@ -27,6 +27,15 @@ class Renderer {
 	}
 
 	void render() {
+		m_context->drawFrame();
+	}
+
+	void waitIdle() {
+		m_context->waitIdle();
+	}
+
+	void framebufferResizedEvent() {
+		m_context->setFramebufferResized(true);
 	}
 
   private:

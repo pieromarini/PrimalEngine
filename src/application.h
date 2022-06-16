@@ -10,7 +10,7 @@ namespace primal {
 
 class Application {
   public:
-	Application() : m_window{ new Window(1920, 1080) }, m_renderer{ new Renderer(m_window) } {}
+	Application() : m_window{ new Window(1920, 1080, this) }, m_renderer{ new Renderer(m_window) } {}
 
 	~Application() {
 		delete m_renderer;
@@ -26,11 +26,18 @@ class Application {
 
 			m_renderer->render();
 		}
+
+		m_renderer->waitIdle();
+	}
+
+	void framebufferResizedEvent() {
+		m_renderer->framebufferResizedEvent();
 	}
 
   private:
 	Window* m_window;
 	Renderer* m_renderer;
 };
+
 
 }// namespace primal

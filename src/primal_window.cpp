@@ -1,14 +1,23 @@
 #include "primal_window.h"
+#include "application.h"
 
 namespace primal {
 
-Window::Window(uint32_t width, uint32_t height) : m_width{ width }, m_height{ height } {
+static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+	auto app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+	app->framebufferResizedEvent();
+}
+
+Window::Window(uint32_t width, uint32_t height, Application* ctx) : m_width{ width }, m_height{ height } {
 	glfwInit();
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 	m_handle = glfwCreateWindow(width, height, "Primal Engine", nullptr, nullptr);
+
+	glfwSetWindowUserPointer(m_handle, ctx);
+	glfwSetFramebufferSizeCallback(m_handle, framebufferResizeCallback);
 }
 
 Window::~Window() {
@@ -25,6 +34,16 @@ bool Window::shouldClose() {
 
 void Window::processEvents() {
 	glfwPollEvents();
+}
+
+void Window::createWindowSurface(vk::Instance& instance, VkSurfaceKHR& surface) {
+	glfwCreateWindowSurface(instance, m_handle, nullptr, &surface);
+}
+
+std::pair<int, int> Window::getFramebufferSize() {
+	int width{}, height{};
+	glfwGetFramebufferSize(m_handle, &width, &height);
+	return { width, height };
 }
 
 std::vector<const char*> Window::getGLFWExtensions(const bool enableValidationLayers) {

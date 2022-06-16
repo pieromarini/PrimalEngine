@@ -1,5 +1,6 @@
 #pragma once
 
+#define GLFW_INCLUDE_VULKAN
 #include <vector>
 
 #include <GLFW/glfw3.h>
@@ -7,11 +8,14 @@
 
 #include <cstdint>
 
+
 namespace primal {
+
+class Application;
 
 class Window {
   public:
-	Window(uint32_t width, uint32_t height);
+	Window(uint32_t width, uint32_t height, Application* ctx);
 
 	~Window();
 
@@ -20,6 +24,10 @@ class Window {
 	bool shouldClose();
 
 	void processEvents();
+
+	void createWindowSurface(vk::Instance& instance, VkSurfaceKHR& surface);
+
+	std::pair<int, int> getFramebufferSize();
 
 	std::vector<const char*> getGLFWExtensions(const bool enableValidationLayers);
 
