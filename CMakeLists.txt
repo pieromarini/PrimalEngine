@@ -44,8 +44,7 @@ option(ENABLE_TESTING "Enable Test Builds" OFF)
 
 option(ENABLE_PCH "Enable Precompiled Headers" OFF)
 if(ENABLE_PCH)
-  target_precompile_headers(project_options INTERFACE <vector> <string> <map>
-                            <utility>)
+  target_precompile_headers(project_options INTERFACE <vector> <string> <map> <utility>)
 endif()
 
 if(ENABLE_TESTING)
@@ -161,8 +160,7 @@ target_link_libraries(
 set(EXEC_NAME "sandbox")
 add_executable(${EXEC_NAME} ${sandbox_sources})
 target_include_directories(${EXEC_NAME} PUBLIC ${SANDBOX_DIR} ${SOURCES_DIR})
-target_link_libraries(${EXEC_NAME} PUBLIC ${ENGINE_LIB} project_options
-                                          project_warnings)
+target_link_libraries(${EXEC_NAME} PUBLIC ${ENGINE_LIB} project_options project_warnings)
 
 execute_process(
   COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/res

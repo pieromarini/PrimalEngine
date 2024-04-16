@@ -9,34 +9,34 @@
 namespace primal {
 
 class Application {
-  public:
-	Application() : m_window{ new Window(1920, 1080, this) }, m_renderer{ new Renderer(m_window) } {}
+	public:
+		Application() : m_window{ new Window(1920, 1080, this) }, m_renderer{ new Renderer(m_window) } {}
 
-	~Application() {
-		delete m_renderer;
-		delete m_window;
-	}
-
-	void run() {
-		m_window->init();
-		m_renderer->init();
-
-		while (!(m_window->shouldClose())) {
-			m_window->processEvents();
-
-			m_renderer->render();
+		~Application() {
+			delete m_renderer;
+			delete m_window;
 		}
 
-		m_renderer->waitIdle();
-	}
+		void run() {
+			m_window->init();
+			m_renderer->init();
 
-	void framebufferResizedEvent() {
-		m_renderer->framebufferResizedEvent();
-	}
+			while (!(m_window->shouldClose())) {
+				m_window->processEvents();
 
-  private:
-	Window* m_window;
-	Renderer* m_renderer;
+				m_renderer->render();
+			}
+
+			m_renderer->waitIdle();
+		}
+
+		void framebufferResizedEvent() {
+			m_renderer->framebufferResizedEvent();
+		}
+
+	private:
+		Window*		m_window;
+		Renderer* m_renderer;
 };
 
 

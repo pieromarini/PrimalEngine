@@ -1,6 +1,6 @@
-#include <vector>
-#include <limits>
 #include <algorithm>
+#include <limits>
+#include <vector>
 
 #include "../../primal_window.h"
 #include <vulkan/vulkan.hpp>
@@ -8,9 +8,9 @@
 namespace primal {
 
 struct SwapChainSupportDetails {
-	vk::SurfaceCapabilitiesKHR capabilities;
-	std::vector<vk::SurfaceFormatKHR> formats;
-	std::vector<vk::PresentModeKHR> presentModes;
+		vk::SurfaceCapabilitiesKHR capabilities;
+		std::vector<vk::SurfaceFormatKHR> formats;
+		std::vector<vk::PresentModeKHR> presentModes;
 };
 
 inline SwapChainSupportDetails querySwapChainSupport(vk::PhysicalDevice device, vk::SurfaceKHR surface) {
@@ -44,7 +44,7 @@ inline vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentMod
 	return vk::PresentModeKHR::eFifo;
 }
 
-vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities, Window* window) {
+inline vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities, Window* window) {
 	if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
 		return capabilities.currentExtent;
 	} else {

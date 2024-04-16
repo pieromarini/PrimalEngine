@@ -3,7 +3,6 @@
 int main() {
 	auto app = primal::Application();
 
-	// DEBUG:
 	try {
 		app.run();
 	} catch (const std::exception& e) {
