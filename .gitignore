@@ -33,3 +33,4 @@ target/
 *.cap
 
 .cache
+extern/assimp*

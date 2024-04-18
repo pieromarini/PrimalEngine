@@ -39,6 +39,10 @@ enable_doxygen()
 include(cmake/SubmodulesCheck.cmake)
 check_submodules()
 
+# FetchContent config
+include(FetchContent)
+set(FETCHCONTENT_BASE_DIR ${PROJECT_SOURCE_DIR}/extern CACHE PATH "Missing description." FORCE)
+
 option(BUILD_SHARED_LIBS "Enable compilation of shared libraries" ON)
 option(ENABLE_TESTING "Enable Test Builds" OFF)
 
@@ -119,18 +123,16 @@ set(STBIMAGE_DIR "${LIB_DIR}/stb_image")
 target_include_directories(${ENGINE_LIB} PUBLIC "${STBIMAGE_DIR}")
 
 # [LIB] ASSIMP
-set(ASSIMP_DIR "${LIB_DIR}/assimp")
-add_subdirectory("${ASSIMP_DIR}")
-set(ASSIMP_BUILD_SAMPLES OFF)
-set(ASSIMP_BUILD_TESTS OFF)
-set(ASSIMP_BUILD_ASSIMP_TOOLS OFF)
-set(ASSIMP_INSTALL OFF)
-set(ASSIMP_BUILD_ASSIMP_VIEW OFF)
-set(ASSIMP_NO_EXPORT OFF)
-set(ASSIMP_WARNINGS_AS_ERRORS OFF)
-set(ASSIMP_UBSAN OFF)
-set(ASSIMP_ASAN OFF)
-target_include_directories(${ENGINE_LIB} PUBLIC "${ASSIMP_DIR}/include")
+FetchContent_Declare(assimp GIT_REPOSITORY https://github.com/assimp/assimp.git GIT_TAG master)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_INJECT_DEBUG_POSTFIX OFF CACHE BOOL "" FORCE)
+set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(assimp)
+target_include_directories(${ENGINE_LIB} PRIVATE extern/assimp-src/include)
+target_link_libraries(${ENGINE_LIB} assimp)
+
+set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 
 # [LIB] spdlog
 set(SPDLOG_DIR "${LIB_DIR}/spdlog")
