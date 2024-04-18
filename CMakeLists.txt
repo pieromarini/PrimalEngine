@@ -75,18 +75,18 @@ target_include_directories(${ENGINE_LIB} PRIVATE "${SOURCES_DIR}")
 target_compile_definitions(${ENGINE_LIB} PUBLIC GLM_FORCE_DEPTH_ZERO_TO_ONE)
 
 # [LIB] GLM
-add_subdirectory(extern/glm)
-target_link_libraries(${ENGINE_LIB} glm::glm)
+add_subdirectory(extern/glm EXCLUDE_FROM_ALL)
+target_include_directories(${ENGINE_LIB} PUBLIC extern/glm)
 
 # [LIB] Vulkan
 find_package(Vulkan REQUIRED)
 target_include_directories(${ENGINE_LIB} PUBLIC "${Vulkan_INCLUDE_DIRS}")
 
 # [LIB] VkBootstrap
-add_subdirectory(extern/vk-bootstrap)
+add_subdirectory(extern/vk-bootstrap EXCLUDE_FROM_ALL)
 set(VK_BOOTSTRAP_TEST OFF CACHE BOOL "" FORCE)
 set(VK_BOOTSTRAP_INSTALL OFF CACHE BOOL "" FORCE)
-target_include_directories(${ENGINE_LIB} PUBLIC vkbootstrap)
+target_include_directories(${ENGINE_LIB} PUBLIC vk-bootstrap)
 
 # [LIB] STB_IMAGE
 set(STBIMAGE_DIR "${LIB_DIR}/stb_image")
@@ -114,6 +114,7 @@ target_include_directories(${ENGINE_LIB} PRIVATE extern/vma/include)
 target_link_libraries(${ENGINE_LIB} PRIVATE
   "${Vulkan_LIBRARY}"
   "${CMAKE_DL_LIBS}"
+  glm::glm
   vk-bootstrap
   SDL3::SDL3
   assimp
@@ -139,7 +140,7 @@ add_custom_target(
   DEPENDS ${SPIRV_BINARY_FILES}
 )
 
-target_precompile_headers(project_options INTERFACE <optional> <vector> <memory> <string> <vector> <unordered_map> <glm/mat4x4.hpp>  <glm/vec4.hpp> <vulkan/vulkan.h>)
+target_precompile_headers(${ENGINE_LIB} INTERFACE <optional> <vector> <memory> <string> <vector> <unordered_map> <vulkan/vulkan.h>)
 
 # [EXEC] Main Executable Linking
 set(EXEC_NAME "sandbox")
