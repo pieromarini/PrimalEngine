@@ -34,3 +34,4 @@ target/
 
 .cache
 extern/assimp*
+extern/sdl*

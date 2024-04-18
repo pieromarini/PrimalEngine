@@ -92,32 +92,6 @@ target_include_directories(${ENGINE_LIB} PUBLIC "${Vulkan_INCLUDE_DIRS}")
 # TODO: Vulkan_GLSLC_EXECUTABLE -> GLSL SPIR-V compiler
 # Vulkan_GLSLANG_VALIDATOR_EXECUTABLE -> glslangValidator
 
-# [LIB] ImGUI
-set(IMGUI_DIR "${LIB_DIR}/imgui")
-add_library(
-  imgui STATIC
-  ${IMGUI_DIR}/imconfig.h
-  ${IMGUI_DIR}/imgui.h
-  ${IMGUI_DIR}/imgui.cpp
-  ${IMGUI_DIR}/imgui_demo.cpp
-  ${IMGUI_DIR}/imgui_draw.cpp
-  ${IMGUI_DIR}/backends/imgui_impl_glfw.h
-  ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
-  ${IMGUI_DIR}/backends/imgui_impl_vulkan.h
-  ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
-  ${IMGUI_DIR}/imgui_internal.h
-  ${IMGUI_DIR}/imgui_widgets.cpp
-  ${IMGUI_DIR}/imstb_rectpack.h
-  ${IMGUI_DIR}/imstb_textedit.h
-  ${IMGUI_DIR}/imstb_truetype.h)
-
-if(BUILD_SHARED_LIBS)
-  # NOTE: Need to enable PIC so we can build the shared library correctly.
-  set_target_properties(imgui PROPERTIES POSITION_INDEPENDENT_CODE ON)
-endif()
-target_include_directories(imgui PUBLIC "${IMGUI_DIR}" "${GLFW_DIR}/include")
-target_include_directories(${ENGINE_LIB} PUBLIC "${IMGUI_DIR}")
-
 # [LIB] STB_IMAGE
 set(STBIMAGE_DIR "${LIB_DIR}/stb_image")
 target_include_directories(${ENGINE_LIB} PUBLIC "${STBIMAGE_DIR}")
@@ -130,31 +104,39 @@ set(ASSIMP_INJECT_DEBUG_POSTFIX OFF CACHE BOOL "" FORCE)
 set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(assimp)
 target_include_directories(${ENGINE_LIB} PRIVATE extern/assimp-src/include)
-target_link_libraries(${ENGINE_LIB} assimp)
 
-set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
-
-# [LIB] spdlog
-set(SPDLOG_DIR "${LIB_DIR}/spdlog")
-add_subdirectory("${SPDLOG_DIR}")
-if(BUILD_SHARED_LIBS)
-  set(SPDLOG_BUILD_SHARED ON)
-  set(SPDLOG_BUILD_TEXTS OFF)
-  set_target_properties(spdlog PROPERTIES POSITION_INDEPENDENT_CODE ON)
-endif()
-target_include_directories(${ENGINE_LIB} PUBLIC "${SPDLOG_DIR}/include")
+# [LIB] SDL3
+FetchContent_Declare(sdl3 GIT_REPOSITORY https://github.com/libsdl-org/SDL.git GIT_TAG main)
+set(BUILD_EXAMPLES OFF CACHE INTERNAL "" FORCE)
+FetchContent_MakeAvailable(sdl3)
+target_include_directories(${ENGINE_LIB} PRIVATE extern/sdl3-src/include)
 
 # Engine Library Linking
-target_link_libraries(
-  ${ENGINE_LIB}
-  glfw
-  "${GLFW_LIBRARIES}"
+target_link_libraries(${ENGINE_LIB} PRIVATE
   "${Vulkan_LIBRARY}"
   "${CMAKE_DL_LIBS}"
-  imgui
+  SDL3::SDL3
   assimp
-  spdlog::spdlog
   tbb
+)
+
+find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)
+
+foreach(GLSL ${glsl_sources})
+  message(STATUS "BUILDING SHADER")
+  get_filename_component(FILE_NAME ${GLSL} NAME)
+  set(SPIRV "${PROJECT_SOURCE_DIR}/shaders/${FILE_NAME}.spv")
+  message(STATUS ${GLSL})
+  add_custom_command(
+    OUTPUT ${SPIRV}
+    COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV}
+    DEPENDS ${GLSL})
+  list(APPEND SPIRV_BINARY_FILES ${SPIRV})
+endforeach(GLSL)
+
+add_custom_target(
+  Shaders 
+  DEPENDS ${SPIRV_BINARY_FILES}
 )
 
 # [EXEC] Main Executable Linking
