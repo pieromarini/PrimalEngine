@@ -46,10 +46,6 @@ set(FETCHCONTENT_BASE_DIR ${PROJECT_SOURCE_DIR}/extern CACHE PATH "Missing descr
 option(BUILD_SHARED_LIBS "Enable compilation of shared libraries" ON)
 option(ENABLE_TESTING "Enable Test Builds" OFF)
 
-option(ENABLE_PCH "Enable Precompiled Headers" OFF)
-if(ENABLE_PCH)
-  target_precompile_headers(project_options INTERFACE <vector> <string> <map> <utility>)
-endif()
 
 if(ENABLE_TESTING)
   enable_testing()
@@ -76,23 +72,21 @@ include(cmake/StaticAnalyzers.cmake)
 
 target_include_directories(${ENGINE_LIB} PRIVATE "${SOURCES_DIR}")
 
-target_compile_definitions(engine PUBLIC GLM_FORCE_DEPTH_ZERO_TO_ONE)
+target_compile_definitions(${ENGINE_LIB} PUBLIC GLM_FORCE_DEPTH_ZERO_TO_ONE)
 
-# [LIB] GLFW
-set(GLFW_DIR "${LIB_DIR}/glfw")
-add_subdirectory("${GLFW_DIR}")
-set(GLFW_BUILD_EXAMPLES OFF)
-set(GLFW_BUILD_TESTS OFF)
-set(GLFW_BUILD_DOCS OFF)
-set(GLFW_INSTALL OFF)
-target_include_directories(${ENGINE_LIB} PUBLIC "${GLFW_DIR}/include")
-target_compile_definitions(${ENGINE_LIB} PUBLIC "GLFW_INCLUDE_NONE")
+# [LIB] GLM
+add_subdirectory(extern/glm)
+target_link_libraries(${ENGINE_LIB} glm::glm)
 
 # [LIB] Vulkan
 find_package(Vulkan REQUIRED)
 target_include_directories(${ENGINE_LIB} PUBLIC "${Vulkan_INCLUDE_DIRS}")
-# TODO: Vulkan_GLSLC_EXECUTABLE -> GLSL SPIR-V compiler
-# Vulkan_GLSLANG_VALIDATOR_EXECUTABLE -> glslangValidator
+
+# [LIB] VkBootstrap
+add_subdirectory(extern/vk-bootstrap)
+set(VK_BOOTSTRAP_TEST OFF CACHE BOOL "" FORCE)
+set(VK_BOOTSTRAP_INSTALL OFF CACHE BOOL "" FORCE)
+target_include_directories(${ENGINE_LIB} PUBLIC vkbootstrap)
 
 # [LIB] STB_IMAGE
 set(STBIMAGE_DIR "${LIB_DIR}/stb_image")
@@ -113,10 +107,14 @@ set(BUILD_EXAMPLES OFF CACHE INTERNAL "" FORCE)
 FetchContent_MakeAvailable(sdl3)
 target_include_directories(${ENGINE_LIB} PRIVATE extern/sdl3-src/include)
 
+# [LIB] VulkanMemoryAllocator
+target_include_directories(${ENGINE_LIB} PRIVATE extern/vma/include)
+
 # Engine Library Linking
 target_link_libraries(${ENGINE_LIB} PRIVATE
   "${Vulkan_LIBRARY}"
   "${CMAKE_DL_LIBS}"
+  vk-bootstrap
   SDL3::SDL3
   assimp
   tbb
@@ -140,6 +138,8 @@ add_custom_target(
   Shaders 
   DEPENDS ${SPIRV_BINARY_FILES}
 )
+
+target_precompile_headers(project_options INTERFACE <optional> <vector> <memory> <string> <vector> <unordered_map> <glm/mat4x4.hpp>  <glm/vec4.hpp> <vulkan/vulkan.h>)
 
 # [EXEC] Main Executable Linking
 set(EXEC_NAME "sandbox")
