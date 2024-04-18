@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 3.1...3.15)
+cmake_minimum_required(VERSION 3.27)
 
-if(${CMAKE_VERSION} VERSION_LESS 3.12)
+if(${CMAKE_VERSION} VERSION_LESS 3.27)
   cmake_policy(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}})
 endif()
 
@@ -114,10 +114,9 @@ endif()
 target_include_directories(imgui PUBLIC "${IMGUI_DIR}" "${GLFW_DIR}/include")
 target_include_directories(${ENGINE_LIB} PUBLIC "${IMGUI_DIR}")
 
-# [LIB] SOIL
-set(SOIL_DIR "${LIB_DIR}/SOIL")
-add_subdirectory("${SOIL_DIR}")
-target_include_directories(${ENGINE_LIB} PUBLIC "${SOIL_DIR}/include")
+# [LIB] STB_IMAGE
+set(STBIMAGE_DIR "${LIB_DIR}/stb_image")
+target_include_directories(${ENGINE_LIB} PUBLIC "${STBIMAGE_DIR}")
 
 # [LIB] ASSIMP
 set(ASSIMP_DIR "${LIB_DIR}/assimp")
@@ -148,13 +147,13 @@ target_link_libraries(
   ${ENGINE_LIB}
   glfw
   "${GLFW_LIBRARIES}"
-  soil
   "${Vulkan_LIBRARY}"
   "${CMAKE_DL_LIBS}"
   imgui
   assimp
   spdlog::spdlog
-  tbb)
+  tbb
+)
 
 # [EXEC] Main Executable Linking
 set(EXEC_NAME "sandbox")
