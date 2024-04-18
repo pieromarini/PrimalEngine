@@ -76,6 +76,8 @@ include(cmake/StaticAnalyzers.cmake)
 
 target_include_directories(${ENGINE_LIB} PRIVATE "${SOURCES_DIR}")
 
+target_compile_definitions(engine PUBLIC GLM_FORCE_DEPTH_ZERO_TO_ONE)
+
 # [LIB] GLFW
 set(GLFW_DIR "${LIB_DIR}/glfw")
 add_subdirectory("${GLFW_DIR}")
@@ -120,7 +122,7 @@ target_link_libraries(${ENGINE_LIB} PRIVATE
   tbb
 )
 
-find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)
+find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin)
 
 foreach(GLSL ${glsl_sources})
   message(STATUS "BUILDING SHADER")
