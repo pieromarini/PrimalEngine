@@ -1,3 +1,6 @@
 [submodule "extern/vma"]
 	path = extern/vma
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
+[submodule "extern/vk-bootstrap"]
+	path = extern/vk-bootstrap
+	url = https://github.com/charles-lunarg/vk-bootstrap/
