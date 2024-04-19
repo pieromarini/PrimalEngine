@@ -70,7 +70,7 @@ endif()
 # Setup static analysis
 include(cmake/StaticAnalyzers.cmake)
 
-target_include_directories(${ENGINE_LIB} PRIVATE "${SOURCES_DIR}")
+target_include_directories(${ENGINE_LIB} PUBLIC "${SOURCES_DIR}")
 
 target_compile_definitions(${ENGINE_LIB} PUBLIC GLM_FORCE_DEPTH_ZERO_TO_ONE)
 
@@ -99,19 +99,19 @@ set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_INJECT_DEBUG_POSTFIX OFF CACHE BOOL "" FORCE)
 set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(assimp)
-target_include_directories(${ENGINE_LIB} PRIVATE extern/assimp-src/include)
+target_include_directories(${ENGINE_LIB} PUBLIC extern/assimp-src/include)
 
 # [LIB] SDL3
 FetchContent_Declare(sdl3 GIT_REPOSITORY https://github.com/libsdl-org/SDL.git GIT_TAG main)
 set(BUILD_EXAMPLES OFF CACHE INTERNAL "" FORCE)
 FetchContent_MakeAvailable(sdl3)
-target_include_directories(${ENGINE_LIB} PRIVATE extern/sdl3-src/include)
+target_include_directories(${ENGINE_LIB} PUBLIC extern/sdl3-src/include)
 
 # [LIB] VulkanMemoryAllocator
-target_include_directories(${ENGINE_LIB} PRIVATE extern/vma/include)
+target_include_directories(${ENGINE_LIB} PUBLIC extern/vma/include)
 
 # Engine Library Linking
-target_link_libraries(${ENGINE_LIB} PRIVATE
+target_link_libraries(${ENGINE_LIB} PUBLIC
   "${Vulkan_LIBRARY}"
   "${CMAKE_DL_LIBS}"
   glm::glm
@@ -121,8 +121,8 @@ target_link_libraries(${ENGINE_LIB} PRIVATE
   tbb
 )
 
+# SPIR-V shader compilation
 find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin)
-
 foreach(GLSL ${glsl_sources})
   message(STATUS "BUILDING SHADER")
   get_filename_component(FILE_NAME ${GLSL} NAME)
@@ -135,11 +135,11 @@ foreach(GLSL ${glsl_sources})
   list(APPEND SPIRV_BINARY_FILES ${SPIRV})
 endforeach(GLSL)
 
-add_custom_target(
-  Shaders 
+add_custom_target(Shaders 
   DEPENDS ${SPIRV_BINARY_FILES}
 )
 
+# Engine precompiled headers
 target_precompile_headers(${ENGINE_LIB} INTERFACE <optional> <vector> <memory> <string> <vector> <unordered_map> <vulkan/vulkan.h>)
 
 # [EXEC] Main Executable Linking
