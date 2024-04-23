@@ -10,6 +10,14 @@ struct VulkanRendererConfig {
 		SDL_Window* window;
 };
 
+struct FrameData {
+		VkCommandPool commandPool;
+		VkCommandBuffer commandBuffer;
+};
+
+constexpr uint32_t FRAME_OVERLAP = 2;
+
+
 class VulkanRenderer {
 	public:
 		void init(VulkanRendererConfig config);
@@ -35,6 +43,13 @@ class VulkanRenderer {
 		std::vector<VkImage> m_swapchainImages;
 		std::vector<VkImageView> m_swapchainImageViews;
 		VkExtent2D m_swapchainExtent;
+
+		// Commands
+		FrameData m_frames[FRAME_OVERLAP]{};
+		uint32_t m_frameNumber{};
+		FrameData& getCurrentFrame() { return m_frames[m_frameNumber % FRAME_OVERLAP]; };
+		VkQueue m_graphicsQueue{};
+		uint32_t m_graphicsQueueFamily{};
 };
 
 }// namespace pm

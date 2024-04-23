@@ -9,7 +9,9 @@
 #include <string>
 #include <vector>
 
-#define VMA_IMPLEMENTATION
+#include <format>
+
+#include "vk_enum_string_helper.h"
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 

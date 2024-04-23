@@ -51,18 +51,15 @@ void pm::PrimalApp::run() {
 	SDL_Event e;
 	bool bQuit = false;
 
-	// main loop
 	while (!bQuit) {
-		// Handle events on queue
 		while (SDL_PollEvent(&e) != 0) {
-			// close the window when user alt-f4s or clicks the X button
 			if (e.type == SDL_EVENT_QUIT)
 				bQuit = true;
 
-			if (e.type == SDL_EVENT_WINDOW_MINIMIZED) {
+			if (e.type == SDL_EVENT_WINDOW_MINIMIZED || e.type == SDL_EVENT_WINDOW_FOCUS_LOST) {
 				m_stopRendering = true;
 			}
-			if (e.type == SDL_EVENT_WINDOW_RESTORED) {
+			if (e.type == SDL_EVENT_WINDOW_RESTORED || e.type == SDL_EVENT_WINDOW_FOCUS_GAINED) {
 				m_stopRendering = false;
 			}
 		}

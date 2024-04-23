@@ -1,3 +1,5 @@
+#pragma once
+
 #include "platform/vulkan/vulkan_renderer.h"
 #include "vk_types.h"
 

@@ -7,7 +7,7 @@ endif()
 project(
   PrimalEngine
   DESCRIPTION "C++ Game Engine"
-  LANGUAGES C CXX)
+  LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -46,7 +46,6 @@ set(FETCHCONTENT_BASE_DIR ${PROJECT_SOURCE_DIR}/extern CACHE PATH "Missing descr
 option(BUILD_SHARED_LIBS "Enable compilation of shared libraries" ON)
 option(ENABLE_TESTING "Enable Test Builds" OFF)
 
-
 if(ENABLE_TESTING)
   enable_testing()
   message("Building Tests")
@@ -60,12 +59,10 @@ set(LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/extern")
 set(SOURCES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(SANDBOX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sandbox")
 set(ENGINE_LIB "primal_engine")
-if(BUILD_SHARED_LIBS)
-  add_library(${ENGINE_LIB} SHARED "${engine_sources}")
-  set_target_properties(${ENGINE_LIB} PROPERTIES POSITION_INDEPENDENT_CODE ON)
-else()
-  add_library(${ENGINE_LIB} "${engine_sources}")
-endif()
+
+add_library(${ENGINE_LIB} SHARED "${engine_sources}")
+
+set_target_properties(${ENGINE_LIB} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Setup static analysis
 include(cmake/StaticAnalyzers.cmake)
@@ -86,15 +83,14 @@ target_include_directories(${ENGINE_LIB} PUBLIC "${Vulkan_INCLUDE_DIRS}")
 add_subdirectory(extern/vk-bootstrap EXCLUDE_FROM_ALL)
 set(VK_BOOTSTRAP_TEST OFF CACHE BOOL "" FORCE)
 set(VK_BOOTSTRAP_INSTALL OFF CACHE BOOL "" FORCE)
-target_include_directories(${ENGINE_LIB} PUBLIC vk-bootstrap)
+target_include_directories(${ENGINE_LIB} PUBLIC vk-bootstrap/src)
 
 # [LIB] STB_IMAGE
 set(STBIMAGE_DIR "${LIB_DIR}/stb_image")
 target_include_directories(${ENGINE_LIB} PUBLIC "${STBIMAGE_DIR}")
 
 # [LIB] ASSIMP
-FetchContent_Declare(assimp GIT_REPOSITORY https://github.com/assimp/assimp.git GIT_TAG master)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(assimp GIT_REPOSITORY https://github.com/assimp/assimp.git GIT_TAG master EXCLUDE_FROM_ALL)
 set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_INJECT_DEBUG_POSTFIX OFF CACHE BOOL "" FORCE)
 set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
@@ -102,20 +98,26 @@ FetchContent_MakeAvailable(assimp)
 target_include_directories(${ENGINE_LIB} PUBLIC extern/assimp-src/include)
 
 # [LIB] SDL3
-FetchContent_Declare(sdl3 GIT_REPOSITORY https://github.com/libsdl-org/SDL.git GIT_TAG main)
+FetchContent_Declare(sdl3 GIT_REPOSITORY https://github.com/libsdl-org/SDL.git GIT_TAG main EXCLUDE_FROM_ALL)
 set(BUILD_EXAMPLES OFF CACHE INTERNAL "" FORCE)
+set(SDL_TEST_LIBRARY OFF CACHE INTERNAL "" FORCE)
+set(SDL_TESTS OFF CACHE INTERNAL "" FORCE)
+set(SDL_DISABLE_INSTALL OFF CACHE INTERNAL "" FORCE)
+set(SDL_DISABLE_INSTALL_DOCS OFF CACHE INTERNAL "" FORCE)
+set(SDL_INSTALL_TESTS OFF CACHE INTERNAL "" FORCE)
 FetchContent_MakeAvailable(sdl3)
 target_include_directories(${ENGINE_LIB} PUBLIC extern/sdl3-src/include)
 
 # [LIB] VulkanMemoryAllocator
-target_include_directories(${ENGINE_LIB} PUBLIC extern/vma/include)
+add_subdirectory(extern/vma EXCLUDE_FROM_ALL)
 
 # Engine Library Linking
 target_link_libraries(${ENGINE_LIB} PUBLIC
   "${Vulkan_LIBRARY}"
   "${CMAKE_DL_LIBS}"
+  GPUOpen::VulkanMemoryAllocator
+  vk-bootstrap::vk-bootstrap
   glm::glm
-  vk-bootstrap
   SDL3::SDL3
   assimp
   tbb
