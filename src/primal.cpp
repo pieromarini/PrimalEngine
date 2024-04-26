@@ -76,4 +76,5 @@ void pm::PrimalApp::run() {
 }
 
 void pm::PrimalApp::draw() {
+	m_renderer.draw();
 }

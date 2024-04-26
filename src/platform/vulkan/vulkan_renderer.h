@@ -1,3 +1,5 @@
+#pragma once
+
 #include <SDL3/SDL.h>
 #include <VkBootstrap.h>
 #include <vulkan/vulkan.h>
@@ -11,8 +13,11 @@ struct VulkanRendererConfig {
 };
 
 struct FrameData {
-		VkCommandPool commandPool;
-		VkCommandBuffer commandBuffer;
+		VkCommandPool m_commandPool;
+		VkCommandBuffer m_commandBuffer;
+		VkSemaphore m_swapchainSemaphore;
+		VkSemaphore m_renderSemaphore;
+		VkFence m_renderFence;
 };
 
 constexpr uint32_t FRAME_OVERLAP = 2;
@@ -25,6 +30,7 @@ class VulkanRenderer {
 		void initSwapchain(VulkanRendererConfig& config);
 		void initCommands(VulkanRendererConfig& config);
 		void initSyncStructures(VulkanRendererConfig& config);
+		void draw();
 
 		void cleanup();
 
