@@ -1,6 +1,7 @@
 #include "vulkan_renderer.h"
 #include "SDL3/SDL_vulkan.h"
 #include "vk_types.h"
+#include "vulkan_structures_helpers.h"
 
 namespace pm {
 
@@ -39,7 +40,7 @@ void VulkanRenderer::initVulkan(VulkanRendererConfig& config) {
 	features12.bufferDeviceAddress = true;
 	features12.descriptorIndexing = true;
 
-	// Yse VKBootstrap to select a gpu.
+	// Use VKBootstrap to select a gpu.
 	// We want a gpu that can write to the SDL surface and supports vulkan 1.3 with the correct features
 	vkb::PhysicalDeviceSelector selector{ vkbInstance };
 	vkb::PhysicalDevice physicalDevice = selector
@@ -69,18 +70,12 @@ void VulkanRenderer::initSwapchain(VulkanRendererConfig& config) {
 }
 
 void VulkanRenderer::initCommands(VulkanRendererConfig& config) {
-	VkCommandPoolCreateInfo commandPoolCreateInfo = {};
-	commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-	commandPoolCreateInfo.queueFamilyIndex = m_graphicsQueueFamily;
-	for (uint32_t i = 0; i < FRAME_OVERLAP; ++i) {
-		VK_CHECK(vkCreateCommandPool(m_device, &commandPoolCreateInfo, nullptr, &m_frames[i].commandPool));
-		VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
-		commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		commandBufferAllocateInfo.commandPool = m_frames[i].commandPool;
-		commandBufferAllocateInfo.commandBufferCount = 1;
-		commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		VK_CHECK(vkAllocateCommandBuffers(m_device, &commandBufferAllocateInfo, &m_frames[i].commandBuffer));
+	auto commandPoolInfo = commandPoolCreateInfo(m_graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+
+	for (auto& frame : m_frames) {
+		VK_CHECK(vkCreateCommandPool(m_device, &commandPoolInfo, nullptr, &frame.commandPool));
+		auto commandAllocateInfo = commandBufferAllocateInfo(frame.commandPool, 1);
+		VK_CHECK(vkAllocateCommandBuffers(m_device, &commandAllocateInfo, &frame.commandBuffer));
 	}
 }
 
@@ -118,12 +113,19 @@ void VulkanRenderer::destroySwapchain() {
 }
 
 void VulkanRenderer::cleanup() {
+	vkDeviceWaitIdle(m_device);
+
+	for (auto& m_frame : m_frames) {
+		vkDestroyCommandPool(m_device, m_frame.commandPool, nullptr);
+	}
+
 	destroySwapchain();
 
 	vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
 	vkDestroyDevice(m_device, nullptr);
 
 	vkb::destroy_debug_utils_messenger(m_instance, m_debug_messenger);
+
 	vkDestroyInstance(m_instance, nullptr);
 }
 
