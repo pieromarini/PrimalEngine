@@ -1,5 +1,6 @@
 #pragma once
 
+#include "vk_types.h"
 #include <SDL3/SDL.h>
 #include <VkBootstrap.h>
 #include <vulkan/vulkan.h>
@@ -20,6 +21,14 @@ struct FrameData {
 		VkFence m_renderFence;
 };
 
+struct AllocatedImage {
+		VkImage image;
+		VkImageView imageView;
+		VmaAllocation allocation;
+		VkExtent3D imageExtent;
+		VkFormat imageFormat;
+};
+
 constexpr uint32_t FRAME_OVERLAP = 2;
 
 
@@ -30,7 +39,10 @@ class VulkanRenderer {
 		void initSwapchain(VulkanRendererConfig& config);
 		void initCommands(VulkanRendererConfig& config);
 		void initSyncStructures(VulkanRendererConfig& config);
+
+		// drawing
 		void draw();
+		void drawBackground(VkCommandBuffer commandBuffer);
 
 		void cleanup();
 
@@ -56,6 +68,13 @@ class VulkanRenderer {
 		FrameData& getCurrentFrame() { return m_frames[m_frameNumber % FRAME_OVERLAP]; };
 		VkQueue m_graphicsQueue{};
 		uint32_t m_graphicsQueueFamily{};
+
+		// Allocator
+		VmaAllocator m_allocator;
+
+		// Draw resources
+		AllocatedImage m_drawImage;
+		VkExtent2D m_drawExtent;
 };
 
 }// namespace pm

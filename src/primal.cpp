@@ -1,12 +1,10 @@
 #include <chrono>
-#include <iostream>
 #include <thread>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
 #include "primal.h"
-#include <vk_types.h>
 
 constexpr bool bUseValidationLayers = true;
 
@@ -24,8 +22,8 @@ void pm::PrimalApp::init() {
 
 	m_window = SDL_CreateWindow(
 		"Vulkan Engine",
-		m_windowExtent.width,
-		m_windowExtent.height,
+		static_cast<int32_t>(m_windowExtent.width),
+		static_cast<int32_t>(m_windowExtent.height),
 		window_flags);
 
 	VulkanRendererConfig config = {

@@ -100,3 +100,46 @@ inline VkSubmitInfo2 submitInfo(VkCommandBufferSubmitInfo* cmd, VkSemaphoreSubmi
 
 	return info;
 }
+
+inline VkImageCreateInfo imageCreateInfo(VkFormat format, VkImageUsageFlags usageFlags, VkExtent3D extent) {
+	VkImageCreateInfo createInfo = {};
+
+	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	createInfo.pNext = nullptr;
+
+	createInfo.imageType = VK_IMAGE_TYPE_2D;
+
+	createInfo.format = format;
+	createInfo.extent = extent;
+
+	createInfo.mipLevels = 1;
+	createInfo.arrayLayers = 1;
+
+	// for MSAA. we will not be using it by default, so default it to 1 sample per pixel.
+	createInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+	// optimal tiling, which means the image is stored on the best gpu format
+	createInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+	createInfo.usage = usageFlags;
+
+	return createInfo;
+}
+
+inline VkImageViewCreateInfo imageViewCreateInfo(VkFormat format, VkImage image, VkImageAspectFlags aspectFlags) {
+	// build a image-view for the depth image to use for rendering
+	VkImageViewCreateInfo createInfo = {};
+
+	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	createInfo.pNext = nullptr;
+
+	createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	createInfo.image = image;
+	createInfo.format = format;
+	createInfo.subresourceRange.baseMipLevel = 0;
+	createInfo.subresourceRange.levelCount = 1;
+	createInfo.subresourceRange.baseArrayLayer = 0;
+	createInfo.subresourceRange.layerCount = 1;
+	createInfo.subresourceRange.aspectMask = aspectFlags;
+
+	return createInfo;
+}
