@@ -33,5 +33,10 @@ target/
 *.cap
 
 .cache
+
+# Cmake FetchContent build dirs
 extern/assimp*
 extern/sdl*
+
+# Compiled SPV shaders
+res/shaders/*.spv
