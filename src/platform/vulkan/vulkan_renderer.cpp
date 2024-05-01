@@ -1,11 +1,12 @@
 #define VMA_IMPLEMENTATION
-#include "vulkan_renderer.h"
+#include <vector>
+#include <cmath>
 #include "SDL3/SDL_vulkan.h"
 #include "platform/vulkan/vulkan_images.h"
 #include "vk_types.h"
+#include "vulkan_renderer.h"
 #include "vulkan_structures_helpers.h"
-#include <cmath>
-#include <cstdlib>
+#include "platform/vulkan/vulkan_descriptor.h"
 
 namespace pm {
 
@@ -14,6 +15,8 @@ void VulkanRenderer::init(VulkanRendererConfig config) {
 	initSwapchain(config);
 	initCommands(config);
 	initSyncStructures(config);
+	initDescriptors();
+	initPipelines();
 }
 
 void VulkanRenderer::initVulkan(VulkanRendererConfig& config) {
@@ -185,6 +188,9 @@ void VulkanRenderer::cleanup() {
 	vkDestroyImageView(m_device, m_drawImage.imageView, nullptr);
 	vmaDestroyImage(m_allocator, m_drawImage.image, m_drawImage.allocation);
 
+	vkDestroyPipelineLayout(m_device, m_gradientPipelineLayout, nullptr);
+	vkDestroyPipeline(m_device, m_gradientPipeline, nullptr);
+
 	destroySwapchain();
 
 	vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
@@ -273,15 +279,77 @@ void VulkanRenderer::draw() {
 }
 
 void VulkanRenderer::drawBackground(VkCommandBuffer commandBuffer) {
-	// make a clear-color from frame number. This will flash with a 120 frame period.
-	VkClearColorValue clearValue;
-	float flash = std::abs(std::sin(static_cast<float>(m_frameNumber) / 120.f));
-	clearValue = { { 0.0f, 0.0f, flash, 1.0f } };
-
-	auto clearRange = imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
-
-	// clear image
-	vkCmdClearColorImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_gradientPipeline);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_gradientPipelineLayout, 0, 1, &m_drawImageDescriptors, 0, nullptr);
+	vkCmdDispatch(commandBuffer, std::ceil(m_drawExtent.width / 16.0), std::ceil(m_drawExtent.height / 16.0), 1);
 }
+
+void VulkanRenderer::initDescriptors() {
+	std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
+		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 }
+	};
+
+	m_globalDescriptorAllocator.initPool(m_device, 10, sizes);
+
+	DescriptorLayoutBuilder builder;
+	builder.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+	m_drawImageDescriptorLayout = builder.build(m_device, VK_SHADER_STAGE_COMPUTE_BIT);
+
+	m_drawImageDescriptors = m_globalDescriptorAllocator.allocate(m_device, m_drawImageDescriptorLayout);
+
+	VkDescriptorImageInfo imgInfo = {};
+	imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+	imgInfo.imageView = m_drawImage.imageView;
+
+	VkWriteDescriptorSet drawImageWrite = {};
+	drawImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	drawImageWrite.pNext = nullptr;
+
+	drawImageWrite.dstBinding = 0;
+	drawImageWrite.dstSet = m_drawImageDescriptors;
+	drawImageWrite.descriptorCount = 1;
+	drawImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	drawImageWrite.pImageInfo = &imgInfo;
+
+	vkUpdateDescriptorSets(m_device, 1, &drawImageWrite, 0, nullptr);
+}
+
+void VulkanRenderer::initPipelines() {
+	initBackgroundPipelines();
+}
+
+void VulkanRenderer::initBackgroundPipelines() {
+	VkPipelineLayoutCreateInfo computeLayout{};
+	computeLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	computeLayout.pNext = nullptr;
+	computeLayout.pSetLayouts = &m_drawImageDescriptorLayout;
+	computeLayout.setLayoutCount = 1;
+
+	VK_CHECK(vkCreatePipelineLayout(m_device, &computeLayout, nullptr, &m_gradientPipelineLayout));
+
+	VkShaderModule computeDrawShader{};
+	if (!loadShaderModule("res/shaders/gradient.comp.spv", m_device, &computeDrawShader)) {
+		std::format("Error when building the compute shader \n");
+	}
+
+	VkPipelineShaderStageCreateInfo stageinfo{};
+	stageinfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	stageinfo.pNext = nullptr;
+	stageinfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+	stageinfo.module = computeDrawShader;
+	stageinfo.pName = "main";
+
+	VkComputePipelineCreateInfo computePipelineCreateInfo{};
+	computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	computePipelineCreateInfo.pNext = nullptr;
+	computePipelineCreateInfo.layout = m_gradientPipelineLayout;
+	computePipelineCreateInfo.stage = stageinfo;
+
+	VK_CHECK(vkCreateComputePipelines(m_device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &m_gradientPipeline));
+
+	// Shader modules are only used when building the pipeline
+	vkDestroyShaderModule(m_device, computeDrawShader, nullptr);
+}
+
 
 }// namespace pm

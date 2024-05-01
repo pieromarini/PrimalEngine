@@ -1,9 +1,12 @@
 #pragma once
 
-#include "vk_types.h"
 #include <SDL3/SDL.h>
 #include <VkBootstrap.h>
 #include <vulkan/vulkan.h>
+
+#include "vk_types.h"
+#include "vulkan_descriptor.h"
+#include "vulkan_shader.h"
 
 namespace pm {
 
@@ -35,10 +38,6 @@ constexpr uint32_t FRAME_OVERLAP = 2;
 class VulkanRenderer {
 	public:
 		void init(VulkanRendererConfig config);
-		void initVulkan(VulkanRendererConfig& config);
-		void initSwapchain(VulkanRendererConfig& config);
-		void initCommands(VulkanRendererConfig& config);
-		void initSyncStructures(VulkanRendererConfig& config);
 
 		// drawing
 		void draw();
@@ -47,6 +46,14 @@ class VulkanRenderer {
 		void cleanup();
 
 	private:
+		void initVulkan(VulkanRendererConfig& config);
+		void initSwapchain(VulkanRendererConfig& config);
+		void initCommands(VulkanRendererConfig& config);
+		void initSyncStructures(VulkanRendererConfig& config);
+		void initDescriptors();
+		void initPipelines();
+		void initBackgroundPipelines();
+
 		VkInstance m_instance;
 		VkDebugUtilsMessengerEXT m_debug_messenger;
 		VkPhysicalDevice m_chosenGPU;
@@ -75,6 +82,15 @@ class VulkanRenderer {
 		// Draw resources
 		AllocatedImage m_drawImage;
 		VkExtent2D m_drawExtent;
+
+		// Descriptors
+		DescriptorAllocator m_globalDescriptorAllocator;
+		VkDescriptorSet m_drawImageDescriptors;
+		VkDescriptorSetLayout m_drawImageDescriptorLayout;
+
+		// Pipelines
+		VkPipeline m_gradientPipeline;
+		VkPipelineLayout m_gradientPipelineLayout;
 };
 
 }// namespace pm
