@@ -182,9 +182,10 @@ void VulkanRenderer::cleanup() {
 		vkDestroySemaphore(m_device, frame.m_swapchainSemaphore, nullptr);
 	}
 
-	destroySwapchain();
 	vkDestroyImageView(m_device, m_drawImage.imageView, nullptr);
 	vmaDestroyImage(m_allocator, m_drawImage.image, m_drawImage.allocation);
+
+	destroySwapchain();
 
 	vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
 	vkDestroyDevice(m_device, nullptr);

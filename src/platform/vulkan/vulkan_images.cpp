@@ -26,10 +26,9 @@ void transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout currentLa
 }
 
 void copyImageToImage(VkCommandBuffer cmd, VkImage source, VkImage destination, VkExtent2D srcSize, VkExtent2D dstSize) {
-	VkImageBlit2 blitRegion{
-		.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
-		.pNext = nullptr
-	};
+	VkImageBlit2 blitRegion = {};
+	blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+	blitRegion.pNext = nullptr;
 
 	blitRegion.srcOffsets[1].x = static_cast<int32_t>(srcSize.width);
 	blitRegion.srcOffsets[1].y = static_cast<int32_t>(srcSize.height);
@@ -49,7 +48,9 @@ void copyImageToImage(VkCommandBuffer cmd, VkImage source, VkImage destination, 
 	blitRegion.dstSubresource.layerCount = 1;
 	blitRegion.dstSubresource.mipLevel = 0;
 
-	VkBlitImageInfo2 blitInfo{ .sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2, .pNext = nullptr };
+	VkBlitImageInfo2 blitInfo = {};
+	blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+	blitInfo.pNext = nullptr;
 	blitInfo.dstImage = destination;
 	blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 	blitInfo.srcImage = source;
