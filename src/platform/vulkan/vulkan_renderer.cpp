@@ -1,12 +1,13 @@
 #define VMA_IMPLEMENTATION
-#include <vector>
-#include <cmath>
+#include "vulkan_renderer.h"
 #include "SDL3/SDL_vulkan.h"
+#include "platform/vulkan/vulkan_descriptor.h"
 #include "platform/vulkan/vulkan_images.h"
 #include "vk_types.h"
-#include "vulkan_renderer.h"
+#include "vulkan_pipeline.h"
 #include "vulkan_structures_helpers.h"
-#include "platform/vulkan/vulkan_descriptor.h"
+#include <cmath>
+#include <vector>
 
 namespace pm {
 
@@ -191,6 +192,9 @@ void VulkanRenderer::cleanup() {
 	vkDestroyPipelineLayout(m_device, m_gradientPipelineLayout, nullptr);
 	vkDestroyPipeline(m_device, m_gradientPipeline, nullptr);
 
+	vkDestroyPipelineLayout(m_device, m_trianglePipelineLayout, nullptr);
+	vkDestroyPipeline(m_device, m_trianglePipeline, nullptr);
+
 	destroySwapchain();
 
 	vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
@@ -232,7 +236,11 @@ void VulkanRenderer::draw() {
 	drawBackground(commandBuffer);
 
 	// transition the draw image and the swapchain image into their correct transfer layouts
-	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+	drawGeometry(commandBuffer);
+
+	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 	transitionImage(commandBuffer, m_swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 	// execute a copy from the draw image into the swapchain
@@ -284,6 +292,39 @@ void VulkanRenderer::drawBackground(VkCommandBuffer commandBuffer) {
 	vkCmdDispatch(commandBuffer, std::ceil(m_drawExtent.width / 16.0), std::ceil(m_drawExtent.height / 16.0), 1);
 }
 
+void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
+	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(m_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
+
+	VkRenderingInfo renderInfo = renderingInfo(m_drawExtent, &colorAttachment, nullptr);
+	vkCmdBeginRendering(commandBuffer, &renderInfo);
+
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_trianglePipeline);
+
+	// set dynamic viewport and scissor
+	VkViewport viewport = {};
+	viewport.x = 0;
+	viewport.y = 0;
+	viewport.width = static_cast<float>(m_drawExtent.width);
+	viewport.height = static_cast<float>(m_drawExtent.height);
+	viewport.minDepth = 0.f;
+	viewport.maxDepth = 1.f;
+
+	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+	VkRect2D scissor = {};
+	scissor.offset.x = 0;
+	scissor.offset.y = 0;
+	scissor.extent.width = m_drawExtent.width;
+	scissor.extent.height = m_drawExtent.height;
+
+	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+	// launch a draw command to draw 3 vertices
+	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+	vkCmdEndRendering(commandBuffer);
+}
+
 void VulkanRenderer::initDescriptors() {
 	std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
 		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 }
@@ -316,6 +357,7 @@ void VulkanRenderer::initDescriptors() {
 
 void VulkanRenderer::initPipelines() {
 	initBackgroundPipelines();
+	initTrianglePipeline();
 }
 
 void VulkanRenderer::initBackgroundPipelines() {
@@ -329,15 +371,10 @@ void VulkanRenderer::initBackgroundPipelines() {
 
 	VkShaderModule computeDrawShader{};
 	if (!loadShaderModule("res/shaders/gradient.comp.spv", m_device, &computeDrawShader)) {
-		std::format("Error when building the compute shader \n");
+		std::cout << std::format("Error when building the compute shader \n");
 	}
 
-	VkPipelineShaderStageCreateInfo stageinfo{};
-	stageinfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	stageinfo.pNext = nullptr;
-	stageinfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-	stageinfo.module = computeDrawShader;
-	stageinfo.pName = "main";
+	auto stageinfo = pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, computeDrawShader);
 
 	VkComputePipelineCreateInfo computePipelineCreateInfo{};
 	computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
@@ -347,8 +384,57 @@ void VulkanRenderer::initBackgroundPipelines() {
 
 	VK_CHECK(vkCreateComputePipelines(m_device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &m_gradientPipeline));
 
-	// Shader modules are only used when building the pipeline
 	vkDestroyShaderModule(m_device, computeDrawShader, nullptr);
+}
+
+void VulkanRenderer::initTrianglePipeline() {
+	VkShaderModule triangleFragShader{};
+	if (!loadShaderModule("res/shaders/triangle.frag.spv", m_device, &triangleFragShader)) {
+		std::cout << std::format("Error when building the triangle fragment shader module");
+	} else {
+		std::cout << std::format("Triangle fragment shader succesfully loaded");
+	}
+
+	VkShaderModule triangleVertexShader{};
+	if (!loadShaderModule("res/shaders/triangle.vert.spv", m_device, &triangleVertexShader)) {
+		std::cout << std::format("Error when building the triangle vertex shader module");
+	} else {
+		std::cout << std::format("Triangle vertex shader succesfully loaded");
+	}
+
+	// build the pipeline layout that controls the inputs/outputs of the shader
+	// we are not using descriptor sets or other systems yet, so no need to use anything other than empty default
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = pipelineLayoutCreateInfo();
+	VK_CHECK(vkCreatePipelineLayout(m_device, &pipelineLayoutInfo, nullptr, &m_trianglePipelineLayout));
+
+	PipelineBuilder pipelineBuilder;
+
+	// use the triangle layout we created
+	pipelineBuilder.setPipelineLayout(m_trianglePipelineLayout);
+	// connecting the vertex and pixel shaders to the pipeline
+	pipelineBuilder.setShaders(triangleVertexShader, triangleFragShader);
+	// it will draw triangles
+	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	// filled triangles
+	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
+	// no backface culling
+	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+	// no multisampling
+	pipelineBuilder.setMultisamplingNone();
+	// no blending
+	pipelineBuilder.disableBlending();
+	// no depth testing
+	pipelineBuilder.disableDepthTest();
+
+	// connect the image format we will draw into, from draw image
+	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
+	pipelineBuilder.setDepthFormat(VK_FORMAT_UNDEFINED);
+
+	// finally build the pipeline
+	m_trianglePipeline = pipelineBuilder.buildPipeline(m_device);
+
+	vkDestroyShaderModule(m_device, triangleFragShader, nullptr);
+	vkDestroyShaderModule(m_device, triangleVertexShader, nullptr);
 }
 
 

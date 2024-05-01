@@ -42,8 +42,10 @@ class VulkanRenderer {
 		// drawing
 		void draw();
 		void drawBackground(VkCommandBuffer commandBuffer);
+		void drawGeometry(VkCommandBuffer commandBuffer);
 
 		void cleanup();
+
 
 	private:
 		void initVulkan(VulkanRendererConfig& config);
@@ -52,7 +54,10 @@ class VulkanRenderer {
 		void initSyncStructures(VulkanRendererConfig& config);
 		void initDescriptors();
 		void initPipelines();
+
+		// specific pipelines
 		void initBackgroundPipelines();
+		void initTrianglePipeline();
 
 		VkInstance m_instance;
 		VkDebugUtilsMessengerEXT m_debug_messenger;
@@ -91,6 +96,10 @@ class VulkanRenderer {
 		// Pipelines
 		VkPipeline m_gradientPipeline;
 		VkPipelineLayout m_gradientPipelineLayout;
+
+		// Triangle
+		VkPipeline m_trianglePipeline;
+		VkPipelineLayout m_trianglePipelineLayout;
 };
 
 }// namespace pm

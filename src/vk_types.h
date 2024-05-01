@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <iostream>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -24,7 +25,7 @@
 	do {                                                                \
 		VkResult err = x;                                                 \
 		if (err) {                                                        \
-			std::format("Detected Vulkan error: {}", string_VkResult(err)); \
+			std::cout << std::format("Detected Vulkan error: {}", string_VkResult(err)); \
 			abort();                                                        \
 		}                                                                 \
 	} while (0)

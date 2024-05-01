@@ -143,3 +143,74 @@ inline VkImageViewCreateInfo imageViewCreateInfo(VkFormat format, VkImage image,
 
 	return createInfo;
 }
+
+inline VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo(VkShaderStageFlagBits stageFlags, VkShaderModule shaderModule) {
+	VkPipelineShaderStageCreateInfo stageInfo{};
+	stageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	stageInfo.pNext = nullptr;
+	stageInfo.stage = stageFlags;
+	stageInfo.module = shaderModule;
+	stageInfo.pName = "main";
+
+	return stageInfo;
+}
+
+inline VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo() {
+	VkPipelineLayoutCreateInfo createInfo{};
+	createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	createInfo.pNext = nullptr;
+
+	// empty defaults
+	createInfo.flags = 0;
+	createInfo.setLayoutCount = 0;
+	createInfo.pSetLayouts = nullptr;
+	createInfo.pushConstantRangeCount = 0;
+	createInfo.pPushConstantRanges = nullptr;
+
+	return createInfo;
+}
+
+inline VkRenderingAttachmentInfo attachmentInfo(VkImageView view, VkClearValue* clear, VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/) {
+	VkRenderingAttachmentInfo colorAttachment{};
+	colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+	colorAttachment.pNext = nullptr;
+
+	colorAttachment.imageView = view;
+	colorAttachment.imageLayout = layout;
+	colorAttachment.loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	if (clear) {
+		colorAttachment.clearValue = *clear;
+	}
+
+	return colorAttachment;
+}
+
+inline VkRenderingAttachmentInfo depthAttachmentInfo(VkImageView view, VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/) {
+	VkRenderingAttachmentInfo depthAttachment{};
+	depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+	depthAttachment.pNext = nullptr;
+
+	depthAttachment.imageView = view;
+	depthAttachment.imageLayout = layout;
+	depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	depthAttachment.clearValue.depthStencil.depth = 0.f;
+
+	return depthAttachment;
+}
+
+inline VkRenderingInfo renderingInfo(VkExtent2D renderExtent, VkRenderingAttachmentInfo* colorAttachment, VkRenderingAttachmentInfo* depthAttachment) {
+	VkRenderingInfo renderInfo{};
+	renderInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+	renderInfo.pNext = nullptr;
+
+	renderInfo.renderArea = VkRect2D{ VkOffset2D{ 0, 0 }, renderExtent };
+	renderInfo.layerCount = 1;
+	renderInfo.colorAttachmentCount = 1;
+	renderInfo.pColorAttachments = colorAttachment;
+	renderInfo.pDepthAttachment = depthAttachment;
+	renderInfo.pStencilAttachment = nullptr;
+
+	return renderInfo;
+}
