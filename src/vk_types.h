@@ -15,6 +15,7 @@
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>

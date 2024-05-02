@@ -1,6 +1,7 @@
 #define VMA_IMPLEMENTATION
 #include "vulkan_renderer.h"
 #include "SDL3/SDL_vulkan.h"
+#include <glm/gtx/transform.hpp>
 #include "platform/vulkan/vulkan_descriptor.h"
 #include "platform/vulkan/vulkan_images.h"
 #include "platform/vulkan/vulkan_loader.h"
@@ -368,9 +369,16 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	// Start mesh pipeline
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshPipeline);
 
+	// Calculate view-projection matrix
+	// NOTE: Flipping near and far plane to increase depth testing quality
+	// NOTE: Invert Y projection since Vulkan has the Y coordinate flipped
+	glm::mat4 view = glm::translate(glm::vec3{ 0, 0, -5 });
+	glm::mat4 projection = glm::perspective(glm::radians(70.f), (float)m_drawExtent.width / (float)m_drawExtent.height, 10000.f, 0.1f);
+	projection[1][1] *= -1;
+
 	// Upload constants
 	GPUDrawPushConstants pushConstants{};
-	pushConstants.worldMatrix = glm::mat4{ 1.f };
+	pushConstants.worldMatrix = projection * view;
 	pushConstants.vertexBuffer = rectangle.vertexBufferAddress;
 
 	// Draw rectangle

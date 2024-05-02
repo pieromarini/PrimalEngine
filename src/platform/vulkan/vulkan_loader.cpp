@@ -3,7 +3,6 @@
 
 #include "vk_types.h"
 #include "vulkan_renderer.h"
-#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 
 #include <fastgltf/glm_element_traits.hpp>
