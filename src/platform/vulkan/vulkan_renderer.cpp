@@ -91,6 +91,8 @@ void VulkanRenderer::initVulkan(VulkanRendererConfig& config) {
 																				 .select()
 																				 .value();
 
+	std::cout << std::format("Selected PhysicalDevice: {}", physicalDevice.name);
+
 
 	// create the final vulkan device
 	vkb::DeviceBuilder deviceBuilder{ physicalDevice };
