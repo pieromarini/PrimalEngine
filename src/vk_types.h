@@ -53,7 +53,7 @@ struct GPUDrawPushConstants {
 	do {                                                                             \
 		VkResult err = x;                                                              \
 		if (err) {                                                                     \
-			std::cout << std::format("Detected Vulkan error: {}", string_VkResult(err)); \
+			std::cout << std::format("Detected Vulkan error: {}\n", string_VkResult(err)); \
 			abort();                                                                     \
 		}                                                                              \
 	} while (0)

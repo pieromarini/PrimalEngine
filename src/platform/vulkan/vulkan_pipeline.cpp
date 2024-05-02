@@ -69,7 +69,7 @@ VkPipeline PipelineBuilder::buildPipeline(VkDevice device) {
 
 	VkPipeline newPipeline;
 	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &newPipeline) != VK_SUCCESS) {
-		std::cout << std::format("failed to create pipeline");
+		std::cout << std::format("failed to create pipeline\n");
 		return VK_NULL_HANDLE;
 	} else {
 		return newPipeline;

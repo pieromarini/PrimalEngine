@@ -91,7 +91,7 @@ void VulkanRenderer::initVulkan(VulkanRendererConfig& config) {
 																				 .select()
 																				 .value();
 
-	std::cout << std::format("Selected PhysicalDevice: {}", physicalDevice.name);
+	std::cout << std::format("Selected PhysicalDevice: {}\n", physicalDevice.name);
 
 
 	// create the final vulkan device
@@ -453,16 +453,16 @@ void VulkanRenderer::initBackgroundPipelines() {
 void VulkanRenderer::initTrianglePipeline() {
 	VkShaderModule triangleFragShader{};
 	if (!loadShaderModule("res/shaders/triangle.frag.spv", m_device, &triangleFragShader)) {
-		std::cout << std::format("Error when building the triangle fragment shader module");
+		std::cout << std::format("Error when building the triangle fragment shader module\n");
 	} else {
-		std::cout << std::format("Triangle fragment shader succesfully loaded");
+		std::cout << std::format("Triangle fragment shader succesfully loaded\n");
 	}
 
 	VkShaderModule triangleVertexShader{};
 	if (!loadShaderModule("res/shaders/triangle.vert.spv", m_device, &triangleVertexShader)) {
-		std::cout << std::format("Error when building the triangle vertex shader module");
+		std::cout << std::format("Error when building the triangle vertex shader module\n");
 	} else {
-		std::cout << std::format("Triangle vertex shader succesfully loaded");
+		std::cout << std::format("Triangle vertex shader succesfully loaded\n");
 	}
 
 	// build the pipeline layout that controls the inputs/outputs of the shader
@@ -503,16 +503,16 @@ void VulkanRenderer::initTrianglePipeline() {
 void VulkanRenderer::initMeshPipeline() {
 	VkShaderModule triangleFragShader{};
 	if (!loadShaderModule("res/shaders/triangle.frag.spv", m_device, &triangleFragShader)) {
-		std::cout << std::format("Error when building the mesh fragment shader module");
+		std::cout << std::format("Error when building the mesh fragment shader module\n");
 	} else {
-		std::cout << std::format("Triangle mesh shader succesfully loaded");
+		std::cout << std::format("Triangle mesh shader succesfully loaded\n");
 	}
 
 	VkShaderModule triangleVertexShader{};
 	if (!loadShaderModule("res/shaders/mesh.vert.spv", m_device, &triangleVertexShader)) {
-		std::cout << std::format("Error when building the mesh vertex shader module");
+		std::cout << std::format("Error when building the mesh vertex shader module\n");
 	} else {
-		std::cout << std::format("Triangle mesh shader succesfully loaded");
+		std::cout << std::format("Triangle mesh shader succesfully loaded\n");
 	}
 
 	VkPushConstantRange bufferRange{};

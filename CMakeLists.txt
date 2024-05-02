@@ -156,7 +156,7 @@ add_executable(${EXEC_NAME} ${sandbox_sources})
 target_include_directories(${EXEC_NAME} PUBLIC ${SANDBOX_DIR} ${SOURCES_DIR})
 target_link_libraries(${EXEC_NAME} PUBLIC ${ENGINE_LIB} project_options project_warnings)
 
-# NOTE: cmake-tools.nvim automatically creates a symbolic link of compile_commands.json to the project root.
-# execute_process(
-#   COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/res
-#           ${PROJECT_BINARY_DIR}/res RESULT_VARIABLE exitcode)
+execute_process(
+  COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/res
+  ${PROJECT_BINARY_DIR}/res RESULT_VARIABLE exitcode
+)
