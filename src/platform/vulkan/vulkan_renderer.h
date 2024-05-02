@@ -14,6 +14,7 @@ struct VulkanRendererConfig {
 		bool useValidationLayers;
 		VkExtent2D windowExtent;
 		SDL_Window* window;
+		bool resizeRequested;
 };
 
 struct FrameData {
@@ -37,7 +38,7 @@ constexpr uint32_t FRAME_OVERLAP = 2;
 
 class VulkanRenderer {
 	public:
-		void init(VulkanRendererConfig config);
+		void init(VulkanRendererConfig* state);
 
 		// NOTE: load some default data for our engine to draw
 		void initDefaultData();
@@ -55,18 +56,22 @@ class VulkanRenderer {
 		GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 
 		void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
+		void resizeSwapchain();
 
 	private:
-		void initVulkan(VulkanRendererConfig& config);
-		void initSwapchain(VulkanRendererConfig& config);
-		void initCommands(VulkanRendererConfig& config);
-		void initSyncStructures(VulkanRendererConfig& config);
+		void initVulkan();
+		void initSwapchain();
+		void initCommands();
+		void initSyncStructures();
 		void initDescriptors();
 		void initPipelines();
 
 		// specific pipelines
 		void initBackgroundPipelines();
 		void initMeshPipeline();
+
+		VulkanRendererConfig* m_rendererState;
+		float m_renderScale{1.0f};
 
 		// Structures for immediateSubmit
     VkFence m_immFence;
@@ -119,7 +124,6 @@ class VulkanRenderer {
 
 		// Loaded meshes from GLTF file
 		std::vector<std::shared_ptr<MeshAsset>> m_testMeshes;
-
 };
 
 }// namespace pm

@@ -14,14 +14,30 @@
 
 namespace pm {
 
-void VulkanRenderer::init(VulkanRendererConfig config) {
-	initVulkan(config);
-	initSwapchain(config);
-	initCommands(config);
-	initSyncStructures(config);
+void VulkanRenderer::init(VulkanRendererConfig* state) {
+	m_rendererState = state;
+	initVulkan();
+	initSwapchain();
+	initCommands();
+	initSyncStructures();
 	initDescriptors();
 	initPipelines();
 	initDefaultData();
+}
+
+void VulkanRenderer::resizeSwapchain() {
+	vkDeviceWaitIdle(m_device);
+
+	destroySwapchain();
+
+	int w{}, h{};
+	SDL_GetWindowSize(m_rendererState->window, &w, &h);
+	m_rendererState->windowExtent.width = w;
+	m_rendererState->windowExtent.height = h;
+
+	createSwapchain(m_rendererState->windowExtent.width, m_rendererState->windowExtent.height);
+
+	m_rendererState->resizeRequested = false;
 }
 
 // load meshes
@@ -29,12 +45,12 @@ void VulkanRenderer::initDefaultData() {
 	m_testMeshes = loadGltfMeshes(this, "res/models/basicmesh.glb").value();
 }
 
-void VulkanRenderer::initVulkan(VulkanRendererConfig& config) {
+void VulkanRenderer::initVulkan() {
 	vkb::InstanceBuilder builder;
 
 	// make the vulkan instance, with basic debug features
 	auto inst = builder.set_app_name("Primal Engine")
-								.request_validation_layers(config.useValidationLayers)
+								.request_validation_layers(m_rendererState->useValidationLayers)
 								.use_default_debug_messenger()
 								.require_api_version(1, 3, 0)
 								.build();
@@ -45,7 +61,7 @@ void VulkanRenderer::initVulkan(VulkanRendererConfig& config) {
 	m_instance = vkbInstance.instance;
 	m_debug_messenger = vkbInstance.debug_messenger;
 
-	SDL_Vulkan_CreateSurface(config.window, m_instance, nullptr, &m_surface);
+	SDL_Vulkan_CreateSurface(m_rendererState->window, m_instance, nullptr, &m_surface);
 
 	// vulkan 1.3 features
 	VkPhysicalDeviceVulkan13Features features{};
@@ -92,8 +108,8 @@ void VulkanRenderer::initVulkan(VulkanRendererConfig& config) {
 	vmaCreateAllocator(&allocatorInfo, &m_allocator);
 }
 
-void VulkanRenderer::initSwapchain(VulkanRendererConfig& config) {
-	createSwapchain(config.windowExtent.width, config.windowExtent.height);
+void VulkanRenderer::initSwapchain() {
+	createSwapchain(m_rendererState->windowExtent.width, m_rendererState->windowExtent.height);
 
 	// For render image and depth iamge, we want to allocate them from gpu local memory
 	VmaAllocationCreateInfo rimg_allocinfo = {};
@@ -102,8 +118,8 @@ void VulkanRenderer::initSwapchain(VulkanRendererConfig& config) {
 
 	// draw image size will match the window
 	VkExtent3D drawImageExtent = {
-		config.windowExtent.width,
-		config.windowExtent.height,
+		m_rendererState->windowExtent.width,
+		m_rendererState->windowExtent.height,
 		1
 	};
 
@@ -138,7 +154,7 @@ void VulkanRenderer::initSwapchain(VulkanRendererConfig& config) {
 	VK_CHECK(vkCreateImageView(m_device, &dview_info, nullptr, &m_depthImage.imageView));
 }
 
-void VulkanRenderer::initCommands(VulkanRendererConfig& config) {
+void VulkanRenderer::initCommands() {
 	auto commandPoolInfo = commandPoolCreateInfo(m_graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
 	for (auto& frame : m_frames) {
@@ -153,7 +169,7 @@ void VulkanRenderer::initCommands(VulkanRendererConfig& config) {
 	VK_CHECK(vkAllocateCommandBuffers(m_device, &cmdAllocInfo, &m_immCommandBuffer));
 }
 
-void VulkanRenderer::initSyncStructures(VulkanRendererConfig& config) {
+void VulkanRenderer::initSyncStructures() {
 	// create syncronization structures
 	// one fence to control when the gpu has finished rendering the frame,
 	// and 2 semaphores to syncronize rendering with swapchain
@@ -244,7 +260,11 @@ void VulkanRenderer::draw() {
 	VK_CHECK(vkResetFences(m_device, 1, &getCurrentFrame().m_renderFence));
 
 	uint32_t swapchainImageIndex{};
-	VK_CHECK(vkAcquireNextImageKHR(m_device, m_swapchain, 1000000000, getCurrentFrame().m_swapchainSemaphore, nullptr, &swapchainImageIndex));
+	VkResult e = vkAcquireNextImageKHR(m_device, m_swapchain, 1000000000, getCurrentFrame().m_swapchainSemaphore, nullptr, &swapchainImageIndex);
+	if (e == VK_ERROR_OUT_OF_DATE_KHR) {
+		m_rendererState->resizeRequested = true;
+		return;
+	}
 
 	// naming it cmd for shorter writing
 	auto commandBuffer = getCurrentFrame().m_commandBuffer;
@@ -257,8 +277,8 @@ void VulkanRenderer::draw() {
 	// so we want to let vulkan know that
 	auto commandBeginInfo = commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-	m_drawExtent.width = m_drawImage.imageExtent.width;
-	m_drawExtent.height = m_drawImage.imageExtent.height;
+	m_drawExtent.width = std::min(m_swapchainExtent.width, m_drawImage.imageExtent.width) * m_renderScale;
+	m_drawExtent.height = std::min(m_swapchainExtent.height, m_drawImage.imageExtent.height) * m_renderScale;
 
 	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &commandBeginInfo));
 
@@ -314,7 +334,10 @@ void VulkanRenderer::draw() {
 
 	presentInfo.pImageIndices = &swapchainImageIndex;
 
-	VK_CHECK(vkQueuePresentKHR(m_graphicsQueue, &presentInfo));
+	VkResult presentResult = vkQueuePresentKHR(m_graphicsQueue, &presentInfo);
+	if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
+		m_rendererState->resizeRequested = true;
+	}
 
 	// increase the number of frames drawn
 	m_frameNumber++;
@@ -474,7 +497,7 @@ void VulkanRenderer::initMeshPipeline() {
 	// no multisampling
 	pipelineBuilder.setMultisamplingNone();
 	// no blending
-	pipelineBuilder.disableBlending();
+	pipelineBuilder.enableBlendingAdditive();
 
 	pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 

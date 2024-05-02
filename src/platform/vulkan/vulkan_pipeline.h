@@ -14,11 +14,15 @@ class PipelineBuilder {
 		void setPolygonMode(VkPolygonMode polygonMode);
 		void setCullMode(VkCullModeFlags cullMode, VkFrontFace frontFace);
 		void setMultisamplingNone();
-		void disableBlending();
 		void setColorAttachmentFormat(VkFormat colorFormat);
 		void setDepthFormat(VkFormat depthFormat);
-		void disableDepthTest();
+
+		void enableBlendingAdditive();
+		void enableBlendingAlphablend();
+		void disableBlending();
+
 		void enableDepthTest(bool depthWriteEnable, VkCompareOp op);
+		void disableDepthTest();
 
 	private:
 		std::vector<VkPipelineShaderStageCreateInfo> m_shaderStages{};

@@ -26,13 +26,13 @@ void pm::PrimalApp::init() {
 		static_cast<int32_t>(m_windowExtent.height),
 		window_flags);
 
-	VulkanRendererConfig config = {
+	m_rendererState = {
 		.useValidationLayers = true,
 		.windowExtent = m_windowExtent,
 		.window = m_window
 	};
 
-	m_renderer.init(config);
+	m_renderer.init(&m_rendererState);
 
 	m_isInitialized = true;
 }
@@ -67,6 +67,10 @@ void pm::PrimalApp::run() {
 			// throttle the speed to avoid the endless spinning
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			continue;
+		}
+
+		if (m_resizeRequested) {
+			m_renderer.resizeSwapchain();
 		}
 
 		draw();

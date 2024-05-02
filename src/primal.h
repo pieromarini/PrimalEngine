@@ -16,11 +16,13 @@ class PrimalApp {
 		GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 
 	private:
+		bool m_resizeRequested{false};
 		bool m_isInitialized{ false };
 		int m_frameNumber{ 0 };
 		bool m_stopRendering{ false };
-		VkExtent2D m_windowExtent{ 1700, 900 };
+		VkExtent2D m_windowExtent{ 1920, 1080 };
 		VulkanRenderer m_renderer{};
+		VulkanRendererConfig m_rendererState{};
 
 		SDL_Window* m_window{ nullptr };
 };
