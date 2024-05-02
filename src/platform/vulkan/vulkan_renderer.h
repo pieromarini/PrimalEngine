@@ -39,6 +39,9 @@ class VulkanRenderer {
 	public:
 		void init(VulkanRendererConfig config);
 
+		// NOTE: load some default data for our engine to draw
+		void initDefaultData();
+
 		// drawing
 		void draw();
 		void drawBackground(VkCommandBuffer commandBuffer);
@@ -46,6 +49,12 @@ class VulkanRenderer {
 
 		void cleanup();
 
+		// Buffers
+		AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+		void destroyBuffer(const AllocatedBuffer& buffer);
+		GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
+
+		void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
 
 	private:
 		void initVulkan(VulkanRendererConfig& config);
@@ -58,7 +67,14 @@ class VulkanRenderer {
 		// specific pipelines
 		void initBackgroundPipelines();
 		void initTrianglePipeline();
+		void initMeshPipeline();
 
+		// Structures for immediateSubmit
+    VkFence m_immFence;
+    VkCommandBuffer m_immCommandBuffer;
+    VkCommandPool m_immCommandPool;
+
+		// Vulkan init stuff
 		VkInstance m_instance;
 		VkDebugUtilsMessengerEXT m_debug_messenger;
 		VkPhysicalDevice m_chosenGPU;
@@ -93,13 +109,18 @@ class VulkanRenderer {
 		VkDescriptorSet m_drawImageDescriptors;
 		VkDescriptorSetLayout m_drawImageDescriptorLayout;
 
-		// Pipelines
+		// Compute pipeline
 		VkPipeline m_gradientPipeline;
 		VkPipelineLayout m_gradientPipelineLayout;
 
-		// Triangle
+		// Triangle pipeline
 		VkPipeline m_trianglePipeline;
 		VkPipelineLayout m_trianglePipelineLayout;
+
+		// Mesh pipeline
+		VkPipeline m_meshPipeline;
+		VkPipelineLayout m_meshPipelineLayout;
+		GPUMeshBuffers rectangle;
 };
 
 }// namespace pm
