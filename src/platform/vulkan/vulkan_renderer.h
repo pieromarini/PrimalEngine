@@ -66,7 +66,6 @@ class VulkanRenderer {
 
 		// specific pipelines
 		void initBackgroundPipelines();
-		void initTrianglePipeline();
 		void initMeshPipeline();
 
 		// Structures for immediateSubmit
@@ -102,6 +101,7 @@ class VulkanRenderer {
 
 		// Draw resources
 		AllocatedImage m_drawImage;
+		AllocatedImage m_depthImage;
 		VkExtent2D m_drawExtent;
 
 		// Descriptors
@@ -113,17 +113,13 @@ class VulkanRenderer {
 		VkPipeline m_gradientPipeline;
 		VkPipelineLayout m_gradientPipelineLayout;
 
-		// Triangle pipeline
-		VkPipeline m_trianglePipeline;
-		VkPipelineLayout m_trianglePipelineLayout;
-
 		// Mesh pipeline
 		VkPipeline m_meshPipeline;
 		VkPipelineLayout m_meshPipelineLayout;
-		GPUMeshBuffers rectangle;
 
 		// Loaded meshes from GLTF file
 		std::vector<std::shared_ptr<MeshAsset>> m_testMeshes;
+
 };
 
 }// namespace pm
