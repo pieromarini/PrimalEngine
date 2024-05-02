@@ -90,13 +90,14 @@ target_include_directories(${ENGINE_LIB} PUBLIC vk-bootstrap/src)
 set(STBIMAGE_DIR "${LIB_DIR}/stb_image")
 target_include_directories(${ENGINE_LIB} PUBLIC "${STBIMAGE_DIR}")
 
-# [LIB] ASSIMP
-FetchContent_Declare(assimp GIT_REPOSITORY https://github.com/assimp/assimp.git GIT_TAG master EXCLUDE_FROM_ALL)
-set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(ASSIMP_INJECT_DEBUG_POSTFIX OFF CACHE BOOL "" FORCE)
-set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(assimp)
-target_include_directories(${ENGINE_LIB} PUBLIC extern/assimp-src/include)
+# NOTE: we are not using assimp yet.
+# [LIB] ASSIMP 
+# FetchContent_Declare(assimp GIT_REPOSITORY https://github.com/assimp/assimp.git GIT_TAG master EXCLUDE_FROM_ALL)
+# set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+# set(ASSIMP_INJECT_DEBUG_POSTFIX OFF CACHE BOOL "" FORCE)
+# set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
+# FetchContent_MakeAvailable(assimp)
+# target_include_directories(${ENGINE_LIB} PUBLIC extern/assimp-src/include)
 
 # [LIB] SDL3
 FetchContent_Declare(sdl3 GIT_REPOSITORY https://github.com/libsdl-org/SDL.git GIT_TAG main EXCLUDE_FROM_ALL)
@@ -120,7 +121,7 @@ target_link_libraries(${ENGINE_LIB} PUBLIC
   vk-bootstrap::vk-bootstrap
   glm::glm
   SDL3::SDL3
-  assimp
+  # assimp
   tbb
 )
 
@@ -143,7 +144,7 @@ add_custom_target(Shaders
 )
 
 # Engine precompiled headers
-target_precompile_headers(${ENGINE_LIB} INTERFACE <optional> <vector> <memory> <string> <vector> <unordered_map> <vulkan/vulkan.h>)
+target_precompile_headers(${ENGINE_LIB} INTERFACE <optional> <iostream> <array> <vector> <memory> <string> <vector> <unordered_map> <format> <vulkan/vulkan.h>)
 
 # [EXEC] Main Executable Linking
 set(EXEC_NAME "sandbox")
@@ -151,6 +152,7 @@ add_executable(${EXEC_NAME} ${sandbox_sources})
 target_include_directories(${EXEC_NAME} PUBLIC ${SANDBOX_DIR} ${SOURCES_DIR})
 target_link_libraries(${EXEC_NAME} PUBLIC ${ENGINE_LIB} project_options project_warnings)
 
+# NOTE: cmake-tools.nvim automatically creates a symbolic link of compile_commands.json to the project root.
 # execute_process(
 #   COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/res
 #           ${PROJECT_BINARY_DIR}/res RESULT_VARIABLE exitcode)
