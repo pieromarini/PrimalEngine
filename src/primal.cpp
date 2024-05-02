@@ -76,3 +76,7 @@ void pm::PrimalApp::run() {
 void pm::PrimalApp::draw() {
 	m_renderer.draw();
 }
+
+GPUMeshBuffers pm::PrimalApp::uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
+	return m_renderer.uploadMesh(indices, vertices);
+}

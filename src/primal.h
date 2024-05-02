@@ -1,7 +1,7 @@
 #pragma once
 
-#include "platform/vulkan/vulkan_renderer.h"
 #include "vk_types.h"
+#include "platform/vulkan/vulkan_renderer.h"
 
 namespace pm {
 
@@ -12,6 +12,8 @@ class PrimalApp {
 		void draw();
 		void cleanup();
 		PrimalApp& get();
+
+		GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 
 	private:
 		bool m_isInitialized{ false };

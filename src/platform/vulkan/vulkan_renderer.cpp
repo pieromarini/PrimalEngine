@@ -3,8 +3,10 @@
 #include "SDL3/SDL_vulkan.h"
 #include "platform/vulkan/vulkan_descriptor.h"
 #include "platform/vulkan/vulkan_images.h"
+#include "platform/vulkan/vulkan_loader.h"
 #include "vk_types.h"
 #include "vulkan_pipeline.h"
+#include "vulkan_shader.h"
 #include "vulkan_structures_helpers.h"
 #include <cmath>
 #include <vector>
@@ -46,6 +48,8 @@ void VulkanRenderer::initDefaultData() {
 	rectIndices[5] = 3;
 
 	rectangle = uploadMesh(rectIndices, rectVertices);
+
+	m_testMeshes = loadGltfMeshes(this, "res/models/basicmesh.glb").value();
 }
 
 void VulkanRenderer::initVulkan(VulkanRendererConfig& config) {
@@ -210,8 +214,6 @@ void VulkanRenderer::destroySwapchain() {
 void VulkanRenderer::cleanup() {
 	vkDeviceWaitIdle(m_device);
 
-	vmaDestroyAllocator(m_allocator);
-
 	for (auto& frame : m_frames) {
 		vkDestroyCommandPool(m_device, frame.m_commandPool, nullptr);
 
@@ -236,6 +238,8 @@ void VulkanRenderer::cleanup() {
 	vkDestroyPipeline(m_device, m_meshPipeline, nullptr);
 
 	destroySwapchain();
+
+	vmaDestroyAllocator(m_allocator);
 
 	vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
 	vkDestroyDevice(m_device, nullptr);
@@ -338,9 +342,9 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	VkRenderingInfo renderInfo = renderingInfo(m_drawExtent, &colorAttachment, nullptr);
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
 
+	// Start triangle pipeline
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_trianglePipeline);
 
-	// set dynamic viewport and scissor
 	VkViewport viewport = {};
 	viewport.x = 0;
 	viewport.y = 0;
@@ -348,7 +352,6 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	viewport.height = static_cast<float>(m_drawExtent.height);
 	viewport.minDepth = 0.f;
 	viewport.maxDepth = 1.f;
-
 	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
 	VkRect2D scissor = {};
@@ -356,13 +359,11 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	scissor.offset.y = 0;
 	scissor.extent.width = m_drawExtent.width;
 	scissor.extent.height = m_drawExtent.height;
-
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-	// draw triangle
 	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
-	// Draw mesh
+	// Start mesh pipeline
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshPipeline);
 
 	// Upload constants
@@ -370,10 +371,16 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	pushConstants.worldMatrix = glm::mat4{ 1.f };
 	pushConstants.vertexBuffer = rectangle.vertexBufferAddress;
 
+	// Draw rectangle
 	vkCmdPushConstants(commandBuffer, m_meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 	vkCmdBindIndexBuffer(commandBuffer, rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-
 	vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
+
+	// Draw GLTF mesh
+	pushConstants.vertexBuffer = m_testMeshes[2]->meshBuffers.vertexBufferAddress;
+	vkCmdPushConstants(commandBuffer, m_meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+	vkCmdBindIndexBuffer(commandBuffer, m_testMeshes[2]->meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdDrawIndexed(commandBuffer, m_testMeshes[2]->surfaces[0].count, 1, m_testMeshes[2]->surfaces[0].startIndex, 0, 0);
 
 	vkCmdEndRendering(commandBuffer);
 }

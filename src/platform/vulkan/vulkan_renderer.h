@@ -3,10 +3,10 @@
 #include <SDL3/SDL.h>
 #include <VkBootstrap.h>
 #include <vulkan/vulkan.h>
+#include "vulkan_loader.h"
 
 #include "vk_types.h"
 #include "vulkan_descriptor.h"
-#include "vulkan_shader.h"
 
 namespace pm {
 
@@ -121,6 +121,9 @@ class VulkanRenderer {
 		VkPipeline m_meshPipeline;
 		VkPipelineLayout m_meshPipelineLayout;
 		GPUMeshBuffers rectangle;
+
+		// Loaded meshes from GLTF file
+		std::vector<std::shared_ptr<MeshAsset>> m_testMeshes;
 };
 
 }// namespace pm

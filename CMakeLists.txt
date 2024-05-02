@@ -84,7 +84,7 @@ target_include_directories(${ENGINE_LIB} PUBLIC "${Vulkan_INCLUDE_DIRS}")
 add_subdirectory(extern/vk-bootstrap EXCLUDE_FROM_ALL)
 set(VK_BOOTSTRAP_TEST OFF CACHE BOOL "" FORCE)
 set(VK_BOOTSTRAP_INSTALL OFF CACHE BOOL "" FORCE)
-target_include_directories(${ENGINE_LIB} PUBLIC vk-bootstrap/src)
+target_include_directories(${ENGINE_LIB} PUBLIC extern/vk-bootstrap/src)
 
 # [LIB] STB_IMAGE
 set(STBIMAGE_DIR "${LIB_DIR}/stb_image")
@@ -98,6 +98,9 @@ target_include_directories(${ENGINE_LIB} PUBLIC "${STBIMAGE_DIR}")
 # set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
 # FetchContent_MakeAvailable(assimp)
 # target_include_directories(${ENGINE_LIB} PUBLIC extern/assimp-src/include)
+# [LIB] fastgltf
+add_subdirectory(extern/fastgltf)
+target_include_directories(${ENGINE_LIB} PUBLIC extern/fastgltf/include)
 
 # [LIB] SDL3
 FetchContent_Declare(sdl3 GIT_REPOSITORY https://github.com/libsdl-org/SDL.git GIT_TAG main EXCLUDE_FROM_ALL)
@@ -123,6 +126,7 @@ target_link_libraries(${ENGINE_LIB} PUBLIC
   SDL3::SDL3
   # assimp
   tbb
+  fastgltf::fastgltf
 )
 
 # SPIR-V shader compilation
