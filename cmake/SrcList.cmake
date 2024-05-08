@@ -5,6 +5,11 @@ if(UNIX)
 		COMMAND bash -c "tr '\n' ';'"
 		OUTPUT_VARIABLE src_files
 	)
+  file(GLOB_RECURSE glsl_sources
+    "${PROJECT_SOURCE_DIR}/res/shaders/*.frag"
+    "${PROJECT_SOURCE_DIR}/res/shaders/*.vert"
+    "${PROJECT_SOURCE_DIR}/res/shaders/*.comp"
+  )
 	execute_process(
 		COMMAND bash -c "find ${PROJECT_SOURCE_DIR}/sandbox -type f"
 		COMMAND bash -c "tr '\n' ';'"

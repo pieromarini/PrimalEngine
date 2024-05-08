@@ -15,8 +15,4 @@ function(check_submodules)
 		endif()
 	endif()
 
-	if(NOT EXISTS "${PROJECT_SOURCE_DIR}/extern/glfw/CMakeLists.txt")
-		message(FATAL_ERROR "The submodules were not downloaded! glfw was turned off or failed. Please update submodules and try again.")
-	endif()
-
 endfunction()
