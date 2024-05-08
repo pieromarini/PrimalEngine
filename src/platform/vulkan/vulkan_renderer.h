@@ -1,9 +1,9 @@
 #pragma once
 
+#include "vulkan_loader.h"
 #include <SDL3/SDL.h>
 #include <VkBootstrap.h>
 #include <vulkan/vulkan.h>
-#include "vulkan_loader.h"
 
 #include "vk_types.h"
 #include "vulkan_descriptor.h"
@@ -20,9 +20,13 @@ struct VulkanRendererConfig {
 struct FrameData {
 		VkCommandPool m_commandPool;
 		VkCommandBuffer m_commandBuffer;
+
 		VkSemaphore m_swapchainSemaphore;
 		VkSemaphore m_renderSemaphore;
+
 		VkFence m_renderFence;
+
+		DescriptorAllocator m_frameDescriptors;
 };
 
 struct AllocatedImage {
@@ -31,6 +35,15 @@ struct AllocatedImage {
 		VmaAllocation allocation;
 		VkExtent3D imageExtent;
 		VkFormat imageFormat;
+};
+
+struct GPUSceneData {
+		glm::mat4 view;
+		glm::mat4 proj;
+		glm::mat4 viewproj;
+		glm::vec4 ambientColor;
+		glm::vec4 sunlightDirection;
+		glm::vec4 sunlightColor;
 };
 
 constexpr uint32_t FRAME_OVERLAP = 2;
@@ -53,6 +66,12 @@ class VulkanRenderer {
 		// Buffers
 		AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
 		void destroyBuffer(const AllocatedBuffer& buffer);
+
+		// Images
+		AllocatedImage createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+		AllocatedImage createImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+		void destroyImage(const AllocatedImage& img);
+
 		GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 
 		void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
@@ -71,12 +90,12 @@ class VulkanRenderer {
 		void initMeshPipeline();
 
 		VulkanRendererConfig* m_rendererState;
-		float m_renderScale{1.0f};
+		float m_renderScale{ 1.0f };
 
 		// Structures for immediateSubmit
-    VkFence m_immFence;
-    VkCommandBuffer m_immCommandBuffer;
-    VkCommandPool m_immCommandPool;
+		VkFence m_immFence;
+		VkCommandBuffer m_immCommandBuffer;
+		VkCommandPool m_immCommandPool;
 
 		// Vulkan init stuff
 		VkInstance m_instance;
@@ -113,6 +132,11 @@ class VulkanRenderer {
 		DescriptorAllocator m_globalDescriptorAllocator;
 		VkDescriptorSet m_drawImageDescriptors;
 		VkDescriptorSetLayout m_drawImageDescriptorLayout;
+		VkDescriptorSetLayout m_gpuSceneDataDescriptorLayout;
+		VkDescriptorSetLayout m_singleImageDescriptorLayout;
+
+		// Scene data tied to DescriptorSetLayout
+		GPUSceneData m_sceneData;
 
 		// Compute pipeline
 		VkPipeline m_gradientPipeline;
@@ -123,7 +147,17 @@ class VulkanRenderer {
 		VkPipelineLayout m_meshPipelineLayout;
 
 		// Loaded meshes from GLTF file
+		GPUMeshBuffers rectangle;
 		std::vector<std::shared_ptr<MeshAsset>> m_testMeshes;
+
+		// Image testing
+		AllocatedImage whiteImage;
+		AllocatedImage blackImage;
+		AllocatedImage greyImage;
+		AllocatedImage errorCheckerboardImage;
+
+		VkSampler defaultSamplerLinear;
+		VkSampler defaultSamplerNearest;
 };
 
 }// namespace pm

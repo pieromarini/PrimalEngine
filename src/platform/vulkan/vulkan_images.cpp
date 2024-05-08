@@ -1,6 +1,8 @@
 #include "vulkan_images.h"
 #include "vulkan_structures_helpers.h"
 
+namespace pm {
+
 void transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout) {
 	VkImageMemoryBarrier2 imageBarrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
 
@@ -61,3 +63,5 @@ void copyImageToImage(VkCommandBuffer cmd, VkImage source, VkImage destination, 
 
 	vkCmdBlitImage2(cmd, &blitInfo);
 }
+
+}// namespace pm
