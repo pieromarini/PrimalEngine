@@ -84,7 +84,7 @@ void VulkanRenderer::initVulkan() {
 																				 .select()
 																				 .value();
 
-	std::cout << std::format("Selected PhysicalDevice: {}\n", physicalDevice.name);
+	std::cout << std::format("GPU: {}\n", physicalDevice.name);
 
 
 	// create the final vulkan device
@@ -257,7 +257,6 @@ void VulkanRenderer::cleanup() {
 void VulkanRenderer::draw() {
 	// wait until the gpu has finished rendering the last frame. Timeout of 1 second
 	VK_CHECK(vkWaitForFences(m_device, 1, &getCurrentFrame().m_renderFence, true, 1000000000));
-	VK_CHECK(vkResetFences(m_device, 1, &getCurrentFrame().m_renderFence));
 
 	uint32_t swapchainImageIndex{};
 	VkResult e = vkAcquireNextImageKHR(m_device, m_swapchain, 1000000000, getCurrentFrame().m_swapchainSemaphore, nullptr, &swapchainImageIndex);
@@ -265,6 +264,8 @@ void VulkanRenderer::draw() {
 		m_rendererState->resizeRequested = true;
 		return;
 	}
+
+	VK_CHECK(vkResetFences(m_device, 1, &getCurrentFrame().m_renderFence));
 
 	// naming it cmd for shorter writing
 	auto commandBuffer = getCurrentFrame().m_commandBuffer;

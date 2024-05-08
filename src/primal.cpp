@@ -69,7 +69,7 @@ void pm::PrimalApp::run() {
 			continue;
 		}
 
-		if (m_resizeRequested) {
+		if (m_rendererState.resizeRequested) {
 			m_renderer.resizeSwapchain();
 		}
 
