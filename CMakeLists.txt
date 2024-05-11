@@ -4,6 +4,9 @@ if(${CMAKE_VERSION} VERSION_LESS 3.27)
   cmake_policy(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}})
 endif()
 
+# TEMPORARY. g++-13 seems stable for now
+set(CMAKE_CXX_COMPILER "/usr/bin/g++-13")
+
 project(
   PrimalEngine
   DESCRIPTION "C++ Game Engine"
