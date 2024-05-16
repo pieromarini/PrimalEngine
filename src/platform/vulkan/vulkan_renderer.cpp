@@ -462,6 +462,7 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	projection[1][1] *= -1;
 
 	// allocate a new uniform buffer for the scene data
+	// This should be deleted each frame.
 	AllocatedBuffer gpuSceneDataBuffer = createBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
 	// write the buffer
