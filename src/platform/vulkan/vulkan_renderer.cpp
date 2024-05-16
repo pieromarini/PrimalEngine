@@ -465,7 +465,7 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	AllocatedBuffer gpuSceneDataBuffer = createBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
 	// write the buffer
-	auto* sceneUniformData = (GPUSceneData*)gpuSceneDataBuffer.allocation->GetMappedData();
+	auto* sceneUniformData = static_cast<GPUSceneData*>(gpuSceneDataBuffer.allocation->GetMappedData());
 	*sceneUniformData = m_sceneData;
 
 	// create a descriptor set that binds that buffer and update it

@@ -47,6 +47,9 @@ struct GPUMeshBuffers {
 // push constants for our mesh object draws
 struct GPUDrawPushConstants {
 		glm::mat4 worldMatrix;
+
+		// NOTE: sending pointer to vertex data as PushConstants for now.
+		// We might want to set SSBOs using DescriptorSets instead.
 		VkDeviceAddress vertexBuffer;
 };
 
