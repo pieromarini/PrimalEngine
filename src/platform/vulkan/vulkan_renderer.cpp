@@ -238,7 +238,7 @@ void VulkanRenderer::initSyncStructures() {
 	// create syncronization structures
 	// one fence to control when the gpu has finished rendering the frame,
 	// and 2 semaphores to syncronize rendering with swapchain
-	// we want the fence to start signalled so we can wait on it on the first frame
+	// we want the fence to start signaled so we can wait on it on the first frame
 	auto fenceCreate = fenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
 	auto semaphoreCreate = semaphoreCreateInfo();
 
@@ -581,15 +581,11 @@ void VulkanRenderer::initMeshPipeline() {
 	VkShaderModule triangleFragShader{};
 	if (!loadShaderModule("res/shaders/tex_image.frag.spv", m_device, &triangleFragShader)) {
 		std::cout << std::format("Error when building the mesh fragment shader module\n");
-	} else {
-		std::cout << std::format("Triangle mesh shader succesfully loaded\n");
 	}
 
 	VkShaderModule triangleVertexShader{};
 	if (!loadShaderModule("res/shaders/mesh.vert.spv", m_device, &triangleVertexShader)) {
 		std::cout << std::format("Error when building the mesh vertex shader module\n");
-	} else {
-		std::cout << std::format("Triangle mesh shader succesfully loaded\n");
 	}
 
 	VkPushConstantRange bufferRange{};
@@ -720,7 +716,6 @@ GPUMeshBuffers VulkanRenderer::uploadMesh(std::span<uint32_t> indices, std::span
 
 		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.indexBuffer.buffer, 1, &indexCopy);
 	});
-	void initMeshPipeline();
 
 	destroyBuffer(staging);
 

@@ -18,7 +18,7 @@ void pm::PrimalApp::init() {
 
 	SDL_Init(SDL_INIT_VIDEO);
 
-	auto window_flags = static_cast<SDL_WindowFlags>(SDL_WINDOW_VULKAN);
+	auto window_flags = static_cast<SDL_WindowFlags>(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
 	m_window = SDL_CreateWindow(
 		"Vulkan Engine",
