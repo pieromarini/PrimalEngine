@@ -9,6 +9,7 @@
 #include <fastgltf/parser.hpp>
 #include <fastgltf/tools.hpp>
 
+namespace pm {
 
 std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(pm::VulkanRenderer* renderer, std::filesystem::path filePath) {
 	std::cout << std::format("Loading file: {}\n", filePath.string());
@@ -107,7 +108,7 @@ std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(pm::Vulkan
 		}
 
 		// display the vertex normals
-		constexpr bool OverrideColors = true;
+		constexpr bool OverrideColors = false;
 		if (OverrideColors) {
 			for (Vertex& vtx : vertices) {
 				vtx.color = glm::vec4(vtx.normal, 1.f);
@@ -120,3 +121,5 @@ std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(pm::Vulkan
 
 	return meshes;
 }
+
+}// namespace pm

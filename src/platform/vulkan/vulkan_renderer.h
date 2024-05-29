@@ -5,6 +5,7 @@
 #include <VkBootstrap.h>
 #include <vulkan/vulkan.h>
 
+#include "camera.h"
 #include "vk_types.h"
 #include "vulkan_descriptor.h"
 
@@ -14,6 +15,7 @@ struct VulkanRendererConfig {
 		bool useValidationLayers;
 		VkExtent2D windowExtent;
 		SDL_Window* window;
+		Camera* mainCamera;
 		bool resizeRequested;
 };
 
@@ -46,8 +48,58 @@ struct GPUSceneData {
 		glm::vec4 sunlightColor;
 };
 
-constexpr uint32_t FRAME_OVERLAP = 2;
+struct GLTFMetallic_Roughness {
+		MaterialPipeline opaquePipeline;
+		MaterialPipeline transparentPipeline;
 
+		VkDescriptorSetLayout materialLayout;
+
+		struct MaterialConstants {
+				glm::vec4 colorFactors;
+				glm::vec4 metalRoughFactors;
+				// padding, we need it anyway for uniform buffers
+				glm::vec4 padding[14];
+		};
+
+		struct MaterialResources {
+				AllocatedImage colorImage;
+				VkSampler colorSampler;
+				AllocatedImage metalRoughImage;
+				VkSampler metalRoughSampler;
+				VkBuffer dataBuffer;
+				uint32_t dataBufferOffset;
+		};
+
+		DescriptorWriter writer;
+
+		void buildPipelines(VulkanRenderer* engine);
+		void clearResources(VkDevice device);
+
+		MaterialInstance writeMaterial(VkDevice device, MaterialPass pass, const MaterialResources& resources, DescriptorAllocator& descriptorAllocator);
+};
+
+struct MeshNode : public Node {
+		std::shared_ptr<MeshAsset> mesh;
+
+		void draw(const glm::mat4& topMatrix, DrawContext& ctx) override;
+};
+
+struct RenderObject {
+		uint32_t indexCount;
+		uint32_t firstIndex;
+		VkBuffer indexBuffer;
+
+		MaterialInstance* material;
+
+		glm::mat4 transform;
+		VkDeviceAddress vertexBufferAddress;
+};
+
+struct DrawContext {
+		std::vector<RenderObject> OpaqueSurfaces;
+};
+
+constexpr uint32_t FRAME_OVERLAP = 2;
 
 class VulkanRenderer {
 	public:
@@ -77,6 +129,16 @@ class VulkanRenderer {
 		void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
 		void resizeSwapchain();
 
+		VkDevice m_device;
+		VkDescriptorSetLayout m_gpuSceneDataDescriptorLayout;
+		AllocatedImage m_drawImage;
+		AllocatedImage m_depthImage;
+
+		DrawContext mainDrawContext;
+		std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;
+
+		void updateScene();
+
 	private:
 		void initVulkan();
 		void initSwapchain();
@@ -101,7 +163,6 @@ class VulkanRenderer {
 		VkInstance m_instance;
 		VkDebugUtilsMessengerEXT m_debug_messenger;
 		VkPhysicalDevice m_chosenGPU;
-		VkDevice m_device;
 		VkSurfaceKHR m_surface;
 
 		// Swapchain
@@ -124,15 +185,12 @@ class VulkanRenderer {
 		VmaAllocator m_allocator;
 
 		// Draw resources
-		AllocatedImage m_drawImage;
-		AllocatedImage m_depthImage;
 		VkExtent2D m_drawExtent;
 
 		// Descriptors
 		DescriptorAllocator m_globalDescriptorAllocator;
 		VkDescriptorSet m_drawImageDescriptors;
 		VkDescriptorSetLayout m_drawImageDescriptorLayout;
-		VkDescriptorSetLayout m_gpuSceneDataDescriptorLayout;
 		VkDescriptorSetLayout m_singleImageDescriptorLayout;
 
 		// Scene data tied to DescriptorSetLayout
@@ -158,6 +216,9 @@ class VulkanRenderer {
 
 		VkSampler defaultSamplerLinear;
 		VkSampler defaultSamplerNearest;
+
+		MaterialInstance defaultData;
+		GLTFMetallic_Roughness metalRoughMaterial;
 };
 
 }// namespace pm

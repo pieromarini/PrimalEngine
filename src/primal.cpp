@@ -8,17 +8,20 @@
 
 constexpr bool bUseValidationLayers = true;
 
-pm::PrimalApp* loadedEngine = nullptr;
+namespace pm {
 
-pm::PrimalApp& pm::PrimalApp::get() { return *loadedEngine; }
+PrimalApp* loadedEngine = nullptr;
 
-void pm::PrimalApp::init() {
+PrimalApp& PrimalApp::get() { return *loadedEngine; }
+
+void PrimalApp::init() {
 	assert(loadedEngine == nullptr);
 	loadedEngine = this;
 
 	SDL_Init(SDL_INIT_VIDEO);
 
 	auto window_flags = static_cast<SDL_WindowFlags>(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+	SDL_SetRelativeMouseMode(SDL_TRUE);
 
 	m_window = SDL_CreateWindow(
 		"Vulkan Engine",
@@ -26,10 +29,18 @@ void pm::PrimalApp::init() {
 		static_cast<int32_t>(m_windowExtent.height),
 		window_flags);
 
+	m_mainCamera = new Camera();
+	m_mainCamera->velocity = glm::vec3(0.f);
+	m_mainCamera->position = glm::vec3(0, 0, 5);
+
+	m_mainCamera->pitch = 0;
+	m_mainCamera->yaw = 0;
+
 	m_rendererState = {
 		.useValidationLayers = true,
 		.windowExtent = m_windowExtent,
-		.window = m_window
+		.window = m_window,
+		.mainCamera = m_mainCamera
 	};
 
 	m_renderer.init(&m_rendererState);
@@ -37,7 +48,7 @@ void pm::PrimalApp::init() {
 	m_isInitialized = true;
 }
 
-void pm::PrimalApp::cleanup() {
+void PrimalApp::cleanup() {
 	if (m_isInitialized) {
 		m_renderer.cleanup();
 		SDL_DestroyWindow(m_window);
@@ -45,7 +56,7 @@ void pm::PrimalApp::cleanup() {
 	loadedEngine = nullptr;
 }
 
-void pm::PrimalApp::run() {
+void PrimalApp::run() {
 	SDL_Event e;
 	bool bQuit = false;
 
@@ -60,6 +71,8 @@ void pm::PrimalApp::run() {
 			if (e.type == SDL_EVENT_WINDOW_RESTORED || e.type == SDL_EVENT_WINDOW_FOCUS_GAINED) {
 				m_stopRendering = false;
 			}
+
+			m_mainCamera->processSDLEvent(e);
 		}
 
 		// do not draw if we are minimized
@@ -77,10 +90,12 @@ void pm::PrimalApp::run() {
 	}
 }
 
-void pm::PrimalApp::draw() {
+void PrimalApp::draw() {
 	m_renderer.draw();
 }
 
-GPUMeshBuffers pm::PrimalApp::uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
+GPUMeshBuffers PrimalApp::uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
 	return m_renderer.uploadMesh(indices, vertices);
 }
+
+}// namespace pm

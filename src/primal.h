@@ -2,6 +2,7 @@
 
 #include "vk_types.h"
 #include "platform/vulkan/vulkan_renderer.h"
+#include "camera.h"
 
 namespace pm {
 
@@ -24,6 +25,7 @@ class PrimalApp {
 		VulkanRendererConfig m_rendererState{};
 
 		SDL_Window* m_window{ nullptr };
+		Camera* m_mainCamera;
 };
 
 }// namespace pm

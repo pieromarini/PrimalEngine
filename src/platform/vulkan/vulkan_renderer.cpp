@@ -1,6 +1,5 @@
 #define VMA_IMPLEMENTATION
 #include "vulkan_renderer.h"
-#include "SDL3/SDL_vulkan.h"
 #include "platform/vulkan/vulkan_descriptor.h"
 #include "platform/vulkan/vulkan_images.h"
 #include "platform/vulkan/vulkan_loader.h"
@@ -8,6 +7,7 @@
 #include "vulkan_pipeline.h"
 #include "vulkan_shader.h"
 #include "vulkan_structures_helpers.h"
+#include <SDL3/SDL_vulkan.h>
 #include <cmath>
 #include <glm/gtx/transform.hpp>
 #include <vector>
@@ -108,6 +108,40 @@ void VulkanRenderer::initDefaultData() {
 
 	// Load meshes
 	m_testMeshes = loadGltfMeshes(this, "res/models/basicmesh.glb").value();
+
+	GLTFMetallic_Roughness::MaterialResources materialResources{};
+	// default the material textures
+	materialResources.colorImage = whiteImage;
+	materialResources.colorSampler = defaultSamplerLinear;
+	materialResources.metalRoughImage = whiteImage;
+	materialResources.metalRoughSampler = defaultSamplerLinear;
+
+	// set the uniform buffer for the material data
+	AllocatedBuffer materialConstants = createBuffer(sizeof(GLTFMetallic_Roughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+	// write the buffer
+	GLTFMetallic_Roughness::MaterialConstants* sceneUniformData = (GLTFMetallic_Roughness::MaterialConstants*)materialConstants.allocation->GetMappedData();
+	sceneUniformData->colorFactors = glm::vec4{ 1, 1, 1, 1 };
+	sceneUniformData->metalRoughFactors = glm::vec4{ 1, 0.5, 0, 0 };
+
+	materialResources.dataBuffer = materialConstants.buffer;
+	materialResources.dataBufferOffset = 0;
+
+	defaultData = metalRoughMaterial.writeMaterial(m_device, MaterialPass::MainColor, materialResources, m_globalDescriptorAllocator);
+
+	for (auto& m : m_testMeshes) {
+		auto newNode = std::make_shared<MeshNode>();
+		newNode->mesh = m;
+
+		newNode->localTransform = glm::mat4{ 1.f };
+		newNode->worldTransform = glm::mat4{ 1.f };
+
+		for (auto& s : newNode->mesh->surfaces) {
+			s.material = std::make_shared<GLTFMaterial>(defaultData);
+		}
+
+		loadedNodes[m->name] = std::move(newNode);
+	}
 }
 
 void VulkanRenderer::initVulkan() {
@@ -322,6 +356,7 @@ void VulkanRenderer::cleanup() {
 }
 
 void VulkanRenderer::draw() {
+	updateScene();
 	// wait until the gpu has finished rendering the last frame. Timeout of 1 second
 	VK_CHECK(vkWaitForFences(m_device, 1, &getCurrentFrame().m_renderFence, true, 1000000000));
 
@@ -476,15 +511,25 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	writer.writeBuffer(0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	writer.updateSet(m_device, globalDescriptor);
 
+	// Node drawing
+	for (const RenderObject& draw : mainDrawContext.OpaqueSurfaces) {
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->pipeline);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->layout, 0, 1, &globalDescriptor, 0, nullptr);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->layout, 1, 1, &draw.material->materialSet, 0, nullptr);
+
+		vkCmdBindIndexBuffer(commandBuffer, draw.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+		GPUDrawPushConstants pushConstants{};
+		pushConstants.vertexBuffer = draw.vertexBufferAddress;
+		pushConstants.worldMatrix = draw.transform;
+		vkCmdPushConstants(commandBuffer, draw.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+
+		vkCmdDrawIndexed(commandBuffer, draw.indexCount, 1, draw.firstIndex, 0, 0);
+	}
+
 	// Push Constants
 	GPUDrawPushConstants pushConstants{};
 	pushConstants.worldMatrix = projection * view;
-	pushConstants.vertexBuffer = m_testMeshes[2]->meshBuffers.vertexBufferAddress;
-
-	// Draw GLTF mesh
-	vkCmdPushConstants(commandBuffer, m_meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
-	vkCmdBindIndexBuffer(commandBuffer, m_testMeshes[2]->meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-	vkCmdDrawIndexed(commandBuffer, m_testMeshes[2]->surfaces[0].count, 1, m_testMeshes[2]->surfaces[0].startIndex, 0, 0);
 
 	// Draw rectangle
 	pushConstants.vertexBuffer = rectangle.vertexBufferAddress;
@@ -548,6 +593,7 @@ void VulkanRenderer::initDescriptors() {
 void VulkanRenderer::initPipelines() {
 	initBackgroundPipelines();
 	initMeshPipeline();
+	metalRoughMaterial.buildPipelines(this);
 }
 
 void VulkanRenderer::initBackgroundPipelines() {
@@ -801,6 +847,150 @@ AllocatedImage VulkanRenderer::createImage(void* data, VkExtent3D size, VkFormat
 void VulkanRenderer::destroyImage(const AllocatedImage& img) {
 	vkDestroyImageView(m_device, img.imageView, nullptr);
 	vmaDestroyImage(m_allocator, img.image, img.allocation);
+}
+
+void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
+	VkShaderModule meshFragShader{};
+	if (!loadShaderModule("res/shaders/mesh.frag.spv", renderer->m_device, &meshFragShader)) {
+		std::cout << std::format("Error when building the triangle fragment shader module") << '\n';
+	}
+
+	VkShaderModule meshVertexShader{};
+	if (!loadShaderModule("res/shaders/mesh.vert.spv", renderer->m_device, &meshVertexShader)) {
+		std::cout << std::format("Error when building the triangle vertex shader module") << '\n';
+	}
+
+	VkPushConstantRange matrixRange{};
+	matrixRange.offset = 0;
+	matrixRange.size = sizeof(GPUDrawPushConstants);
+	matrixRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	DescriptorLayoutBuilder layoutBuilder;
+	layoutBuilder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	layoutBuilder.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	layoutBuilder.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+
+	materialLayout = layoutBuilder.build(renderer->m_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+
+	VkDescriptorSetLayout layouts[] = {
+		renderer->m_gpuSceneDataDescriptorLayout,
+		materialLayout
+	};
+
+	VkPipelineLayoutCreateInfo mesh_layout_info = pipelineLayoutCreateInfo();
+	mesh_layout_info.setLayoutCount = 2;
+	mesh_layout_info.pSetLayouts = layouts;
+	mesh_layout_info.pPushConstantRanges = &matrixRange;
+	mesh_layout_info.pushConstantRangeCount = 1;
+
+	VkPipelineLayout newLayout{};
+	VK_CHECK(vkCreatePipelineLayout(renderer->m_device, &mesh_layout_info, nullptr, &newLayout));
+
+	opaquePipeline.layout = newLayout;
+	transparentPipeline.layout = newLayout;
+
+	// build the stage-create-info for both vertex and fragment stages. This lets
+	// the pipeline know the shader modules per stage
+	PipelineBuilder pipelineBuilder;
+	pipelineBuilder.setShaders(meshVertexShader, meshFragShader);
+	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
+	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+	pipelineBuilder.setMultisamplingNone();
+	pipelineBuilder.disableBlending();
+	pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+
+	// render format
+	pipelineBuilder.setColorAttachmentFormat(renderer->m_drawImage.imageFormat);
+	pipelineBuilder.setDepthFormat(renderer->m_depthImage.imageFormat);
+
+	// use the triangle layout we created
+	pipelineBuilder.m_pipelineLayout = newLayout;
+
+	// finally build the pipeline
+	opaquePipeline.pipeline = pipelineBuilder.buildPipeline(renderer->m_device);
+
+	// create the transparent variant
+	pipelineBuilder.enableBlendingAdditive();
+
+	pipelineBuilder.enableDepthTest(false, VK_COMPARE_OP_GREATER_OR_EQUAL);
+
+	transparentPipeline.pipeline = pipelineBuilder.buildPipeline(renderer->m_device);
+
+	vkDestroyShaderModule(renderer->m_device, meshFragShader, nullptr);
+	vkDestroyShaderModule(renderer->m_device, meshVertexShader, nullptr);
+}
+
+MaterialInstance GLTFMetallic_Roughness::writeMaterial(VkDevice device, MaterialPass pass, const MaterialResources& resources, DescriptorAllocator& descriptorAllocator) {
+	MaterialInstance matData{};
+	matData.passType = pass;
+	if (pass == MaterialPass::Transparent) {
+		matData.pipeline = &transparentPipeline;
+	} else {
+		matData.pipeline = &opaquePipeline;
+	}
+
+	matData.materialSet = descriptorAllocator.allocate(device, materialLayout);
+
+
+	writer.clear();
+	writer.writeBuffer(0, resources.dataBuffer, sizeof(MaterialConstants), resources.dataBufferOffset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	writer.writeImage(1, resources.colorImage.imageView, resources.colorSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	writer.writeImage(2, resources.metalRoughImage.imageView, resources.metalRoughSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+
+	writer.updateSet(device, matData.materialSet);
+
+	return matData;
+}
+
+void MeshNode::draw(const glm::mat4& topMatrix, DrawContext& ctx) {
+	glm::mat4 nodeMatrix = topMatrix * worldTransform;
+
+	for (auto& s : mesh->surfaces) {
+		RenderObject def{};
+		def.indexCount = s.count;
+		def.firstIndex = s.startIndex;
+		def.indexBuffer = mesh->meshBuffers.indexBuffer.buffer;
+		def.material = &s.material->data;
+
+		def.transform = nodeMatrix;
+		def.vertexBufferAddress = mesh->meshBuffers.vertexBufferAddress;
+
+		ctx.OpaqueSurfaces.push_back(def);
+	}
+
+	// recurse down
+	Node::draw(topMatrix, ctx);
+}
+
+void VulkanRenderer::updateScene() {
+	m_rendererState->mainCamera->update();
+
+	mainDrawContext.OpaqueSurfaces.clear();
+
+	m_sceneData.view = m_rendererState->mainCamera->getViewMatrix();
+	// camera projection
+	m_sceneData.proj = glm::perspective(glm::radians(70.f), (float)m_rendererState->windowExtent.width / (float)m_rendererState->windowExtent.height, 10000.f, 0.1f);
+
+	// invert the Y direction on projection matrix so that we are more similar
+	// to opengl and gltf axis
+	m_sceneData.proj[1][1] *= -1;
+	m_sceneData.viewproj = m_sceneData.proj * m_sceneData.view;
+
+	// some default lighting parameters
+	m_sceneData.ambientColor = glm::vec4(.1f);
+	m_sceneData.sunlightColor = glm::vec4(1.f);
+	m_sceneData.sunlightDirection = glm::vec4(0, 1, 0.5, 1.f);
+
+	loadedNodes["Suzanne"]->draw(glm::mat4{ 1.f }, mainDrawContext);
+
+	for (int x = -3; x < 3; x++) {
+
+		glm::mat4 scale = glm::scale(glm::vec3{ 0.2 });
+		glm::mat4 translation = glm::translate(glm::vec3{ x, 1, 0 });
+
+		loadedNodes["Cube"]->draw(translation * scale, mainDrawContext);
+	}
 }
 
 }// namespace pm
