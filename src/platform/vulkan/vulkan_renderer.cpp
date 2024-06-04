@@ -23,6 +23,15 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	initDescriptors();
 	initPipelines();
 	initDefaultData();
+
+	m_rendererState->mainCamera->position = glm::vec3(30.f, -00.f, -085.f);
+
+	std::string structurePath = { "res/models/structure.glb" };
+	auto structureFile = loadGltf(this,structurePath);
+
+	assert(structureFile.has_value());
+
+	loadedScenes["structure"] = *structureFile;
 }
 
 void VulkanRenderer::resizeSwapchain() {
@@ -317,6 +326,8 @@ void VulkanRenderer::destroySwapchain() {
 
 void VulkanRenderer::cleanup() {
 	vkDeviceWaitIdle(m_device);
+
+ 	loadedScenes.clear();
 
 	for (auto& frame : m_frames) {
 		vkDestroyCommandPool(m_device, frame.m_commandPool, nullptr);
@@ -991,6 +1002,8 @@ void VulkanRenderer::updateScene() {
 
 		loadedNodes["Cube"]->draw(translation * scale, mainDrawContext);
 	}
+
+	loadedScenes["structure"]->draw(glm::mat4{ 1.f }, mainDrawContext);
 }
 
 }// namespace pm

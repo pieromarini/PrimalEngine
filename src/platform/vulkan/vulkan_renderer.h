@@ -139,6 +139,21 @@ class VulkanRenderer {
 
 		void updateScene();
 
+		// Image testing
+		AllocatedImage whiteImage;
+		AllocatedImage blackImage;
+		AllocatedImage greyImage;
+		AllocatedImage errorCheckerboardImage;
+
+		VkSampler defaultSamplerLinear;
+		VkSampler defaultSamplerNearest;
+
+		// GLTF loading testing
+		MaterialInstance defaultData;
+		GLTFMetallic_Roughness metalRoughMaterial;
+
+		std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes;
+
 	private:
 		void initVulkan();
 		void initSwapchain();
@@ -207,18 +222,6 @@ class VulkanRenderer {
 		// Loaded meshes from GLTF file
 		GPUMeshBuffers rectangle;
 		std::vector<std::shared_ptr<MeshAsset>> m_testMeshes;
-
-		// Image testing
-		AllocatedImage whiteImage;
-		AllocatedImage blackImage;
-		AllocatedImage greyImage;
-		AllocatedImage errorCheckerboardImage;
-
-		VkSampler defaultSamplerLinear;
-		VkSampler defaultSamplerNearest;
-
-		MaterialInstance defaultData;
-		GLTFMetallic_Roughness metalRoughMaterial;
 };
 
 }// namespace pm
