@@ -888,14 +888,14 @@ void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
 		materialLayout
 	};
 
-	VkPipelineLayoutCreateInfo mesh_layout_info = pipelineLayoutCreateInfo();
-	mesh_layout_info.setLayoutCount = 2;
-	mesh_layout_info.pSetLayouts = layouts;
-	mesh_layout_info.pPushConstantRanges = &matrixRange;
-	mesh_layout_info.pushConstantRangeCount = 1;
+	VkPipelineLayoutCreateInfo meshLayoutInfo = pipelineLayoutCreateInfo();
+	meshLayoutInfo.pPushConstantRanges = &matrixRange;
+	meshLayoutInfo.pushConstantRangeCount = 1;
+	meshLayoutInfo.setLayoutCount = 2;
+	meshLayoutInfo.pSetLayouts = layouts;
 
 	VkPipelineLayout newLayout{};
-	VK_CHECK(vkCreatePipelineLayout(renderer->m_device, &mesh_layout_info, nullptr, &newLayout));
+	VK_CHECK(vkCreatePipelineLayout(renderer->m_device, &meshLayoutInfo, nullptr, &newLayout));
 
 	opaquePipeline.layout = newLayout;
 	transparentPipeline.layout = newLayout;
