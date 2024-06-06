@@ -11,12 +11,21 @@
 
 namespace pm {
 
+struct RendererStats {
+		float frametime;
+		int triangleCount;
+		int drawCallCount;
+		float sceneUpdateTime;
+		float meshDrawTime;
+};
+
 struct VulkanRendererConfig {
 		bool useValidationLayers;
 		VkExtent2D windowExtent;
 		SDL_Window* window;
 		Camera* mainCamera;
 		bool resizeRequested;
+		RendererStats rendererStats;
 };
 
 struct FrameData {

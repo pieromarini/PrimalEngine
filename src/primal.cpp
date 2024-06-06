@@ -61,6 +61,8 @@ void PrimalApp::run() {
 	bool bQuit = false;
 
 	while (!bQuit) {
+		auto start = std::chrono::system_clock::now();
+
 		while (SDL_PollEvent(&e) != 0) {
 			if (e.type == SDL_EVENT_QUIT)
 				bQuit = true;
@@ -87,6 +89,18 @@ void PrimalApp::run() {
 		}
 
 		draw();
+
+		auto end = std::chrono::system_clock::now();
+		auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+		m_rendererState.rendererStats.frametime = elapsed.count() / 1000.0f;
+
+		auto stats = std::format("Frametime: {}us | Update: {}us | MeshDraw: {}us | Triangles: {} | DrawCall: {}",
+			m_rendererState.rendererStats.frametime,
+			m_rendererState.rendererStats.sceneUpdateTime,
+			m_rendererState.rendererStats.meshDrawTime,
+			m_rendererState.rendererStats.triangleCount,
+			m_rendererState.rendererStats.drawCallCount);
+		std::cout << stats << '\n';
 	}
 }
 
