@@ -903,6 +903,7 @@ void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
 	// build the stage-create-info for both vertex and fragment stages. This lets
 	// the pipeline know the shader modules per stage
 	PipelineBuilder pipelineBuilder;
+	pipelineBuilder.setPipelineLayout(newLayout);
 	pipelineBuilder.setShaders(meshVertexShader, meshFragShader);
 	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
@@ -914,9 +915,6 @@ void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
 	// render format
 	pipelineBuilder.setColorAttachmentFormat(renderer->m_drawImage.imageFormat);
 	pipelineBuilder.setDepthFormat(renderer->m_depthImage.imageFormat);
-
-	// use the triangle layout we created
-	pipelineBuilder.m_pipelineLayout = newLayout;
 
 	// finally build the pipeline
 	opaquePipeline.pipeline = pipelineBuilder.buildPipeline(renderer->m_device);
