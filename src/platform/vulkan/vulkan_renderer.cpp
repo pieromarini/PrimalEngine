@@ -27,7 +27,7 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	m_rendererState->mainCamera->position = glm::vec3(30.f, -00.f, -085.f);
 
 	std::string structurePath = { "res/models/structure.glb" };
-	auto structureFile = loadGltf(this,structurePath);
+	auto structureFile = loadGltf(this, structurePath);
 
 	assert(structureFile.has_value());
 
@@ -635,7 +635,6 @@ void VulkanRenderer::initBackgroundPipelines() {
 }
 
 void VulkanRenderer::initMeshPipeline() {
-
 	VkShaderModule triangleFragShader{};
 	if (!loadShaderModule("res/shaders/tex_image.frag.spv", m_device, &triangleFragShader)) {
 		std::cout << std::format("Error when building the mesh fragment shader module\n");
@@ -940,7 +939,6 @@ MaterialInstance GLTFMetallic_Roughness::writeMaterial(VkDevice device, Material
 	}
 
 	matData.materialSet = descriptorAllocator.allocate(device, materialLayout);
-
 
 	writer.clear();
 	writer.writeBuffer(0, resources.dataBuffer, sizeof(MaterialConstants), resources.dataBufferOffset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
