@@ -458,8 +458,12 @@ void VulkanRenderer::draw() {
 }
 
 void VulkanRenderer::drawBackground(VkCommandBuffer commandBuffer) {
+	ComputePushConstants data = {
+		.data1 = { 0.1, 0.2, 0.4, 0.97 }
+	};
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_gradientPipeline);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_gradientPipelineLayout, 0, 1, &m_drawImageDescriptors, 0, nullptr);
+	vkCmdPushConstants(commandBuffer, m_gradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &data);
 	vkCmdDispatch(commandBuffer, std::ceil(m_drawExtent.width / 16.0), std::ceil(m_drawExtent.height / 16.0), 1);
 }
 
@@ -581,6 +585,14 @@ void VulkanRenderer::initBackgroundPipelines() {
 	computeLayout.pNext = nullptr;
 	computeLayout.pSetLayouts = &m_drawImageDescriptorLayout;
 	computeLayout.setLayoutCount = 1;
+
+	VkPushConstantRange pushConstants{};
+	pushConstants.offset = 0;
+	pushConstants.size = sizeof(ComputePushConstants);
+	pushConstants.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+	computeLayout.pPushConstantRanges = &pushConstants;
+	computeLayout.pushConstantRangeCount = 1;
 
 	VK_CHECK(vkCreatePipelineLayout(m_device, &computeLayout, nullptr, &m_gradientPipelineLayout));
 
