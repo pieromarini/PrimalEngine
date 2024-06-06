@@ -103,7 +103,8 @@ struct RenderObject {
 };
 
 struct DrawContext {
-		std::vector<RenderObject> OpaqueSurfaces;
+		std::vector<RenderObject> opaqueSurfaces;
+		std::vector<RenderObject> transparentSurfaces;
 };
 
 constexpr uint32_t FRAME_OVERLAP = 2;

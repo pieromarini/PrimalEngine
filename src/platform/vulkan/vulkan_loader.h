@@ -2,6 +2,9 @@
 
 #include "platform/vulkan/vulkan_descriptor.h"
 #include "vk_types.h"
+#include <fastgltf/glm_element_traits.hpp>
+#include <fastgltf/parser.hpp>
+#include <fastgltf/tools.hpp>
 #include <filesystem>
 
 namespace pm {
@@ -46,7 +49,7 @@ struct LoadedGLTF : public IRenderable {
 
 		AllocatedBuffer materialDataBuffer;
 
-		VulkanRenderer* creator;
+		VulkanRenderer* renderer;
 
 		~LoadedGLTF() { clearAll(); };
 
@@ -56,6 +59,9 @@ struct LoadedGLTF : public IRenderable {
 		void clearAll();
 };
 
+std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asset& asset, fastgltf::Image& image);
+
 std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, std::string_view filePath);
+
 
 }// namespace pm

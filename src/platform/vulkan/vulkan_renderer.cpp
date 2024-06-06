@@ -327,7 +327,7 @@ void VulkanRenderer::destroySwapchain() {
 void VulkanRenderer::cleanup() {
 	vkDeviceWaitIdle(m_device);
 
- 	loadedScenes.clear();
+	loadedScenes.clear();
 
 	for (auto& frame : m_frames) {
 		vkDestroyCommandPool(m_device, frame.m_commandPool, nullptr);
@@ -512,8 +512,8 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	writer.writeBuffer(0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	writer.updateSet(m_device, globalDescriptor);
 
-	// Node drawing
-	for (const RenderObject& draw : mainDrawContext.OpaqueSurfaces) {
+	// TODO: make this more manageable, we don't want a lambda here.
+	auto draw = [&](const RenderObject& draw) {
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->pipeline);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->layout, 0, 1, &globalDescriptor, 0, nullptr);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->layout, 1, 1, &draw.material->materialSet, 0, nullptr);
@@ -526,6 +526,14 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 		vkCmdPushConstants(commandBuffer, draw.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 
 		vkCmdDrawIndexed(commandBuffer, draw.indexCount, 1, draw.firstIndex, 0, 0);
+	};
+
+	for (auto& r : mainDrawContext.opaqueSurfaces) {
+		draw(r);
+	}
+
+	for (auto& r : mainDrawContext.transparentSurfaces) {
+		draw(r);
 	}
 
 	vkCmdEndRendering(commandBuffer);
@@ -892,7 +900,7 @@ void MeshNode::draw(const glm::mat4& topMatrix, DrawContext& ctx) {
 		def.transform = nodeMatrix;
 		def.vertexBufferAddress = mesh->meshBuffers.vertexBufferAddress;
 
-		ctx.OpaqueSurfaces.push_back(def);
+		ctx.opaqueSurfaces.push_back(def);
 	}
 
 	// recurse down
@@ -902,7 +910,8 @@ void MeshNode::draw(const glm::mat4& topMatrix, DrawContext& ctx) {
 void VulkanRenderer::updateScene() {
 	m_rendererState->mainCamera->update();
 
-	mainDrawContext.OpaqueSurfaces.clear();
+	mainDrawContext.opaqueSurfaces.clear();
+	mainDrawContext.transparentSurfaces.clear();
 
 	m_sceneData.view = m_rendererState->mainCamera->getViewMatrix();
 	// camera projection
