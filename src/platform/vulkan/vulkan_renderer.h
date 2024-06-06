@@ -206,7 +206,6 @@ class VulkanRenderer {
 		DescriptorAllocator m_globalDescriptorAllocator;
 		VkDescriptorSet m_drawImageDescriptors;
 		VkDescriptorSetLayout m_drawImageDescriptorLayout;
-		VkDescriptorSetLayout m_singleImageDescriptorLayout;
 
 		// Scene data tied to DescriptorSetLayout
 		GPUSceneData m_sceneData;
@@ -214,10 +213,6 @@ class VulkanRenderer {
 		// Compute pipeline
 		VkPipeline m_gradientPipeline;
 		VkPipelineLayout m_gradientPipelineLayout;
-
-		// Mesh pipeline
-		VkPipeline m_meshPipeline;
-		VkPipelineLayout m_meshPipelineLayout;
 
 		// Loaded meshes from GLTF file
 		GPUMeshBuffers rectangle;

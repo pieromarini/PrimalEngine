@@ -351,9 +351,6 @@ void VulkanRenderer::cleanup() {
 	vkDestroyPipelineLayout(m_device, m_gradientPipelineLayout, nullptr);
 	vkDestroyPipeline(m_device, m_gradientPipeline, nullptr);
 
-	vkDestroyPipelineLayout(m_device, m_meshPipelineLayout, nullptr);
-	vkDestroyPipeline(m_device, m_meshPipeline, nullptr);
-
 	destroySwapchain();
 
 	vmaDestroyAllocator(m_allocator);
@@ -404,12 +401,13 @@ void VulkanRenderer::draw() {
 
 	drawBackground(commandBuffer);
 
-	// transition the draw image and the swapchain image into their correct transfer layouts
+	// transition the draw image and the depth image into their correct attachment layouts
 	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	transitionImage(commandBuffer, m_depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
 	drawGeometry(commandBuffer);
 
+	// transition the draw image and the swapchain image into their correct transfer layouts
 	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 	transitionImage(commandBuffer, m_swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
@@ -472,9 +470,6 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	VkRenderingInfo renderInfo = renderingInfo(m_drawExtent, &colorAttachment, &depthAttachment);
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
 
-	// Start mesh pipeline
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshPipeline);
-
 	VkViewport viewport = {};
 	viewport.x = 0;
 	viewport.y = 0;
@@ -490,15 +485,6 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	scissor.extent.width = m_drawExtent.width;
 	scissor.extent.height = m_drawExtent.height;
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
-	// Bind texture
-	VkDescriptorSet imageSet = getCurrentFrame().m_frameDescriptors.allocate(m_device, m_singleImageDescriptorLayout);
-	{
-		DescriptorWriter writer;
-		writer.writeImage(0, errorCheckerboardImage.imageView, defaultSamplerNearest, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-		writer.updateSet(m_device, imageSet);
-	}
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshPipelineLayout, 0, 1, &imageSet, 0, nullptr);
 
 	// Calculate view-projection matrix
 	// NOTE: Flipping near and far plane to increase depth testing quality
@@ -538,16 +524,6 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 		vkCmdDrawIndexed(commandBuffer, draw.indexCount, 1, draw.firstIndex, 0, 0);
 	}
 
-	// Push Constants
-	GPUDrawPushConstants pushConstants{};
-	pushConstants.worldMatrix = projection * view;
-
-	// Draw rectangle
-	pushConstants.vertexBuffer = rectangle.vertexBufferAddress;
-	vkCmdPushConstants(commandBuffer, m_meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
-	vkCmdBindIndexBuffer(commandBuffer, rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-	vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
-
 	vkCmdEndRendering(commandBuffer);
 }
 
@@ -563,13 +539,6 @@ void VulkanRenderer::initDescriptors() {
 		DescriptorLayoutBuilder builder;
 		builder.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 		m_drawImageDescriptorLayout = builder.build(m_device, VK_SHADER_STAGE_COMPUTE_BIT);
-	}
-
-	// Texture descriptor
-	{
-		DescriptorLayoutBuilder builder;
-		builder.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-		m_singleImageDescriptorLayout = builder.build(m_device, VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 
 	// Vertex/Fragment UBO
@@ -603,7 +572,6 @@ void VulkanRenderer::initDescriptors() {
 
 void VulkanRenderer::initPipelines() {
 	initBackgroundPipelines();
-	initMeshPipeline();
 	metalRoughMaterial.buildPipelines(this);
 }
 
@@ -632,57 +600,6 @@ void VulkanRenderer::initBackgroundPipelines() {
 	VK_CHECK(vkCreateComputePipelines(m_device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &m_gradientPipeline));
 
 	vkDestroyShaderModule(m_device, computeDrawShader, nullptr);
-}
-
-void VulkanRenderer::initMeshPipeline() {
-	VkShaderModule triangleFragShader{};
-	if (!loadShaderModule("res/shaders/tex_image.frag.spv", m_device, &triangleFragShader)) {
-		std::cout << std::format("Error when building the mesh fragment shader module\n");
-	}
-
-	VkShaderModule triangleVertexShader{};
-	if (!loadShaderModule("res/shaders/mesh.vert.spv", m_device, &triangleVertexShader)) {
-		std::cout << std::format("Error when building the mesh vertex shader module\n");
-	}
-
-	VkPushConstantRange bufferRange{};
-	bufferRange.offset = 0;
-	bufferRange.size = sizeof(GPUDrawPushConstants);
-	bufferRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-	VkPipelineLayoutCreateInfo pipelineLayoutInfo = pipelineLayoutCreateInfo();
-	pipelineLayoutInfo.pPushConstantRanges = &bufferRange;
-	pipelineLayoutInfo.pushConstantRangeCount = 1;
-	pipelineLayoutInfo.pSetLayouts = &m_singleImageDescriptorLayout;
-	pipelineLayoutInfo.setLayoutCount = 1;
-
-	VK_CHECK(vkCreatePipelineLayout(m_device, &pipelineLayoutInfo, nullptr, &m_meshPipelineLayout));
-
-	PipelineBuilder pipelineBuilder;
-
-	pipelineBuilder.setPipelineLayout(m_meshPipelineLayout);
-	// connecting the vertex and pixel shaders to the pipeline
-	pipelineBuilder.setShaders(triangleVertexShader, triangleFragShader);
-	// it will draw triangles
-	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-	// filled triangles
-	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
-	// no backface culling
-	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-	// no multisampling
-	pipelineBuilder.setMultisamplingNone();
-	// no blending
-	pipelineBuilder.disableBlending();
-
-	pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-
-	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
-	pipelineBuilder.setDepthFormat(m_depthImage.imageFormat);
-
-	m_meshPipeline = pipelineBuilder.buildPipeline(m_device);
-
-	vkDestroyShaderModule(m_device, triangleFragShader, nullptr);
-	vkDestroyShaderModule(m_device, triangleVertexShader, nullptr);
 }
 
 void VulkanRenderer::immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function) {
