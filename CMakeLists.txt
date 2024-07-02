@@ -5,7 +5,11 @@ if(${CMAKE_VERSION} VERSION_LESS 3.27)
 endif()
 
 # TEMPORARY. g++-13 seems stable for now
-set(CMAKE_CXX_COMPILER "/usr/bin/g++-13")
+if(APPLE)
+  set(CMAKE_CXX_COMPILER "/usr/bin/clang++")
+elseif(UNIX)
+  set(CMAKE_CXX_COMPILER "/usr/bin/g++-13")
+endif()
 
 project(
   PrimalEngine
