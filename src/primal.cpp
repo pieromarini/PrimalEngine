@@ -2,6 +2,7 @@
 #include <thread>
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_vulkan.h>
 
 #include "primal.h"
@@ -21,13 +22,14 @@ void PrimalApp::init() {
 	SDL_Init(SDL_INIT_VIDEO);
 
 	auto window_flags = static_cast<SDL_WindowFlags>(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
-	SDL_SetRelativeMouseMode(SDL_TRUE);
 
 	m_window = SDL_CreateWindow(
 		"Vulkan Engine",
 		static_cast<int32_t>(m_windowExtent.width),
 		static_cast<int32_t>(m_windowExtent.height),
 		window_flags);
+
+	SDL_SetWindowRelativeMouseMode(m_window, SDL_TRUE);
 
 	m_mainCamera = new Camera();
 	m_mainCamera->velocity = glm::vec3(0.f);
