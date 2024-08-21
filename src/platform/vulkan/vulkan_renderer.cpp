@@ -26,7 +26,7 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 
 	m_rendererState->mainCamera->position = glm::vec3(30.f, -00.f, -085.f);
 
-	std::string structurePath = { "res/models/structure.glb" };
+	const std::string structurePath = { "res/models/structure.glb" };
 	auto structureFile = loadGltf(this, structurePath);
 
 	assert(structureFile.has_value());
@@ -138,7 +138,7 @@ void VulkanRenderer::initDefaultData() {
 
 	defaultData = metalRoughMaterial.writeMaterial(m_device, MaterialPass::MainColor, materialResources, m_globalDescriptorAllocator);
 
-	for (auto& m : m_testMeshes) {
+	for (const auto& m : m_testMeshes) {
 		auto newNode = std::make_shared<MeshNode>();
 		newNode->mesh = m;
 
