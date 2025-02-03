@@ -106,7 +106,7 @@ add_subdirectory(extern/fastgltf)
 target_include_directories(${ENGINE_LIB} PUBLIC extern/fastgltf/include)
 
 # [LIB] SDL3
-FetchContent_Declare(sdl3 GIT_REPOSITORY https://github.com/libsdl-org/SDL.git GIT_TAG main EXCLUDE_FROM_ALL)
+FetchContent_Declare(sdl3 GIT_REPOSITORY https://github.com/libsdl-org/SDL.git GIT_TAG release-3.2.2 EXCLUDE_FROM_ALL)
 set(BUILD_EXAMPLES OFF CACHE INTERNAL "" FORCE)
 set(SDL_TEST_LIBRARY OFF CACHE INTERNAL "" FORCE)
 set(SDL_TESTS OFF CACHE INTERNAL "" FORCE)

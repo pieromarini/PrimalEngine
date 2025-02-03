@@ -29,31 +29,31 @@ void Camera::update() {
 
 void Camera::processSDLEvent(SDL_Event& e) {
 	if (e.type == SDL_EVENT_KEY_DOWN) {
-		if (e.key.keysym.sym == SDLK_w) {
+		if (e.key.key == SDLK_W) {
 			velocity.z = -1;
 		}
-		if (e.key.keysym.sym == SDLK_s) {
+		if (e.key.key == SDLK_S) {
 			velocity.z = 1;
 		}
-		if (e.key.keysym.sym == SDLK_a) {
+		if (e.key.key == SDLK_A) {
 			velocity.x = -1;
 		}
-		if (e.key.keysym.sym == SDLK_d) {
+		if (e.key.key == SDLK_D) {
 			velocity.x = 1;
 		}
 	}
 
 	if (e.type == SDL_EVENT_KEY_UP) {
-		if (e.key.keysym.sym == SDLK_w) {
+		if (e.key.key == SDLK_W) {
 			velocity.z = 0;
 		}
-		if (e.key.keysym.sym == SDLK_s) {
+		if (e.key.key == SDLK_S) {
 			velocity.z = 0;
 		}
-		if (e.key.keysym.sym == SDLK_a) {
+		if (e.key.key == SDLK_A) {
 			velocity.x = 0;
 		}
-		if (e.key.keysym.sym == SDLK_d) {
+		if (e.key.key == SDLK_D) {
 			velocity.x = 0;
 		}
 	}

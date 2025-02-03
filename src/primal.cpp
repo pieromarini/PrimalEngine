@@ -21,13 +21,14 @@ void PrimalApp::init() {
 	SDL_Init(SDL_INIT_VIDEO);
 
 	auto window_flags = static_cast<SDL_WindowFlags>(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
-	SDL_SetRelativeMouseMode(SDL_TRUE);
 
 	m_window = SDL_CreateWindow(
 		"Vulkan Engine",
 		static_cast<int32_t>(m_windowExtent.width),
 		static_cast<int32_t>(m_windowExtent.height),
 		window_flags);
+
+	SDL_SetWindowRelativeMouseMode(m_window, true);
 
 	m_mainCamera = new Camera();
 	m_mainCamera->velocity = glm::vec3(0.f);
@@ -91,10 +92,10 @@ void PrimalApp::run() {
 		draw();
 
 		auto end = std::chrono::system_clock::now();
-		auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-		m_rendererState.rendererStats.frametime = elapsed.count() / 1000.0f;
+		auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+		m_rendererState.rendererStats.frametime = elapsed.count();
 
-		auto stats = std::format("Frametime: {}us | Update: {}us | MeshDraw: {}us | Triangles: {} | DrawCall: {}",
+		auto stats = std::format("Frametime: {}ms | Update: {}us | MeshDraw: {}us | Triangles: {} | DrawCall: {}",
 			m_rendererState.rendererStats.frametime,
 			m_rendererState.rendererStats.sceneUpdateTime,
 			m_rendererState.rendererStats.meshDrawTime,
