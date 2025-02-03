@@ -5,7 +5,11 @@ if(${CMAKE_VERSION} VERSION_LESS 3.27)
 endif()
 
 # TEMPORARY. g++-13 seems stable for now
-set(CMAKE_CXX_COMPILER "/usr/bin/g++-13")
+if(APPLE)
+  set(CMAKE_CXX_COMPILER "/usr/bin/clang++")
+elseif(UNIX)
+  set(CMAKE_CXX_COMPILER "/usr/bin/g++-13")
+endif()
 
 project(
   PrimalEngine
@@ -16,8 +20,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
-# Intel Threading Library.
-find_package(TBB COMPONENTS tbbmalloc tbbmalloc_proxy tbb_preview)
+# Intel Threading Library. Not working for mac compilation right now (?)
+if(!APPLE)
+  find_package(TBB COMPONENTS tbbmalloc tbbmalloc_proxy tbb_preview)
+endif()
 
 include(cmake/BasicSettings.cmake)
 
@@ -128,9 +134,12 @@ target_link_libraries(${ENGINE_LIB} PUBLIC
   glm::glm
   SDL3::SDL3
   # assimp
-  tbb
   fastgltf::fastgltf
 )
+
+if(!APPLE)
+	target_link_libraries(${ENGINE_LIB} PUBLIC tbb)
+endif()
 
 # SPIR-V shader compilation
 find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin)

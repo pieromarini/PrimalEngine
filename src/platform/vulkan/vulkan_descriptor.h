@@ -30,7 +30,7 @@ struct DescriptorAllocator {
 		std::vector<PoolSizeRatio> ratios;
 		std::vector<VkDescriptorPool> fullPools;
 		std::vector<VkDescriptorPool> readyPools;
-		uint32_t setsPerPool;
+		uint32_t setsPerPool{};
 		uint32_t MAX_SETS_PER_POOL = 4092;
 };
 

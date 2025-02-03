@@ -10,6 +10,8 @@
 namespace pm {
 
 struct GLTFMaterial {
+		GLTFMaterial() = default;
+		GLTFMaterial(const MaterialInstance& d): data{d} {}
 		MaterialInstance data;
 };
 

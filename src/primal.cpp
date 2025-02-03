@@ -2,6 +2,7 @@
 #include <thread>
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_vulkan.h>
 
 #include "primal.h"
