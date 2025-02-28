@@ -102,7 +102,7 @@ void PrimalApp::run() {
 			m_rendererState.rendererStats.meshDrawTime,
 			m_rendererState.rendererStats.triangleCount,
 			m_rendererState.rendererStats.drawCallCount);
-		// std::cout << stats << '\n';
+		std::cout << stats << '\n';
 	}
 }
 

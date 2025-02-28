@@ -50,40 +50,6 @@ void VulkanRenderer::resizeSwapchain() {
 }
 
 void VulkanRenderer::initDefaultData() {
-	// rectangle
-	std::array<Vertex, 4> rect_vertices{};
-
-	rect_vertices[0].position = { 4.0, 0.5, 0 };
-	rect_vertices[1].position = { 4.0, 2.0, 0 };
-	rect_vertices[2].position = { 1.5, 0.5, 0 };
-	rect_vertices[3].position = { 1.5, 2.0, 0 };
-
-	rect_vertices[0].color = { 0.0, 0.0, 0.0, 1.0 };
-	rect_vertices[1].color = { 0.5, 0.5, 0.5, 1.0 };
-	rect_vertices[2].color = { 1.0, 0.0, 0.0, 1.0 };
-	rect_vertices[3].color = { 0.0, 1.0, 0.0, 1.0 };
-
-	rect_vertices[0].uv_x = 1;
-	rect_vertices[0].uv_y = 0;
-	rect_vertices[1].uv_x = 0;
-	rect_vertices[1].uv_y = 0;
-	rect_vertices[2].uv_x = 1;
-	rect_vertices[2].uv_y = 1;
-	rect_vertices[3].uv_x = 0;
-	rect_vertices[3].uv_y = 1;
-
-	std::array<uint32_t, 6> rect_indices{};
-
-	rect_indices[0] = 0;
-	rect_indices[1] = 1;
-	rect_indices[2] = 2;
-
-	rect_indices[3] = 2;
-	rect_indices[4] = 1;
-	rect_indices[5] = 3;
-
-	rectangle = uploadMesh(rect_indices, rect_vertices);
-
 	// 3 default textures, white, grey, black. 1 pixel each
 	uint32_t white = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
 	whiteImage = createImage((void*)&white, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -114,43 +80,6 @@ void VulkanRenderer::initDefaultData() {
 	sampl.magFilter = VK_FILTER_LINEAR;
 	sampl.minFilter = VK_FILTER_LINEAR;
 	vkCreateSampler(m_device, &sampl, nullptr, &defaultSamplerLinear);
-
-	// Load meshes
-	m_testMeshes = loadGltfMeshes(this, "res/models/basicmesh.glb").value();
-
-	GLTFMetallic_Roughness::MaterialResources materialResources{};
-	// default the material textures
-	materialResources.colorImage = whiteImage;
-	materialResources.colorSampler = defaultSamplerLinear;
-	materialResources.metalRoughImage = whiteImage;
-	materialResources.metalRoughSampler = defaultSamplerLinear;
-
-	// set the uniform buffer for the material data
-	AllocatedBuffer materialConstants = createBuffer(sizeof(GLTFMetallic_Roughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-
-	// write the buffer
-	GLTFMetallic_Roughness::MaterialConstants* sceneUniformData = (GLTFMetallic_Roughness::MaterialConstants*)materialConstants.allocation->GetMappedData();
-	sceneUniformData->colorFactors = glm::vec4{ 1, 1, 1, 1 };
-	sceneUniformData->metalRoughFactors = glm::vec4{ 1, 0.5, 0, 0 };
-
-	materialResources.dataBuffer = materialConstants.buffer;
-	materialResources.dataBufferOffset = 0;
-
-	defaultData = metalRoughMaterial.writeMaterial(m_device, MaterialPass::MainColor, materialResources, m_globalDescriptorAllocator);
-
-	for (const auto& m : m_testMeshes) {
-		auto newNode = std::make_shared<MeshNode>();
-		newNode->mesh = m;
-
-		newNode->localTransform = glm::mat4{ 1.f };
-		newNode->worldTransform = glm::mat4{ 1.f };
-
-		for (auto& s : newNode->mesh->surfaces) {
-			s.material = std::make_shared<GLTFMaterial>(defaultData);
-		}
-
-		loadedNodes[m->name] = std::move(newNode);
-	}
 }
 
 void VulkanRenderer::initVulkan() {
@@ -607,7 +536,7 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 
 void VulkanRenderer::initDescriptors() {
 	std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
-		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 }
+		{ .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 1 }
 	};
 
 	m_globalDescriptorAllocator.init(m_device, 10, sizes);
@@ -637,10 +566,10 @@ void VulkanRenderer::initDescriptors() {
 	for (auto& frame : m_frames) {
 		// create a descriptor pool
 		std::vector<DescriptorAllocator::PoolSizeRatio> frame_sizes = {
-			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3 },
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 },
-			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 },
+			{ .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 3 },
+			{ .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .ratio = 3 },
+			{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 3 },
+			{ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio = 4 },
 		};
 
 		frame.m_frameDescriptors = {};
@@ -995,21 +924,11 @@ void VulkanRenderer::updateScene() {
 	m_sceneData.sunlightColor = glm::vec4(1.f);
 	m_sceneData.sunlightDirection = glm::vec4(0, 1, 0.5, 1.f);
 
-	loadedNodes["Suzanne"]->draw(glm::mat4{ 1.f }, mainDrawContext);
-
-	for (int x = -3; x < 3; x++) {
-
-		glm::mat4 scale = glm::scale(glm::vec3{ 0.2 });
-		glm::mat4 translation = glm::translate(glm::vec3{ x, 1, 0 });
-
-		loadedNodes["Cube"]->draw(translation * scale, mainDrawContext);
-	}
-
 	loadedScenes["structure"]->draw(glm::mat4{ 1.f }, mainDrawContext);
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-	m_rendererState->rendererStats.sceneUpdateTime = elapsed.count() / 1000.0f;
+	m_rendererState->rendererStats.sceneUpdateTime = static_cast<float>(elapsed.count()) / 1000.0f;
 }
 
 }// namespace pm

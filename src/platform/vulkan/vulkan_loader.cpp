@@ -347,6 +347,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 		}
 
 		GLTFMetallic_Roughness::MaterialResources materialResources{};
+
 		// default the material textures
 		materialResources.colorImage = renderer->whiteImage;
 		materialResources.colorSampler = renderer->defaultSamplerLinear;
