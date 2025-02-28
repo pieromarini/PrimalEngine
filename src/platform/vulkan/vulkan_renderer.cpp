@@ -15,7 +15,7 @@
 namespace pm {
 
 void VulkanRenderer::init(VulkanRendererConfig* state) {
-	m_rendererState = state;
+  m_rendererState = state;
 	initVulkan();
 	initSwapchain();
 	initCommands();

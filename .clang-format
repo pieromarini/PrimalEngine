@@ -1,4 +1,4 @@
-IndentAccessModifiers: true
+IndentAccessModifiers: false
 AlignAfterOpenBracket: DontAlign
 AlignConsecutiveAssignments: None
 AlignConsecutiveDeclarations: None

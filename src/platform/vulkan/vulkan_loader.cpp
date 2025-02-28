@@ -272,9 +272,9 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 	}
 
 	std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
-		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3 },
-		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 }
+		{ .type=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio=3 },
+		{ .type=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio=3 },
+		{ .type=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .ratio=1 }
 	};
 
 	file.descriptorPool.init(renderer->m_device, gltf.materials.size(), sizes);
