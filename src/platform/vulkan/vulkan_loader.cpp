@@ -22,8 +22,7 @@ std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asse
 				assert(filePath.uri.isLocalPath());// We're only capable of loading
 																					 // local files.
 
-				const std::string path(filePath.uri.path().begin(),
-					filePath.uri.path().end());// Thanks C++.
+				const std::string path(filePath.uri.path().begin(), filePath.uri.path().end());
 				unsigned char* data = stbi_load(path.c_str(), &width, &height, &nrChannels, 4);
 				if (data) {
 					VkExtent3D imagesize;
@@ -272,9 +271,9 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 	}
 
 	std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
-		{ .type=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio=3 },
-		{ .type=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio=3 },
-		{ .type=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .ratio=1 }
+		{ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio = 3 },
+		{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 3 },
+		{ .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .ratio = 1 }
 	};
 
 	file.descriptorPool.init(renderer->m_device, gltf.materials.size(), sizes);
@@ -304,6 +303,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 	std::vector<std::shared_ptr<GLTFMaterial>> materials;
 
 	// load textures
+	int defaultTextureCount = 0;
 	for (fastgltf::Image& image : gltf.images) {
 		auto img = loadImage(renderer, gltf, image);
 
@@ -312,9 +312,12 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 			file.images[image.name.c_str()] = *img;
 		} else {
 			images.push_back(renderer->errorCheckerboardImage);
+			defaultTextureCount++;
 			std::cout << "gltf failed to load texture " << image.name << std::endl;
 		}
 	}
+	std::cout << std::format("Loaded {} textures. Errors: {}\n", images.size(), defaultTextureCount);
+
 
 	// create buffer to hold the material data
 	file.materialDataBuffer = renderer->createBuffer(sizeof(GLTFMetallic_Roughness::MaterialConstants) * gltf.materials.size(), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
