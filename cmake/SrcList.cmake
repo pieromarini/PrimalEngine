@@ -16,7 +16,24 @@ if(UNIX)
 		OUTPUT_VARIABLE sandbox_files
 	)
 elseif(WIN32)
-	message(FATAL_ERROR "Source file gathering is not implemented for Windows.")
+	message(STATUS "Collecting Windows source files.")
+	file(GLOB_RECURSE src_files
+		"${PROJECT_SOURCE_DIR}/src/*.h"
+		"${PROJECT_SOURCE_DIR}/src/*.hpp"
+		"${PROJECT_SOURCE_DIR}/src/*.c"
+		"${PROJECT_SOURCE_DIR}/src/*.cpp"
+	)
+	file(GLOB_RECURSE glsl_sources
+		"${PROJECT_SOURCE_DIR}/res/shaders/*.frag"
+		"${PROJECT_SOURCE_DIR}/res/shaders/*.vert"
+		"${PROJECT_SOURCE_DIR}/res/shaders/*.comp"
+	)
+	file(GLOB_RECURSE sandbox_files
+		"${PROJECT_SOURCE_DIR}/sandbox/*.h"
+		"${PROJECT_SOURCE_DIR}/sandbox/*.hpp"
+		"${PROJECT_SOURCE_DIR}/sandbox/*.c"
+		"${PROJECT_SOURCE_DIR}/sandbox/*.cpp"
+	)
 else()
 	message(FATAL_ERROR "Unknown platform.")
 endif()
