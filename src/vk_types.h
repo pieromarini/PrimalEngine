@@ -58,6 +58,7 @@ struct GPUDrawPushConstants {
 enum class MaterialPass : uint8_t {
 	MainColor,
 	Transparent,
+  DoubleSided,
 	Other
 };
 struct MaterialPipeline {

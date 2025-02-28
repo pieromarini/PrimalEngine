@@ -65,7 +65,7 @@ void VulkanRenderer::initDefaultData() {
 	std::array<uint32_t, 16 * 16> pixels{};// for 16x16 checkerboard texture
 	for (int x = 0; x < 16; x++) {
 		for (int y = 0; y < 16; y++) {
-			pixels[y * 16 + x] = ((x % 2) ^ (y % 2)) ? magenta : black;
+			pixels.at(y * 16 + x) = ((x % 2) ^ (y % 2)) ? magenta : black;
 		}
 	}
 	errorCheckerboardImage = createImage(pixels.data(), VkExtent3D{ 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -80,6 +80,16 @@ void VulkanRenderer::initDefaultData() {
 	sampl.magFilter = VK_FILTER_LINEAR;
 	sampl.minFilter = VK_FILTER_LINEAR;
 	vkCreateSampler(m_device, &sampl, nullptr, &defaultSamplerLinear);
+
+	m_mainDeletionQueue.push([&]() {
+		vkDestroySampler(m_device, defaultSamplerNearest, nullptr);
+		vkDestroySampler(m_device, defaultSamplerLinear, nullptr);
+
+		destroyImage(whiteImage);
+		destroyImage(greyImage);
+		destroyImage(blackImage);
+		destroyImage(errorCheckerboardImage);
+	});
 }
 
 void VulkanRenderer::initVulkan() {
@@ -189,6 +199,14 @@ void VulkanRenderer::initSwapchain() {
 	VkImageViewCreateInfo dview_info = imageViewCreateInfo(m_depthImage.imageFormat, m_depthImage.image, VK_IMAGE_ASPECT_DEPTH_BIT);
 
 	VK_CHECK(vkCreateImageView(m_device, &dview_info, nullptr, &m_depthImage.imageView));
+
+	m_mainDeletionQueue.push([&]() {
+		vkDestroyImageView(m_device, m_drawImage.imageView, nullptr);
+		vmaDestroyImage(m_allocator, m_drawImage.image, m_drawImage.allocation);
+
+		vkDestroyImageView(m_device, m_depthImage.imageView, nullptr);
+		vmaDestroyImage(m_allocator, m_depthImage.image, m_depthImage.allocation);
+	});
 }
 
 void VulkanRenderer::initCommands() {
@@ -198,12 +216,14 @@ void VulkanRenderer::initCommands() {
 		VK_CHECK(vkCreateCommandPool(m_device, &commandPoolInfo, nullptr, &frame.m_commandPool));
 		auto commandAllocateInfo = commandBufferAllocateInfo(frame.m_commandPool, 1);
 		VK_CHECK(vkAllocateCommandBuffers(m_device, &commandAllocateInfo, &frame.m_commandBuffer));
+		m_mainDeletionQueue.push([frame, this]() { vkDestroyCommandPool(m_device, frame.m_commandPool, nullptr); });
 	}
 
 	// Create command buffer for immediate submits
 	VK_CHECK(vkCreateCommandPool(m_device, &commandPoolInfo, nullptr, &m_immCommandPool));
 	VkCommandBufferAllocateInfo cmdAllocInfo = commandBufferAllocateInfo(m_immCommandPool, 1);
 	VK_CHECK(vkAllocateCommandBuffers(m_device, &cmdAllocInfo, &m_immCommandBuffer));
+	m_mainDeletionQueue.push([this]() { vkDestroyCommandPool(m_device, m_immCommandPool, nullptr); });
 }
 
 void VulkanRenderer::initSyncStructures() {
@@ -214,13 +234,21 @@ void VulkanRenderer::initSyncStructures() {
 	auto fenceCreate = fenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
 	auto semaphoreCreate = semaphoreCreateInfo();
 
-	for (auto& m_frame : m_frames) {
-		VK_CHECK(vkCreateFence(m_device, &fenceCreate, nullptr, &m_frame.m_renderFence));
 
-		VK_CHECK(vkCreateSemaphore(m_device, &semaphoreCreate, nullptr, &m_frame.m_swapchainSemaphore));
-		VK_CHECK(vkCreateSemaphore(m_device, &semaphoreCreate, nullptr, &m_frame.m_renderSemaphore));
-	}
 	VK_CHECK(vkCreateFence(m_device, &fenceCreate, nullptr, &m_immFence));
+	m_mainDeletionQueue.push([this]() { vkDestroyFence(m_device, m_immFence, nullptr); });
+
+	for (auto& frame : m_frames) {
+		VK_CHECK(vkCreateFence(m_device, &fenceCreate, nullptr, &frame.m_renderFence));
+
+		VK_CHECK(vkCreateSemaphore(m_device, &semaphoreCreate, nullptr, &frame.m_swapchainSemaphore));
+		VK_CHECK(vkCreateSemaphore(m_device, &semaphoreCreate, nullptr, &frame.m_renderSemaphore));
+		m_mainDeletionQueue.push([frame, this] {
+			vkDestroyFence(m_device, frame.m_renderFence, nullptr);
+			vkDestroySemaphore(m_device, frame.m_swapchainSemaphore, nullptr);
+			vkDestroySemaphore(m_device, frame.m_renderSemaphore, nullptr);
+		});
+	}
 }
 
 void VulkanRenderer::createSwapchain(uint32_t width, uint32_t height) {
@@ -259,36 +287,16 @@ void VulkanRenderer::cleanup() {
 	loadedScenes.clear();
 
 	for (auto& frame : m_frames) {
-		vkDestroyCommandPool(m_device, frame.m_commandPool, nullptr);
-
-		vkDestroyFence(m_device, frame.m_renderFence, nullptr);
-		vkDestroySemaphore(m_device, frame.m_renderSemaphore, nullptr);
-		vkDestroySemaphore(m_device, frame.m_swapchainSemaphore, nullptr);
-
-		frame.m_frameDescriptors.destroyPools(m_device);
+		frame.m_deletionQueue.flush();
 	}
 
-	vkDestroyCommandPool(m_device, m_immCommandPool, nullptr);
-	vkDestroyFence(m_device, m_immFence, nullptr);
-
-	vkDestroyImageView(m_device, m_drawImage.imageView, nullptr);
-	vmaDestroyImage(m_allocator, m_drawImage.image, m_drawImage.allocation);
-
-	vkDestroyImageView(m_device, m_depthImage.imageView, nullptr);
-	vmaDestroyImage(m_allocator, m_depthImage.image, m_depthImage.allocation);
-
-	vkDestroyPipelineLayout(m_device, m_gradientPipelineLayout, nullptr);
-	vkDestroyPipeline(m_device, m_gradientPipeline, nullptr);
+	m_mainDeletionQueue.flush();
 
 	destroySwapchain();
-
-	vmaDestroyAllocator(m_allocator);
-
 	vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+	vmaDestroyAllocator(m_allocator);
 	vkDestroyDevice(m_device, nullptr);
-
 	vkb::destroy_debug_utils_messenger(m_instance, m_debug_messenger);
-
 	vkDestroyInstance(m_instance, nullptr);
 }
 
@@ -297,6 +305,7 @@ void VulkanRenderer::draw() {
 	// wait until the gpu has finished rendering the last frame. Timeout of 1 second
 	VK_CHECK(vkWaitForFences(m_device, 1, &getCurrentFrame().m_renderFence, true, 1000000000));
 
+	getCurrentFrame().m_deletionQueue.flush();
 	getCurrentFrame().m_frameDescriptors.clearPools(m_device);
 
 	uint32_t swapchainImageIndex{};
@@ -390,9 +399,9 @@ void VulkanRenderer::drawBackground(VkCommandBuffer commandBuffer) {
 	ComputePushConstants data = {
 		.data1 = { 0.1, 0.2, 0.4, 0.97 }
 	};
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_gradientPipeline);
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_gradientPipelineLayout, 0, 1, &m_drawImageDescriptors, 0, nullptr);
-	vkCmdPushConstants(commandBuffer, m_gradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &data);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_skyPipeline);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_skyPipelineLayout, 0, 1, &m_drawImageDescriptors, 0, nullptr);
+	vkCmdPushConstants(commandBuffer, m_skyPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &data);
 	vkCmdDispatch(commandBuffer, std::ceil(m_drawExtent.width / 16.0), std::ceil(m_drawExtent.height / 16.0), 1);
 }
 
@@ -462,6 +471,10 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	DescriptorWriter writer;
 	writer.writeBuffer(0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	writer.updateSet(m_device, globalDescriptor);
+
+	getCurrentFrame().m_deletionQueue.push([gpuSceneDataBuffer, this]() {
+		destroyBuffer(gpuSceneDataBuffer);
+	});
 
 	// NOTE: This is used to avoid rebinding pipelines/materials while rendering
 	MaterialPipeline* lastPipeline = nullptr;
@@ -540,6 +553,9 @@ void VulkanRenderer::initDescriptors() {
 	};
 
 	m_globalDescriptorAllocator.init(m_device, 10, sizes);
+	m_mainDeletionQueue.push([&]() {
+		m_globalDescriptorAllocator.destroyPools(m_device);
+	});
 
 	// Compute stage image descriptor
 	{
@@ -554,6 +570,11 @@ void VulkanRenderer::initDescriptors() {
 		builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 		m_gpuSceneDataDescriptorLayout = builder.build(m_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
+
+	m_mainDeletionQueue.push([&]() {
+		vkDestroyDescriptorSetLayout(m_device, m_drawImageDescriptorLayout, nullptr);
+		vkDestroyDescriptorSetLayout(m_device, m_gpuSceneDataDescriptorLayout, nullptr);
+	});
 
 	m_drawImageDescriptors = m_globalDescriptorAllocator.allocate(m_device, m_drawImageDescriptorLayout);
 
@@ -574,6 +595,10 @@ void VulkanRenderer::initDescriptors() {
 
 		frame.m_frameDescriptors = {};
 		frame.m_frameDescriptors.init(m_device, 1000, frame_sizes);
+
+		m_mainDeletionQueue.push([&]() {
+			frame.m_frameDescriptors.destroyPools(m_device);
+		});
 	}
 }
 
@@ -597,7 +622,7 @@ void VulkanRenderer::initBackgroundPipelines() {
 	computeLayout.pPushConstantRanges = &pushConstants;
 	computeLayout.pushConstantRangeCount = 1;
 
-	VK_CHECK(vkCreatePipelineLayout(m_device, &computeLayout, nullptr, &m_gradientPipelineLayout));
+	VK_CHECK(vkCreatePipelineLayout(m_device, &computeLayout, nullptr, &m_skyPipelineLayout));
 
 	VkShaderModule computeDrawShader{};
 	if (!loadShaderModule("res/shaders/gradient.comp.spv", m_device, &computeDrawShader)) {
@@ -609,12 +634,17 @@ void VulkanRenderer::initBackgroundPipelines() {
 	VkComputePipelineCreateInfo computePipelineCreateInfo{};
 	computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
 	computePipelineCreateInfo.pNext = nullptr;
-	computePipelineCreateInfo.layout = m_gradientPipelineLayout;
+	computePipelineCreateInfo.layout = m_skyPipelineLayout;
 	computePipelineCreateInfo.stage = stageinfo;
 
-	VK_CHECK(vkCreateComputePipelines(m_device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &m_gradientPipeline));
+	VK_CHECK(vkCreateComputePipelines(m_device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &m_skyPipeline));
 
 	vkDestroyShaderModule(m_device, computeDrawShader, nullptr);
+
+	m_mainDeletionQueue.push([&]() {
+		vkDestroyPipelineLayout(m_device, m_skyPipelineLayout, nullptr);
+		vkDestroyPipeline(m_device, m_skyPipeline, nullptr);
+	});
 }
 
 void VulkanRenderer::immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function) {
@@ -814,6 +844,10 @@ void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
 
 	materialLayout = layoutBuilder.build(renderer->m_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 
+	renderer->m_mainDeletionQueue.push([&]() {
+		vkDestroyDescriptorSetLayout(renderer->m_device, materialLayout, nullptr);
+	});
+
 	VkDescriptorSetLayout layouts[] = {
 		renderer->m_gpuSceneDataDescriptorLayout,
 		materialLayout
@@ -830,6 +864,7 @@ void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
 
 	opaquePipeline.layout = newLayout;
 	transparentPipeline.layout = newLayout;
+  doubleSidedPipeline.layout = newLayout;
 
 	// build the stage-create-info for both vertex and fragment stages. This lets
 	// the pipeline know the shader modules per stage
@@ -838,7 +873,7 @@ void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
 	pipelineBuilder.setShaders(meshVertexShader, meshFragShader);
 	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
-	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+	pipelineBuilder.setCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
 	pipelineBuilder.setMultisamplingNone();
 	pipelineBuilder.disableBlending();
 	pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -847,14 +882,15 @@ void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
 	pipelineBuilder.setColorAttachmentFormat(renderer->m_drawImage.imageFormat);
 	pipelineBuilder.setDepthFormat(renderer->m_depthImage.imageFormat);
 
-	// finally build the pipeline
+	// build opaque pipeline
 	opaquePipeline.pipeline = pipelineBuilder.buildPipeline(renderer->m_device);
 
-	// create the transparent variant
-	pipelineBuilder.enableBlendingAdditive();
+	// create the double sided variant
+  pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+  doubleSidedPipeline.pipeline = pipelineBuilder.buildPipeline(renderer->m_device);
 
-	pipelineBuilder.enableDepthTest(false, VK_COMPARE_OP_GREATER_OR_EQUAL);
-
+	// create the alpha blending variant
+	pipelineBuilder.enableBlendingAlphablend();
 	transparentPipeline.pipeline = pipelineBuilder.buildPipeline(renderer->m_device);
 
 	vkDestroyShaderModule(renderer->m_device, meshFragShader, nullptr);
@@ -866,6 +902,8 @@ MaterialInstance GLTFMetallic_Roughness::writeMaterial(VkDevice device, Material
 	matData.passType = pass;
 	if (pass == MaterialPass::Transparent) {
 		matData.pipeline = &transparentPipeline;
+  } else if (pass == MaterialPass::DoubleSided) {
+		matData.pipeline = &doubleSidedPipeline;
 	} else {
 		matData.pipeline = &opaquePipeline;
 	}

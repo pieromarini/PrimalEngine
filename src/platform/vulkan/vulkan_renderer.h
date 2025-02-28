@@ -5,11 +5,32 @@
 #include <VkBootstrap.h>
 #include <vulkan/vulkan.h>
 
+#include <ranges>
+
 #include "camera.h"
 #include "vk_types.h"
 #include "vulkan_descriptor.h"
 
 namespace pm {
+
+class DeletionQueue {
+public:
+	void push(std::function<void()>&& function) {
+		deletors.push_back(std::move(function));
+	}
+
+	void flush() {
+		// reverse iterate the deletion queue to execute all the functions
+		for (auto & deletor : std::ranges::reverse_view(deletors)) {
+			deletor();
+		}
+
+		deletors.clear();
+	}
+
+private:
+	std::deque<std::function<void()>> deletors{};
+};
 
 struct RendererStats {
 	float frametime;
@@ -36,6 +57,8 @@ struct FrameData {
 	VkSemaphore m_renderSemaphore;
 
 	VkFence m_renderFence;
+
+  DeletionQueue m_deletionQueue;
 
 	DescriptorAllocator m_frameDescriptors;
 };
@@ -67,6 +90,7 @@ struct ComputePushConstants {
 struct GLTFMetallic_Roughness {
 	MaterialPipeline opaquePipeline;
 	MaterialPipeline transparentPipeline;
+	MaterialPipeline doubleSidedPipeline;
 
 	VkDescriptorSetLayout materialLayout;
 
@@ -146,10 +170,13 @@ public:
 	void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
 	void resizeSwapchain();
 
+
 	VkDevice m_device;
 	VkDescriptorSetLayout m_gpuSceneDataDescriptorLayout;
 	AllocatedImage m_drawImage;
 	AllocatedImage m_depthImage;
+
+  DeletionQueue m_mainDeletionQueue;
 
 	DrawContext mainDrawContext;
 	std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;
@@ -228,8 +255,8 @@ private:
 	GPUSceneData m_sceneData;
 
 	// Compute pipeline
-	VkPipeline m_gradientPipeline;
-	VkPipelineLayout m_gradientPipelineLayout;
+	VkPipeline m_skyPipeline;
+	VkPipelineLayout m_skyPipelineLayout;
 
 	// Loaded meshes from GLTF file
 	GPUMeshBuffers rectangle;

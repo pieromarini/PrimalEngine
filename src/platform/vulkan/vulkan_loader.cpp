@@ -1,3 +1,4 @@
+#include "fastgltf/types.hpp"
 #define STB_IMAGE_IMPLEMENTATION
 #include "vulkan_loader.h"
 #include "stb_image.h"
@@ -344,7 +345,9 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 		MaterialPass passType = MaterialPass::MainColor;
 		if (mat.alphaMode == fastgltf::AlphaMode::Blend) {
 			passType = MaterialPass::Transparent;
-		}
+		} else if (mat.doubleSided) {
+      passType = MaterialPass::DoubleSided;
+    }
 
 		GLTFMetallic_Roughness::MaterialResources materialResources{};
 
@@ -524,9 +527,6 @@ void LoadedGLTF::draw(const glm::mat4& topMatrix, DrawContext& ctx) {
 void LoadedGLTF::clearAll() {
 	VkDevice dv = renderer->m_device;
 
-	descriptorPool.destroyPools(dv);
-	renderer->destroyBuffer(materialDataBuffer);
-
 	for (auto& [k, v] : meshes) {
 		renderer->destroyBuffer(v->meshBuffers.indexBuffer);
 		renderer->destroyBuffer(v->meshBuffers.vertexBuffer);
@@ -543,6 +543,9 @@ void LoadedGLTF::clearAll() {
 	for (auto& sampler : samplers) {
 		vkDestroySampler(dv, sampler, nullptr);
 	}
+
+	descriptorPool.destroyPools(dv);
+	renderer->destroyBuffer(materialDataBuffer);
 }
 
 }// namespace pm
