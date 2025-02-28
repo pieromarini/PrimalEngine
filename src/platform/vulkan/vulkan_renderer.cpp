@@ -24,7 +24,10 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	initPipelines();
 	initDefaultData();
 
-	m_rendererState->mainCamera->position = glm::vec3(30.f, -00.f, -085.f);
+	m_rendererState->mainCamera->position = glm::vec3(-15.f, 3.5f, -1.1f);
+  m_rendererState->mainCamera->yaw = -4.61;
+  m_rendererState->mainCamera->pitch = -0.024;
+  m_rendererState->mainCamera->update();
 
 	const std::string structurePath = { "res/models/bistro.glb" };
 	auto structureFile = loadGltf(this, structurePath);
@@ -958,7 +961,7 @@ void VulkanRenderer::updateScene() {
 	m_sceneData.viewproj = m_sceneData.proj * m_sceneData.view;
 
 	// some default lighting parameters
-	m_sceneData.ambientColor = glm::vec4(.1f);
+	m_sceneData.ambientColor = glm::vec4(.4f);
 	m_sceneData.sunlightColor = glm::vec4(1.f);
 	m_sceneData.sunlightDirection = glm::vec4(0, 1, 0.5, 1.f);
 
