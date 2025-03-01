@@ -29,7 +29,7 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
   m_rendererState->mainCamera->pitch = -0.024;
   m_rendererState->mainCamera->update();
 
-	const std::string structurePath = { "res/models/structure.glb" };
+	const std::string structurePath = { "res/models/bistro.glb" };
 	auto structureFile = loadGltf(this, structurePath);
 
 	assert(structureFile.has_value());

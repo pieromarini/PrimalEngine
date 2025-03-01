@@ -4,22 +4,22 @@ if(${CMAKE_VERSION} VERSION_LESS 3.27)
   cmake_policy(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}})
 endif()
 
-# TEMPORARY. g++-13 seems stable for now
 if(APPLE)
-  message("APPLE")
+  message("Configuring for APPLE")
   set(CMAKE_CXX_COMPILER "/usr/bin/clang++")
 elseif(UNIX)
-  message("UNIX")
+  message("Configuring for UNIX")
   set(CMAKE_CXX_COMPILER "/usr/bin/g++-13")
 elseif(Win64)
-  message("WINDOWS x64")
+  message("Configuring for WINDOWS")
   set(CMAKE_CXX_COMPILER "cl.exe")
 endif()
 
 project(
   PrimalEngine
   DESCRIPTION "C++ Game Engine"
-  LANGUAGES CXX)
+  LANGUAGES CXX
+)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -122,6 +122,7 @@ add_subdirectory(extern/fastgltf EXCLUDE_FROM_ALL)
 target_include_directories(${ENGINE_LIB} PUBLIC extern/fastgltf/include)
 
 set(BUILD_SHARED_LIBS ON)
+
 # [LIB] SDL3
 FetchContent_Declare(sdl3 GIT_REPOSITORY https://github.com/libsdl-org/SDL.git GIT_TAG release-3.2.2 EXCLUDE_FROM_ALL)
 set(BUILD_EXAMPLES OFF CACHE INTERNAL "" FORCE)
