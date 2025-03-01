@@ -1,4 +1,6 @@
 #include "vulkan_descriptor.h"
+#include <algorithm>
+#include <cstdint>
 
 void DescriptorLayoutBuilder::addBinding(uint32_t binding, VkDescriptorType type) {
 	VkDescriptorSetLayoutBinding newbind{};
@@ -76,7 +78,8 @@ VkDescriptorPool DescriptorAllocator::getPool(VkDevice device) {
 	} else {
 		newPool = createPool(device, setsPerPool, ratios);
 		setsPerPool = uint32_t(setsPerPool * 1.5);
-		std::clamp(setsPerPool, uint32_t(0), MAX_SETS_PER_POOL);
+		// std::clamp(setsPerPool, uint32_t(0), MAX_SETS_PER_POOL);
+		std::min(MAX_SETS_PER_POOL, std::max(uint32_t(0), setsPerPool));
 	}
 
 	return newPool;

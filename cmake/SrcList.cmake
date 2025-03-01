@@ -1,19 +1,26 @@
 if(UNIX)
-	message(STATUS "Collecting source files.")
+	message(STATUS "Collecting UNIX source files.")
 	execute_process(
 		COMMAND bash -c "find ${PROJECT_SOURCE_DIR}/src -type f"
 		COMMAND bash -c "tr '\n' ';'"
 		OUTPUT_VARIABLE src_files
 	)
-  file(GLOB_RECURSE glsl_sources
-    "${PROJECT_SOURCE_DIR}/res/shaders/*.frag"
-    "${PROJECT_SOURCE_DIR}/res/shaders/*.vert"
-    "${PROJECT_SOURCE_DIR}/res/shaders/*.comp"
-  )
-	execute_process(
-		COMMAND bash -c "find ${PROJECT_SOURCE_DIR}/sandbox -type f"
-		COMMAND bash -c "tr '\n' ';'"
-		OUTPUT_VARIABLE sandbox_files
+	file(GLOB_RECURSE glsl_sources
+		"${PROJECT_SOURCE_DIR}/res/shaders/*.frag"
+		"${PROJECT_SOURCE_DIR}/res/shaders/*.vert"
+		"${PROJECT_SOURCE_DIR}/res/shaders/*.comp"
+	)
+
+	file(GLOB_RECURSE glsl_header_files 
+		"${PROJECT_SOURCE_DIR}/res/shaders/*.h" 
+		"${PROJECT_SOURCE_DIR}/res/shaders/config.h"
+	)
+
+	file(GLOB_RECURSE sandbox_files
+		"${PROJECT_SOURCE_DIR}/sandbox/*.h"
+		"${PROJECT_SOURCE_DIR}/sandbox/*.hpp"
+		"${PROJECT_SOURCE_DIR}/sandbox/*.c"
+		"${PROJECT_SOURCE_DIR}/sandbox/*.cpp"
 	)
 elseif(WIN32)
 	message(STATUS "Collecting Windows source files.")
@@ -27,6 +34,10 @@ elseif(WIN32)
 		"${PROJECT_SOURCE_DIR}/res/shaders/*.frag"
 		"${PROJECT_SOURCE_DIR}/res/shaders/*.vert"
 		"${PROJECT_SOURCE_DIR}/res/shaders/*.comp"
+	)
+	file(GLOB_RECURSE glsl_header_files 
+		"${PROJECT_SOURCE_DIR}/res/shaders/*.h" 
+		"${PROJECT_SOURCE_DIR}/res/shaders/config.h"
 	)
 	file(GLOB_RECURSE sandbox_files
 		"${PROJECT_SOURCE_DIR}/sandbox/*.h"

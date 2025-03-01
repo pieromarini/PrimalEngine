@@ -1,4 +1,4 @@
-#pragma oncepipe
+#pragma once
 
 #include "vk_types.h"
 

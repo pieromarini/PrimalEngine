@@ -29,7 +29,7 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
   m_rendererState->mainCamera->pitch = -0.024;
   m_rendererState->mainCamera->update();
 
-	const std::string structurePath = { "res/models/bistro.glb" };
+	const std::string structurePath = { "res/models/structure.glb" };
 	auto structureFile = loadGltf(this, structurePath);
 
 	assert(structureFile.has_value());
@@ -847,7 +847,7 @@ void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
 
 	materialLayout = layoutBuilder.build(renderer->m_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 
-	renderer->m_mainDeletionQueue.push([&]() {
+	renderer->m_mainDeletionQueue.push([renderer, this]() {
 		vkDestroyDescriptorSetLayout(renderer->m_device, materialLayout, nullptr);
 	});
 

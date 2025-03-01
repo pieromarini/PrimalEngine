@@ -6,9 +6,14 @@ endif()
 
 # TEMPORARY. g++-13 seems stable for now
 if(APPLE)
+  message("APPLE")
   set(CMAKE_CXX_COMPILER "/usr/bin/clang++")
 elseif(UNIX)
+  message("UNIX")
   set(CMAKE_CXX_COMPILER "/usr/bin/g++-13")
+elseif(Win64)
+  message("WINDOWS x64")
+  set(CMAKE_CXX_COMPILER "cl.exe")
 endif()
 
 project(
@@ -69,7 +74,7 @@ set(SOURCES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(SANDBOX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sandbox")
 set(ENGINE_LIB "primal_engine")
 
-add_library(${ENGINE_LIB} SHARED "${engine_sources}")
+add_library(${ENGINE_LIB} STATIC "${engine_sources}")
 
 set_target_properties(${ENGINE_LIB} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 set_target_properties(${ENGINE_LIB} PROPERTIES CXX_STANDARD_REQUIRED ON)
@@ -82,8 +87,12 @@ target_include_directories(${ENGINE_LIB} PUBLIC "${SOURCES_DIR}")
 target_compile_definitions(${ENGINE_LIB} PUBLIC GLM_FORCE_DEPTH_ZERO_TO_ONE)
 
 # [LIB] GLM
+set(BUILD_SHARED_LIBS OFF)
+set(GLM_BUILD_LIBRARY ON)
 add_subdirectory(extern/glm EXCLUDE_FROM_ALL)
 target_include_directories(${ENGINE_LIB} PUBLIC extern/glm)
+
+set(BUILD_SHARED_LIBS ON)
 
 # [LIB] Vulkan
 find_package(Vulkan REQUIRED)
@@ -108,9 +117,11 @@ target_include_directories(${ENGINE_LIB} PUBLIC "${STBIMAGE_DIR}")
 # FetchContent_MakeAvailable(assimp)
 # target_include_directories(${ENGINE_LIB} PUBLIC extern/assimp-src/include)
 # [LIB] fastgltf
-add_subdirectory(extern/fastgltf)
+set(BUILD_SHARED_LIBS OFF)
+add_subdirectory(extern/fastgltf EXCLUDE_FROM_ALL)
 target_include_directories(${ENGINE_LIB} PUBLIC extern/fastgltf/include)
 
+set(BUILD_SHARED_LIBS ON)
 # [LIB] SDL3
 FetchContent_Declare(sdl3 GIT_REPOSITORY https://github.com/libsdl-org/SDL.git GIT_TAG release-3.2.2 EXCLUDE_FROM_ALL)
 set(BUILD_EXAMPLES OFF CACHE INTERNAL "" FORCE)
@@ -119,6 +130,7 @@ set(SDL_TESTS OFF CACHE INTERNAL "" FORCE)
 set(SDL_DISABLE_INSTALL OFF CACHE INTERNAL "" FORCE)
 set(SDL_DISABLE_INSTALL_DOCS OFF CACHE INTERNAL "" FORCE)
 set(SDL_INSTALL_TESTS OFF CACHE INTERNAL "" FORCE)
+set(SDL_STATIC ON)
 FetchContent_MakeAvailable(sdl3)
 target_include_directories(${ENGINE_LIB} PUBLIC extern/sdl3-src/include)
 
@@ -127,14 +139,14 @@ add_subdirectory(extern/vma EXCLUDE_FROM_ALL)
 
 # Engine Library Linking
 target_link_libraries(${ENGINE_LIB} PUBLIC
+  fastgltf
   "${Vulkan_LIBRARY}"
   "${CMAKE_DL_LIBS}"
   GPUOpen::VulkanMemoryAllocator
   vk-bootstrap::vk-bootstrap
   glm::glm
-  SDL3::SDL3
+  SDL3::SDL3-static
   # assimp
-  fastgltf::fastgltf
 )
 
 if(!APPLE)
@@ -142,7 +154,15 @@ if(!APPLE)
 endif()
 
 # SPIR-V shader compilation
-find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin)
+
+if(UNIX)
+  find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin)
+elseif(${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL "AMD64")
+  set(GLSL_VALIDATOR "$ENV{VULKAN_SDK}/Bin/glslangValidator.exe")
+else()
+  set(GLSL_VALIDATOR "$ENV{VULKAN_SDK}/Bin32/glslangValidator.exe")
+endif()
+
 foreach(GLSL ${glsl_sources})
   message(STATUS "BUILDING SHADER")
   get_filename_component(FILE_NAME ${GLSL} NAME)
@@ -151,13 +171,12 @@ foreach(GLSL ${glsl_sources})
   add_custom_command(
     OUTPUT ${SPIRV}
     COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV}
-    DEPENDS ${GLSL})
+    DEPENDS ${GLSL} ${glsl_header_files}
+  )
   list(APPEND SPIRV_BINARY_FILES ${SPIRV})
 endforeach(GLSL)
 
-add_custom_target(Shaders
-  DEPENDS ${SPIRV_BINARY_FILES}
-)
+add_custom_target(Shaders DEPENDS ${SPIRV_BINARY_FILES})
 
 # Engine precompiled headers
 target_precompile_headers(${ENGINE_LIB} INTERFACE <optional> <iostream> <array> <vector> <memory> <string> <vector> <unordered_map> <format> <vulkan/vulkan.h>)
@@ -167,6 +186,8 @@ set(EXEC_NAME "sandbox")
 add_executable(${EXEC_NAME} ${sandbox_sources})
 target_include_directories(${EXEC_NAME} PUBLIC ${SANDBOX_DIR} ${SOURCES_DIR})
 target_link_libraries(${EXEC_NAME} PUBLIC ${ENGINE_LIB} project_options project_warnings)
+
+add_dependencies(${EXEC_NAME} Shaders)
 
 execute_process(
   COMMAND ${CMAKE_COMMAND} -E create_symlink ${PROJECT_SOURCE_DIR}/res
