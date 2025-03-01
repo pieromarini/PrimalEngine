@@ -29,7 +29,7 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	m_rendererState->mainCamera->pitch = -0.024;
 	m_rendererState->mainCamera->update();
 
-	const std::string structurePath = { "res/models/bistro.glb" };
+	const std::string structurePath = { "res/models/structure.glb" };
 	auto structureFile = loadGltf(this, structurePath);
 
 	assert(structureFile.has_value());
@@ -644,7 +644,7 @@ void VulkanRenderer::initBackgroundPipelines() {
 
 	vkDestroyShaderModule(m_device, computeDrawShader, nullptr);
 
-	m_mainDeletionQueue.push([&]() {
+	m_mainDeletionQueue.push([this]() {
 		vkDestroyPipelineLayout(m_device, m_skyPipelineLayout, nullptr);
 		vkDestroyPipeline(m_device, m_skyPipeline, nullptr);
 	});
@@ -867,7 +867,7 @@ void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
 
 	opaquePipeline.layout = newLayout;
 	transparentPipeline.layout = newLayout;
-  doubleSidedPipeline.layout = newLayout;
+	doubleSidedPipeline.layout = newLayout;
 
 	// build the stage-create-info for both vertex and fragment stages. This lets
 	// the pipeline know the shader modules per stage
@@ -889,8 +889,8 @@ void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
 	opaquePipeline.pipeline = pipelineBuilder.buildPipeline(renderer->m_device);
 
 	// create the double sided variant
-  pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-  doubleSidedPipeline.pipeline = pipelineBuilder.buildPipeline(renderer->m_device);
+	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+	doubleSidedPipeline.pipeline = pipelineBuilder.buildPipeline(renderer->m_device);
 
 	// create the alpha blending variant
 	pipelineBuilder.enableBlendingAlphablend();
@@ -905,7 +905,7 @@ MaterialInstance GLTFMetallic_Roughness::writeMaterial(VkDevice device, Material
 	matData.passType = pass;
 	if (pass == MaterialPass::Transparent) {
 		matData.pipeline = &transparentPipeline;
-  } else if (pass == MaterialPass::DoubleSided) {
+	} else if (pass == MaterialPass::DoubleSided) {
 		matData.pipeline = &doubleSidedPipeline;
 	} else {
 		matData.pipeline = &opaquePipeline;
