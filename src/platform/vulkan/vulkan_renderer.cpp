@@ -25,9 +25,9 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	initDefaultData();
 
 	m_rendererState->mainCamera->position = glm::vec3(-15.f, 3.5f, -1.1f);
-  m_rendererState->mainCamera->yaw = -4.61;
-  m_rendererState->mainCamera->pitch = -0.024;
-  m_rendererState->mainCamera->update();
+	m_rendererState->mainCamera->yaw = -4.61;
+	m_rendererState->mainCamera->pitch = -0.024;
+	m_rendererState->mainCamera->update();
 
 	const std::string structurePath = { "res/models/bistro.glb" };
 	auto structureFile = loadGltf(this, structurePath);

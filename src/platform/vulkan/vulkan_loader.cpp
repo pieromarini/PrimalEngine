@@ -3,6 +3,7 @@
 #include "vulkan_loader.h"
 #include "stb_image.h"
 
+#include <filesystem>
 #include "vk_types.h"
 #include "vulkan_renderer.h"
 #include <glm/gtx/quaternion.hpp>
@@ -232,6 +233,10 @@ VkSamplerMipmapMode extractMipmapMode(fastgltf::Filter filter) {
 
 std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, std::string_view filePath) {
 	std::cout << std::format("Loading GLTF: {}", filePath) << '\n';
+	if (!std::filesystem::exists(filePath)) {
+		std::cout << std::format("Cannot load {}. File does not exist.\n", filePath);
+		return {};
+	}
 
 	auto scene = std::make_shared<LoadedGLTF>();
 	scene->renderer = renderer;
