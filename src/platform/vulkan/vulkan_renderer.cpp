@@ -29,7 +29,7 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	m_rendererState->mainCamera->pitch = -0.024;
 	m_rendererState->mainCamera->update();
 
-	const std::string structurePath = { "res/models/structure.glb" };
+	const std::string structurePath = { "res/models/bistro.glb" };
 	auto structureFile = loadGltf(this, structurePath);
 
 	assert(structureFile.has_value());
@@ -869,6 +869,10 @@ void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
 	transparentPipeline.layout = newLayout;
 	doubleSidedPipeline.layout = newLayout;
 
+	renderer->m_mainDeletionQueue.push([=]() {
+		vkDestroyPipelineLayout(renderer->m_device, newLayout, nullptr);
+	});
+
 	// build the stage-create-info for both vertex and fragment stages. This lets
 	// the pipeline know the shader modules per stage
 	PipelineBuilder pipelineBuilder;
@@ -895,6 +899,12 @@ void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
 	// create the alpha blending variant
 	pipelineBuilder.enableBlendingAlphablend();
 	transparentPipeline.pipeline = pipelineBuilder.buildPipeline(renderer->m_device);
+
+	renderer->m_mainDeletionQueue.push([&]() {
+		vkDestroyPipeline(renderer->m_device, opaquePipeline.pipeline, nullptr);
+		vkDestroyPipeline(renderer->m_device, doubleSidedPipeline.pipeline, nullptr);
+		vkDestroyPipeline(renderer->m_device, transparentPipeline.pipeline, nullptr);
+	});
 
 	vkDestroyShaderModule(renderer->m_device, meshFragShader, nullptr);
 	vkDestroyShaderModule(renderer->m_device, meshVertexShader, nullptr);

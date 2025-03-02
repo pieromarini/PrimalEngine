@@ -24,7 +24,7 @@ PrimalApp::PrimalApp() {
 	auto window_flags = static_cast<SDL_WindowFlags>(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
 	m_window = SDL_CreateWindow(
-		"Vulkan Engine",
+		"Primal Engine",
 		static_cast<int32_t>(m_windowExtent.width),
 		static_cast<int32_t>(m_windowExtent.height),
 		window_flags);
