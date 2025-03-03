@@ -110,14 +110,6 @@ void PrimalApp::run() {
 		auto end = std::chrono::system_clock::now();
 		auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 		m_rendererState.rendererStats.frametime = static_cast<float>(elapsed.count());
-
-		auto stats = std::format("Frametime: {}ms | Update: {}us | MeshDraw: {}us | Triangles: {} | DrawCall: {}",
-			m_rendererState.rendererStats.frametime,
-			m_rendererState.rendererStats.sceneUpdateTime,
-			m_rendererState.rendererStats.meshDrawTime,
-			m_rendererState.rendererStats.triangleCount,
-			m_rendererState.rendererStats.drawCallCount);
-		std::cout << stats << '\n';
 	}
 }
 

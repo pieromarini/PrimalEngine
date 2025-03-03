@@ -25,6 +25,11 @@ struct FontUniformData {
 	float outline{ true };
 };
 
+struct FontPushConstants {
+  glm::vec2 scale;
+  glm::vec2 translate;
+};
+
 class DeletionQueue {
 public:
 	void push(std::function<void()>&& function) {
@@ -46,6 +51,7 @@ private:
 
 struct RendererStats {
 	float frametime;
+  float uiFrametime;
 	int triangleCount;
 	int drawCallCount;
 	float sceneUpdateTime;

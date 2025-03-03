@@ -2,6 +2,8 @@
 #include <cassert>
 #include <cstdint>
 #include <fstream>
+#include <iostream>
+#include <format>
 #include <sstream>
 #include <vector>
 
@@ -74,7 +76,7 @@ inline void generateTextFromFont(std::string text, float textureWidth, std::arra
 	float posx = 0.0f;
 	float posy = 0.0f;
 
-  float SOME_CONSTANT = 36.0f;
+  float SCALING_CONSTANT = 1.0f;
 
 	for (uint32_t i = 0; i < text.size(); i++) {
 		bmchar* charInfo = &fontChars[(int)text[i]];
@@ -82,9 +84,9 @@ inline void generateTextFromFont(std::string text, float textureWidth, std::arra
 		if (charInfo->width == 0)
 			charInfo->width = 36;
 
-		float charw = ((float)(charInfo->width) / SOME_CONSTANT);
+		float charw = ((float)(charInfo->width) / SCALING_CONSTANT);
 		float dimx = 1.0f * charw;
-		float charh = ((float)(charInfo->height) / SOME_CONSTANT);
+		float charh = ((float)(charInfo->height) / SCALING_CONSTANT);
 		float dimy = 1.0f * charh;
 
 		float us = charInfo->x / textureWidth;
@@ -92,14 +94,13 @@ inline void generateTextFromFont(std::string text, float textureWidth, std::arra
 		float ts = charInfo->y / textureWidth;
 		float te = (charInfo->y + charInfo->height) / textureWidth;
 
-		float xo = charInfo->xoffset / SOME_CONSTANT;
-		float yo = charInfo->yoffset / SOME_CONSTANT;
+		float xo = charInfo->xoffset / SCALING_CONSTANT;
+		float yo = charInfo->yoffset / SCALING_CONSTANT;
 
-    // Invert Y
-		posy = -yo;
+		posy = yo;
 
-		vertices.push_back({ { posx + dimx + xo, posy - dimy, 0.0f }, { ue, te } });
-		vertices.push_back({ { posx + xo, posy - dimy, 0.0f }, { us, te } });
+		vertices.push_back({ { posx + dimx + xo, posy + dimy, 0.0f }, { ue, te } });
+		vertices.push_back({ { posx + xo, posy + dimy, 0.0f }, { us, te } });
 		vertices.push_back({ { posx + xo, posy, 0.0f }, { us, ts } });
 		vertices.push_back({ { posx + dimx + xo, posy, 0.0f }, { ue, ts } });
 
@@ -109,7 +110,7 @@ inline void generateTextFromFont(std::string text, float textureWidth, std::arra
 		}
 		indexOffset += 4;
 
-		float advance = ((float)(charInfo->xadvance) / SOME_CONSTANT);
+		float advance = ((float)(charInfo->xadvance) / SCALING_CONSTANT);
 		posx += advance;
 	}
 	indexCount = static_cast<uint32_t>(indices.size());

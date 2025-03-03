@@ -31,14 +31,12 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	m_rendererState->mainCamera->pitch = -0.024;
 	m_rendererState->mainCamera->update(0.0);
 
-	generateText("Hello World");
-
 	const std::string structurePath = { "res/models/structure.glb" };
 	auto structureFile = loadGltf(this, structurePath);
 
 	assert(structureFile.has_value());
 
-	loadedScenes["structure"] = *structureFile;
+	loadedScenes["loadedGLTF"] = *structureFile;
 }
 
 void VulkanRenderer::resizeSwapchain() {
@@ -48,8 +46,13 @@ void VulkanRenderer::resizeSwapchain() {
 
 	int w{}, h{};
 	SDL_GetWindowSize(m_rendererState->window, &w, &h);
+
+  int displayWidth{}, displayHeight{};
+  SDL_GetWindowSizeInPixels(m_rendererState->window, &displayWidth, &displayHeight);
+
 	m_rendererState->windowExtent.width = w;
 	m_rendererState->windowExtent.height = h;
+  m_renderScale = static_cast<float>(displayWidth) / static_cast<float>(w);
 
 	createSwapchain(m_rendererState->windowExtent.width, m_rendererState->windowExtent.height);
 
@@ -558,8 +561,11 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	for (auto& r : mainDrawContext.transparentSurfaces) {
 		draw(r);
 	}
+	auto end = std::chrono::system_clock::now();
+	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
   // text rendering commands
+	auto uiStart = std::chrono::system_clock::now();
 	VkDeviceSize offsets[1] = { 0 };
 
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, fontPipelineLayout, 0, 1, &fontDescriptorSet, 0, nullptr);
@@ -567,12 +573,21 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer.buffer, offsets);
   vkCmdBindIndexBuffer(commandBuffer, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+  auto scale = glm::vec2(2.0f / static_cast<float>(m_rendererState->windowExtent.width), 2.0f / static_cast<float>(m_rendererState->windowExtent.height));
+  FontPushConstants fontPushConstants{};
+  fontPushConstants.scale = scale * glm::vec2(0.7f);
+  fontPushConstants.translate = glm::vec2(-250.0f, -520.0f) * scale;
+  vkCmdPushConstants(commandBuffer, fontPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(FontPushConstants), &fontPushConstants);
+
   vkCmdDrawIndexed(commandBuffer, fontIndexCount, 1, 0, 0, 0);
+
+	auto uiEnd = std::chrono::system_clock::now();
+	auto uiElapsed = std::chrono::duration_cast<std::chrono::microseconds>(uiEnd - uiStart);
 
 	vkCmdEndRendering(commandBuffer);
 
-	auto end = std::chrono::system_clock::now();
-	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+  m_rendererState->rendererStats.uiFrametime = uiElapsed.count() / 1000.0f;
 	m_rendererState->rendererStats.meshDrawTime = elapsed.count() / 1000.0f;
 }
 
@@ -725,7 +740,14 @@ void VulkanRenderer::initFontPipeline() {
 		fontDescriptorLayout
 	};
 
+	VkPushConstantRange pushConstantRange{};
+	pushConstantRange.offset = 0;
+	pushConstantRange.size = sizeof(FontPushConstants);
+	pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
 	VkPipelineLayoutCreateInfo fontLayoutInfo = pipelineLayoutCreateInfo();
+  fontLayoutInfo.pPushConstantRanges = &pushConstantRange;
+  fontLayoutInfo.pushConstantRangeCount = 1;
 	fontLayoutInfo.setLayoutCount = 1;
 	fontLayoutInfo.pSetLayouts = layouts;
 
@@ -740,10 +762,10 @@ void VulkanRenderer::initFontPipeline() {
 	pipelineBuilder.setShaders(fontVertexShader, fontFragShader);
 	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
-	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
 	pipelineBuilder.setMultisamplingNone();
 	pipelineBuilder.enableBackgroundBlending();
-	pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+	pipelineBuilder.disableDepthTest();
 
 	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
 	pipelineBuilder.setDepthFormat(m_depthImage.imageFormat);
@@ -1093,7 +1115,7 @@ void VulkanRenderer::updateScene(float deltaTime) {
 	m_sceneData.sunlightColor = glm::vec4(1.f);
 	m_sceneData.sunlightDirection = glm::vec4(0, 1, 0.5, 1.f);
 
-	loadedScenes["structure"]->draw(glm::mat4{ 1.f }, mainDrawContext);
+	loadedScenes["loadedGLTF"]->draw(glm::mat4{ 1.f }, mainDrawContext);
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -1103,6 +1125,17 @@ void VulkanRenderer::updateScene(float deltaTime) {
 void VulkanRenderer::updateFontData() {
 	fontUniformData.modelView = m_sceneData.view;
 	fontUniformData.projection = m_sceneData.proj;
+  fontUniformData.outline  = 0.0f;
+
+  auto stats = std::format("Frametime: {:.2f}ms | UI: {:.4f}ms | Update: {:.4f}us | MeshDraw: {:.4f}us | Triangles: {} | DrawCall: {}",
+    m_rendererState->rendererStats.frametime,
+    m_rendererState->rendererStats.uiFrametime,
+    m_rendererState->rendererStats.sceneUpdateTime,
+    m_rendererState->rendererStats.meshDrawTime,
+    m_rendererState->rendererStats.triangleCount,
+    m_rendererState->rendererStats.drawCallCount);
+
+  generateText(stats);
 
 	// copy data into buffer
 	void* data = fontUniformBuffer.allocation->GetMappedData();
@@ -1121,6 +1154,8 @@ void VulkanRenderer::initFontStuff() {
 
 	updateFontData();
 }
+
+// We are re-creating buffers every frame which is not good?
 // Creates a vertex and index buffer with triangle data containing the chars of the given text
 void VulkanRenderer::generateText(std::string text) {
 	std::vector<FontVertex> vertices;
