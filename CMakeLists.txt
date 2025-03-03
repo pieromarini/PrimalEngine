@@ -18,7 +18,7 @@ endif()
 project(
   PrimalEngine
   DESCRIPTION "C++ Game Engine"
-  LANGUAGES CXX
+	LANGUAGES CXX C
 )
 
 set(CMAKE_CXX_STANDARD 20)
@@ -74,7 +74,21 @@ set(SOURCES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(SANDBOX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sandbox")
 set(ENGINE_LIB "primal_engine")
 
-add_library(${ENGINE_LIB} STATIC "${engine_sources}")
+
+# [LIB] KTX-Software
+set(KTX_DIR "${LIB_DIR}/ktx")
+set(KTX_SOURCES
+    ${KTX_DIR}/lib/texture.c
+    ${KTX_DIR}/lib/hashlist.c
+    ${KTX_DIR}/lib/checkheader.c
+    ${KTX_DIR}/lib/swap.c
+    ${KTX_DIR}/lib/memstream.c
+    ${KTX_DIR}/lib/filestream.c
+    ${KTX_DIR}/lib/vkloader.c)
+
+add_library(${ENGINE_LIB} STATIC "${engine_sources}" "${KTX_SOURCES}")
+
+target_include_directories(${ENGINE_LIB} PUBLIC "${KTX_DIR}/include" "${KTX_DIR}/other_include")
 
 set_target_properties(${ENGINE_LIB} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 set_target_properties(${ENGINE_LIB} PROPERTIES CXX_STANDARD_REQUIRED ON)
@@ -124,7 +138,12 @@ target_include_directories(${ENGINE_LIB} PUBLIC extern/fastgltf/include)
 set(BUILD_SHARED_LIBS ON)
 
 # [LIB] SDL3
-FetchContent_Declare(sdl3 GIT_REPOSITORY https://github.com/libsdl-org/SDL.git GIT_TAG release-3.2.2 EXCLUDE_FROM_ALL)
+FetchContent_Declare(
+  sdl3
+  GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+  GIT_TAG        release-3.2.2
+  EXCLUDE_FROM_ALL
+)
 set(BUILD_EXAMPLES OFF CACHE INTERNAL "" FORCE)
 set(SDL_TEST_LIBRARY OFF CACHE INTERNAL "" FORCE)
 set(SDL_TESTS OFF CACHE INTERNAL "" FORCE)
