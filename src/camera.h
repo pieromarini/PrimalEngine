@@ -17,7 +17,7 @@ public:
 
 	void processSDLEvent(SDL_Event& e);
 
-	void update();
+	void update(float deltaTime);
 };
 
 }// namespace pm

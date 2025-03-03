@@ -12,6 +12,7 @@ void PipelineBuilder::clear() {
 	m_pipelineLayout = {};
 	m_depthStencil = { .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
 	m_renderInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
+  m_vertexInputInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
 
 	m_shaderStages.clear();
 }
@@ -42,16 +43,11 @@ VkPipeline PipelineBuilder::buildPipeline(VkDevice device) {
 	colorBlending.pAttachments = &m_colorBlendAttachment;
 
 
-	// completely clear VertexInputStateCreateInfo, as we have no need for it
-	VkPipelineVertexInputStateCreateInfo vertexInputInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-
 	VkGraphicsPipelineCreateInfo pipelineInfo = { .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
 	// connect the renderInfo to the pNext extension mechanism
 	pipelineInfo.pNext = &m_renderInfo;
 
-	pipelineInfo.stageCount = (uint32_t)m_shaderStages.size();
-	pipelineInfo.pStages = m_shaderStages.data();
-	pipelineInfo.pVertexInputState = &vertexInputInfo;
+	pipelineInfo.pVertexInputState = &m_vertexInputInfo;
 	pipelineInfo.pInputAssemblyState = &m_inputAssembly;
 	pipelineInfo.pViewportState = &viewportState;
 	pipelineInfo.pRasterizationState = &m_rasterizer;
@@ -59,6 +55,8 @@ VkPipeline PipelineBuilder::buildPipeline(VkDevice device) {
 	pipelineInfo.pColorBlendState = &colorBlending;
 	pipelineInfo.pDepthStencilState = &m_depthStencil;
 	pipelineInfo.layout = m_pipelineLayout;
+	pipelineInfo.stageCount = (uint32_t)m_shaderStages.size();
+	pipelineInfo.pStages = m_shaderStages.data();
 
 	VkDynamicState state[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 
@@ -111,6 +109,13 @@ void PipelineBuilder::setMultisamplingNone() {
 	m_multisampling.alphaToCoverageEnable = VK_FALSE;
 	m_multisampling.alphaToOneEnable = VK_FALSE;
 }
+void PipelineBuilder::setVertexInputState(std::vector<VkVertexInputBindingDescription>& vertexInputBindings, std::vector<VkVertexInputAttributeDescription>& vertexInputAttributes) {
+  m_vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(vertexInputBindings.size());
+  m_vertexInputInfo.pVertexBindingDescriptions = vertexInputBindings.data();
+  m_vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertexInputAttributes.size());
+  m_vertexInputInfo.pVertexAttributeDescriptions = vertexInputAttributes.data();
+}
+
 
 void PipelineBuilder::disableBlending() {
 	// default write mask
@@ -175,6 +180,17 @@ void PipelineBuilder::enableBlendingAlphablend() {
 	m_colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 	m_colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
 	m_colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+}
+
+void PipelineBuilder::enableBackgroundBlending() {
+  m_colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+  m_colorBlendAttachment.blendEnable = VK_TRUE;
+  m_colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+  m_colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  m_colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+  m_colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+  m_colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+  m_colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
 }
 
 };// namespace pm

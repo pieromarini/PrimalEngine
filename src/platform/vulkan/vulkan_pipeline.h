@@ -19,8 +19,11 @@ class PipelineBuilder {
 		void setColorAttachmentFormat(VkFormat colorFormat);
 		void setDepthFormat(VkFormat depthFormat);
 
+    void setVertexInputState(std::vector<VkVertexInputBindingDescription>& vertexInputBindings, std::vector<VkVertexInputAttributeDescription>& vertexInputAttributes);
+
 		void enableBlendingAdditive();
 		void enableBlendingAlphablend();
+    void enableBackgroundBlending();
 		void disableBlending();
 
 		void enableDepthTest(bool depthWriteEnable, VkCompareOp op);
@@ -36,6 +39,7 @@ class PipelineBuilder {
 		VkPipelineMultisampleStateCreateInfo m_multisampling{};
 		VkPipelineDepthStencilStateCreateInfo m_depthStencil{};
 		VkPipelineRenderingCreateInfo m_renderInfo{};
+    VkPipelineVertexInputStateCreateInfo m_vertexInputInfo{};
 		VkFormat m_colorAttachmentformat{};
 };
 

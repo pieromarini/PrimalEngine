@@ -10,8 +10,20 @@
 #include "camera.h"
 #include "vk_types.h"
 #include "vulkan_descriptor.h"
+#include "vulkan_texture.h"
+#include "utils/fonts.h"
 
 namespace pm {
+
+struct FontUniformData {
+	// Scene matrices
+	glm::mat4 projection;
+	glm::mat4 modelView;
+	// Font display options
+	glm::vec4 outlineColor{ 1.0f, 0.0f, 0.0f, 0.0f };
+	float outlineWidth{ 0.6f };
+	float outline{ true };
+};
 
 class DeletionQueue {
 public:
@@ -21,7 +33,7 @@ public:
 
 	void flush() {
 		// reverse iterate the deletion queue to execute all the functions
-		for (auto & deletor : std::ranges::reverse_view(deletors)) {
+		for (auto& deletor : std::ranges::reverse_view(deletors)) {
 			deletor();
 		}
 
@@ -58,7 +70,7 @@ struct FrameData {
 
 	VkFence m_renderFence;
 
-  DeletionQueue m_deletionQueue;
+	DeletionQueue m_deletionQueue;
 
 	DescriptorAllocator m_frameDescriptors;
 };
@@ -150,9 +162,10 @@ public:
 	void initDefaultData();
 
 	// drawing
-	void draw();
+	void draw(float deltaTime);
 	void drawBackground(VkCommandBuffer commandBuffer);
 	void drawGeometry(VkCommandBuffer commandBuffer);
+  void drawText(VkCommandBuffer commandBuffer);
 
 	void cleanup();
 
@@ -170,18 +183,20 @@ public:
 	void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
 	void resizeSwapchain();
 
-
 	VkDevice m_device;
 	VkDescriptorSetLayout m_gpuSceneDataDescriptorLayout;
 	AllocatedImage m_drawImage;
 	AllocatedImage m_depthImage;
 
-  DeletionQueue m_mainDeletionQueue;
+	DeletionQueue m_mainDeletionQueue;
 
 	DrawContext mainDrawContext;
 	std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;
 
-	void updateScene();
+  // Font Rendering
+  void generateText(std::string text);
+	void updateScene(float deltaTime);
+  void updateFontData();
 
 	// Image testing
 	AllocatedImage whiteImage;
@@ -205,9 +220,11 @@ private:
 	void initSyncStructures();
 	void initDescriptors();
 	void initPipelines();
+	void initFontStuff();
 
 	// specific pipelines
 	void initBackgroundPipelines();
+  void initFontPipeline();
 	void initMeshPipeline();
 
 	VulkanRendererConfig* m_rendererState;
@@ -261,6 +278,22 @@ private:
 	// Loaded meshes from GLTF file
 	GPUMeshBuffers rectangle;
 	std::vector<std::shared_ptr<MeshAsset>> m_testMeshes;
+
+	// Font rendering
+	VkCommandPool m_fontCommandPool;// TEMP
+  VkCommandBuffer fontCommandBuffer;
+	Texture2D fontSDF;
+  FontUniformData fontUniformData{};
+  AllocatedBuffer fontUniformBuffer;
+	DescriptorAllocator fontDescriptorAllocator;
+  VkDescriptorSetLayout fontDescriptorLayout;
+  VkDescriptorSet fontDescriptorSet;
+  std::array<bmchar, 255> fontChars;
+  uint32_t fontIndexCount{0};
+  VkPipelineLayout fontPipelineLayout;
+  VkPipeline fontPipeline;
+  AllocatedBuffer vertexBuffer;
+  AllocatedBuffer indexBuffer;
 };
 
 }// namespace pm

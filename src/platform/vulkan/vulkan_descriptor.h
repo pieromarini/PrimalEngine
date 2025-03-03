@@ -3,9 +3,9 @@
 #include "vk_types.h"
 
 struct DescriptorLayoutBuilder {
-		void addBinding(uint32_t binding, VkDescriptorType type);
+		void addBinding(uint32_t binding, VkDescriptorType type, VkShaderStageFlags flags = 0);
 		void clear();
-		VkDescriptorSetLayout build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext = nullptr, VkDescriptorSetLayoutCreateFlags flags = 0);
+		VkDescriptorSetLayout build(VkDevice device, VkShaderStageFlags shaderStages = 0, void* pNext = nullptr, VkDescriptorSetLayoutCreateFlags flags = 0);
 
 		std::vector<VkDescriptorSetLayoutBinding> bindings;
 };

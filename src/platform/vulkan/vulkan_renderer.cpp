@@ -1,10 +1,11 @@
+#include <vulkan/vulkan_core.h>
 #define VMA_IMPLEMENTATION
-#include "vulkan_renderer.h"
 #include "platform/vulkan/vulkan_descriptor.h"
 #include "platform/vulkan/vulkan_images.h"
 #include "platform/vulkan/vulkan_loader.h"
 #include "vk_types.h"
 #include "vulkan_pipeline.h"
+#include "vulkan_renderer.h"
 #include "vulkan_shader.h"
 #include "vulkan_structures_helpers.h"
 #include <SDL3/SDL_vulkan.h>
@@ -20,6 +21,7 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	initSwapchain();
 	initCommands();
 	initSyncStructures();
+	initFontStuff();
 	initDescriptors();
 	initPipelines();
 	initDefaultData();
@@ -27,9 +29,11 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	m_rendererState->mainCamera->position = glm::vec3(-15.f, 3.5f, -1.1f);
 	m_rendererState->mainCamera->yaw = -4.61;
 	m_rendererState->mainCamera->pitch = -0.024;
-	m_rendererState->mainCamera->update();
+	m_rendererState->mainCamera->update(0.0);
 
-	const std::string structurePath = { "res/models/bistro.glb" };
+	generateText("Hello World");
+
+	const std::string structurePath = { "res/models/structure.glb" };
 	auto structureFile = loadGltf(this, structurePath);
 
 	assert(structureFile.has_value());
@@ -122,6 +126,12 @@ void VulkanRenderer::initVulkan() {
 	VkPhysicalDeviceVulkan12Features features12{};
 	features12.bufferDeviceAddress = true;
 	features12.descriptorIndexing = true;
+
+  // Use sampler anisotropy when loading sdf textures for font rendering
+  // TODO: how to set this up with vkbootstrap?
+  VkPhysicalDeviceFeatures2 features2{};
+  features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+  features2.features.samplerAnisotropy = VK_TRUE;
 
 	// Use VKBootstrap to select a gpu.
 	// We want a gpu that can write to the SDL surface and supports vulkan 1.3 with the correct features
@@ -222,6 +232,10 @@ void VulkanRenderer::initCommands() {
 		m_mainDeletionQueue.push([frame, this]() { vkDestroyCommandPool(m_device, frame.m_commandPool, nullptr); });
 	}
 
+	// TEMP: create a command pool to load font texture
+	VK_CHECK(vkCreateCommandPool(m_device, &commandPoolInfo, nullptr, &m_fontCommandPool));
+	m_mainDeletionQueue.push([this]() { vkDestroyCommandPool(m_device, m_fontCommandPool, nullptr); });
+
 	// Create command buffer for immediate submits
 	VK_CHECK(vkCreateCommandPool(m_device, &commandPoolInfo, nullptr, &m_immCommandPool));
 	VkCommandBufferAllocateInfo cmdAllocInfo = commandBufferAllocateInfo(m_immCommandPool, 1);
@@ -303,8 +317,9 @@ void VulkanRenderer::cleanup() {
 	vkDestroyInstance(m_instance, nullptr);
 }
 
-void VulkanRenderer::draw() {
-	updateScene();
+void VulkanRenderer::draw(float deltaTime) {
+	updateScene(deltaTime);
+  updateFontData();
 	// wait until the gpu has finished rendering the last frame. Timeout of 1 second
 	VK_CHECK(vkWaitForFences(m_device, 1, &getCurrentFrame().m_renderFence, true, 1000000000));
 
@@ -347,6 +362,7 @@ void VulkanRenderer::draw() {
 	transitionImage(commandBuffer, m_depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
 	drawGeometry(commandBuffer);
+	drawText(commandBuffer);
 
 	// transition the draw image and the swapchain image into their correct transfer layouts
 	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
@@ -543,11 +559,24 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 		draw(r);
 	}
 
+  // text rendering commands
+	VkDeviceSize offsets[1] = { 0 };
+
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, fontPipelineLayout, 0, 1, &fontDescriptorSet, 0, nullptr);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, fontPipeline);
+
+	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer.buffer, offsets);
+  vkCmdBindIndexBuffer(commandBuffer, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+  vkCmdDrawIndexed(commandBuffer, fontIndexCount, 1, 0, 0, 0);
+
 	vkCmdEndRendering(commandBuffer);
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 	m_rendererState->rendererStats.meshDrawTime = elapsed.count() / 1000.0f;
+}
+
+void VulkanRenderer::drawText(VkCommandBuffer commandBuffer) {
 }
 
 void VulkanRenderer::initDescriptors() {
@@ -603,11 +632,42 @@ void VulkanRenderer::initDescriptors() {
 			frame.m_frameDescriptors.destroyPools(m_device);
 		});
 	}
+
+	// Font descriptors
+	std::vector<DescriptorAllocator::PoolSizeRatio> poolSizes = {
+		{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 2 },
+		{ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio = 2 }
+	};
+	fontDescriptorAllocator.init(m_device, 2, poolSizes);
+	m_mainDeletionQueue.push([&]() {
+		fontDescriptorAllocator.destroyPools(m_device);
+	});
+
+	{
+		DescriptorLayoutBuilder builder;
+		builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		builder.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+		fontDescriptorLayout = builder.build(m_device);
+	}
+
+	m_mainDeletionQueue.push([&]() {
+		vkDestroyDescriptorSetLayout(m_device, fontDescriptorLayout, nullptr);
+	});
+
+	fontDescriptorSet = fontDescriptorAllocator.allocate(m_device, fontDescriptorLayout);
+
+	{
+		DescriptorWriter writer;
+		writer.writeBuffer(0, fontUniformBuffer.buffer, sizeof(fontUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+		writer.writeImage(1, fontSDF.view, fontSDF.sampler, fontSDF.imageLayout, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		writer.updateSet(m_device, fontDescriptorSet);
+	}
 }
 
 void VulkanRenderer::initPipelines() {
 	initBackgroundPipelines();
 	metalRoughMaterial.buildPipelines(this);
+	initFontPipeline();
 }
 
 void VulkanRenderer::initBackgroundPipelines() {
@@ -648,6 +708,64 @@ void VulkanRenderer::initBackgroundPipelines() {
 		vkDestroyPipelineLayout(m_device, m_skyPipelineLayout, nullptr);
 		vkDestroyPipeline(m_device, m_skyPipeline, nullptr);
 	});
+}
+
+void VulkanRenderer::initFontPipeline() {
+	VkShaderModule fontFragShader{};
+	if (!loadShaderModule("res/shaders/sdf_text.frag.spv", m_device, &fontFragShader)) {
+		std::cout << std::format("Error when building the font fragment shader module") << '\n';
+	}
+
+	VkShaderModule fontVertexShader{};
+	if (!loadShaderModule("res/shaders/sdf_text.vert.spv", m_device, &fontVertexShader)) {
+		std::cout << std::format("Error when building the font vertex shader module") << '\n';
+	}
+
+	VkDescriptorSetLayout layouts[] = {
+		fontDescriptorLayout
+	};
+
+	VkPipelineLayoutCreateInfo fontLayoutInfo = pipelineLayoutCreateInfo();
+	fontLayoutInfo.setLayoutCount = 1;
+	fontLayoutInfo.pSetLayouts = layouts;
+
+	VK_CHECK(vkCreatePipelineLayout(m_device, &fontLayoutInfo, nullptr, &fontPipelineLayout));
+
+	m_mainDeletionQueue.push([&]() {
+		vkDestroyPipelineLayout(m_device, fontPipelineLayout, nullptr);
+	});
+
+	PipelineBuilder pipelineBuilder;
+	pipelineBuilder.setPipelineLayout(fontPipelineLayout);
+	pipelineBuilder.setShaders(fontVertexShader, fontFragShader);
+	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
+	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+	pipelineBuilder.setMultisamplingNone();
+	pipelineBuilder.enableBackgroundBlending();
+	pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+
+	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
+	pipelineBuilder.setDepthFormat(m_depthImage.imageFormat);
+
+	// TODO: Vertex/Indices data. Should change this to use Buffers
+	std::vector<VkVertexInputBindingDescription> vertexInputBindings = {
+		{ .binding = 0, .stride = sizeof(FontVertex), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX }
+	};
+	std::vector<VkVertexInputAttributeDescription> vertexInputAttributes = {
+		{ .location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = offsetof(FontVertex, pos) },
+		{ .location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(FontVertex, uv) }
+	};
+	pipelineBuilder.setVertexInputState(vertexInputBindings, vertexInputAttributes);
+
+	fontPipeline = pipelineBuilder.buildPipeline(m_device);
+
+	m_mainDeletionQueue.push([&]() {
+		vkDestroyPipeline(m_device, fontPipeline, nullptr);
+	});
+
+	vkDestroyShaderModule(m_device, fontFragShader, nullptr);
+	vkDestroyShaderModule(m_device, fontVertexShader, nullptr);
 }
 
 void VulkanRenderer::immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function) {
@@ -953,10 +1071,10 @@ void MeshNode::draw(const glm::mat4& topMatrix, DrawContext& ctx) {
 	Node::draw(topMatrix, ctx);
 }
 
-void VulkanRenderer::updateScene() {
+void VulkanRenderer::updateScene(float deltaTime) {
 	auto start = std::chrono::system_clock::now();
 
-	m_rendererState->mainCamera->update();
+	m_rendererState->mainCamera->update(deltaTime);
 
 	mainDrawContext.opaqueSurfaces.clear();
 	mainDrawContext.transparentSurfaces.clear();
@@ -981,5 +1099,44 @@ void VulkanRenderer::updateScene() {
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 	m_rendererState->rendererStats.sceneUpdateTime = static_cast<float>(elapsed.count()) / 1000.0f;
 }
+
+void VulkanRenderer::updateFontData() {
+	fontUniformData.modelView = m_sceneData.view;
+	fontUniformData.projection = m_sceneData.proj;
+
+	// copy data into buffer
+	void* data = fontUniformBuffer.allocation->GetMappedData();
+	memcpy(data, &fontUniformData, sizeof(FontUniformData));
+}
+
+void VulkanRenderer::initFontStuff() {
+	// parse font file
+	fontChars = parsebmFont("res/fonts/font.fnt");
+
+	// load ktx texture
+	fontSDF.loadFromFile("res/fonts/font_sdf_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, m_device, m_chosenGPU, m_fontCommandPool, m_graphicsQueue);
+
+	// Create uniform buffer
+	fontUniformBuffer = createBuffer(sizeof(FontUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+
+	updateFontData();
+}
+// Creates a vertex and index buffer with triangle data containing the chars of the given text
+void VulkanRenderer::generateText(std::string text) {
+	std::vector<FontVertex> vertices;
+	std::vector<uint32_t> indices;
+
+	generateTextFromFont(text, static_cast<float>(fontSDF.width), fontChars, vertices, indices, fontIndexCount);
+
+	// Generate host accessible buffers for the text vertices and indices and upload the data
+	vertexBuffer = createBuffer(vertices.size() * sizeof(FontVertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	void* vb = vertexBuffer.allocation->GetMappedData();
+	memcpy(vb, vertices.data(), vertices.size() * sizeof(FontVertex));
+
+	indexBuffer = createBuffer(indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	void* ib = indexBuffer.allocation->GetMappedData();
+	memcpy(ib, indices.data(), indices.size() * sizeof(uint32_t));
+}
+
 
 }// namespace pm

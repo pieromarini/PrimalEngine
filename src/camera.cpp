@@ -22,9 +22,9 @@ glm::mat4 Camera::getRotationMatrix() {
 	return glm::toMat4(yawRotation) * glm::toMat4(pitchRotation);
 }
 
-void Camera::update() {
+void Camera::update(float deltaTime) {
 	glm::mat4 cameraRotation = getRotationMatrix();
-	position += glm::vec3(cameraRotation * glm::vec4(velocity * 0.5f, 0.f));
+	position += glm::vec3(cameraRotation * glm::vec4(velocity * 0.5f * deltaTime, 0.f));
 }
 
 void Camera::processSDLEvent(SDL_Event& e) {

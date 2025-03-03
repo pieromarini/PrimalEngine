@@ -62,6 +62,13 @@ void PrimalApp::run() {
 	SDL_Event e;
 	bool bQuit = false;
 
+  constexpr unsigned long long int TIME_STEP = 1;
+
+  const auto step = Time::step(TIME_STEP);
+  const float step_ns = static_cast<float>(step.count() * 1000000);
+  auto lag = Time::lag(step.count());
+  auto t0 = Time::now();
+
 	while (!bQuit) {
 		auto start = std::chrono::system_clock::now();
 
@@ -90,7 +97,15 @@ void PrimalApp::run() {
 			m_renderer.resizeSwapchain();
 		}
 
-		draw();
+    while (lag >= step) {
+        lag -= step;
+    }
+    auto alpha = (float) lag.count() / step_ns;
+		draw(alpha);
+
+    // update lag and current time
+    lag += Time::delta(t0);
+    t0 = Time::now();
 
 		auto end = std::chrono::system_clock::now();
 		auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
@@ -106,8 +121,8 @@ void PrimalApp::run() {
 	}
 }
 
-void PrimalApp::draw() {
-	m_renderer.draw();
+void PrimalApp::draw(float deltaTime) {
+	m_renderer.draw(deltaTime);
 }
 
 GPUMeshBuffers PrimalApp::uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
