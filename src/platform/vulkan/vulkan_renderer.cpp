@@ -27,12 +27,12 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	initPipelines();
 	initDefaultData();
 
-	const std::string structurePath = { "res/models/structure.glb" };
-	auto structureFile = loadGltf(this, structurePath);
+	const std::string modelPath = { "res/models/structure.glb" };
+	auto loadedGLTF = loadGltf(this, modelPath);
 
-	assert(structureFile.has_value());
+	assert(loadedGLTF.has_value());
 
-	loadedScenes["loadedGLTF"] = *structureFile;
+	loadedScenes["loadedGLTF"] = *loadedGLTF;
 }
 
 void VulkanRenderer::resizeSwapchain() {
