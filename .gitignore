@@ -17,7 +17,6 @@ imgui.ini
 
 # Output
 bin/
-lib/
 
 # CMake
 CMakeCache.txt
