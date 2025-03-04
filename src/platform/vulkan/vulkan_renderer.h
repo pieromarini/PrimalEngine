@@ -28,16 +28,16 @@ struct FontUniformData {
 
 struct UIPushConstants {
 	glm::mat4 transform;
+  VkDeviceAddress vertexBufferAddress;
 };
 
 struct UIUniformData {
 	glm::mat4 projection;
 	glm::mat4 view;
 };
-struct UIVertex {
-	glm::vec2 position;
-	glm::vec3 color;
-	glm::vec2 uv;
+
+struct UIElement {
+  GPUMeshBuffers buffers;
 };
 
 
@@ -194,7 +194,8 @@ public:
 	AllocatedImage createImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	void destroyImage(const AllocatedImage& img);
 
-	GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
+  template <typename VertexType>
+	GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<VertexType> vertices);
 
 	void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
 	void resizeSwapchain();
@@ -311,8 +312,7 @@ private:
 	uint32_t fontIndexCount{ 0 };
 	VkPipelineLayout fontPipelineLayout;
 	VkPipeline fontPipeline;
-	AllocatedBuffer textVertexBuffer;
-	AllocatedBuffer textIndexBuffer;
+  GPUMeshBuffers fontMeshBuffers;
 
 	// UI Rendering
 	UIUniformData uiUniformData{};
@@ -322,8 +322,7 @@ private:
 	VkDescriptorSet uiDescriptorSet;
 	VkPipelineLayout uiPipelineLayout;
 	VkPipeline uiPipeline;
-	AllocatedBuffer uiVertexBuffer;
-	AllocatedBuffer uiIndexBuffer;
+  GPUMeshBuffers uiMeshBuffers;
 };
 
 }// namespace pm

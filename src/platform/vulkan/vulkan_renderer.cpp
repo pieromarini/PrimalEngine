@@ -562,6 +562,7 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	for (auto& r : mainDrawContext.transparentSurfaces) {
 		draw(r);
 	}
+
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
@@ -571,9 +572,6 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, fontPipelineLayout, 0, 1, &fontDescriptorSet, 0, nullptr);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, fontPipeline);
-
-	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &textVertexBuffer.buffer, fontOffsets);
-	vkCmdBindIndexBuffer(commandBuffer, textIndexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
 	UIPushConstants uiPushConstants{};
 	{
@@ -586,8 +584,10 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 		// transform = glm::rotate(transform, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 		transform = glm::scale(transform, glm::vec3(w, h, 1.0f));
 		uiPushConstants.transform = transform;
+    uiPushConstants.vertexBufferAddress = fontMeshBuffers.vertexBufferAddress;
 	}
 	vkCmdPushConstants(commandBuffer, fontPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
+	vkCmdBindIndexBuffer(commandBuffer, fontMeshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
 	vkCmdDrawIndexed(commandBuffer, fontIndexCount, 1, 0, 0, 0);
 
@@ -595,10 +595,6 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	VkDeviceSize uiOffsets[1] = { 0 };
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, uiPipelineLayout, 0, 1, &uiDescriptorSet, 0, nullptr);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, uiPipeline);
-
-	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &uiVertexBuffer.buffer, uiOffsets);
-	vkCmdBindIndexBuffer(commandBuffer, uiIndexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-
 
 	{
 		float x = 1610.0f, y = 300.0f;
@@ -610,8 +606,10 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 		// transform = glm::rotate(transform, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 		transform = glm::scale(transform, glm::vec3(w, h, 1.0f));
 		uiPushConstants.transform = transform;
+    uiPushConstants.vertexBufferAddress = uiMeshBuffers.vertexBufferAddress;
 	}
 	vkCmdPushConstants(commandBuffer, uiPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
+	vkCmdBindIndexBuffer(commandBuffer, uiMeshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
 	auto uiIndexCount = 6;
 	vkCmdDrawIndexed(commandBuffer, uiIndexCount, 1, 0, 0, 0);
@@ -828,17 +826,6 @@ void VulkanRenderer::initUIPipeline() {
 	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
 	pipelineBuilder.setDepthFormat(m_depthImage.imageFormat);
 
-	// TODO: Vertex/Indices data. Should change this to use Buffers
-	std::vector<VkVertexInputBindingDescription> vertexInputBindings = {
-		{ .binding = 0, .stride = sizeof(UIVertex), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX }
-	};
-	std::vector<VkVertexInputAttributeDescription> vertexInputAttributes = {
-		{ .location = 0, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(UIVertex, position) },
-		{ .location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = offsetof(UIVertex, color) },
-		{ .location = 2, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(UIVertex, uv) }
-	};
-	pipelineBuilder.setVertexInputState(vertexInputBindings, vertexInputAttributes);
-
 	uiPipeline = pipelineBuilder.buildPipeline(m_device);
 
 	m_mainDeletionQueue.push([&]() {
@@ -893,16 +880,6 @@ void VulkanRenderer::initFontPipeline() {
 
 	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
 	pipelineBuilder.setDepthFormat(m_depthImage.imageFormat);
-
-	// TODO: Vertex/Indices data. Should change this to use Buffers
-	std::vector<VkVertexInputBindingDescription> vertexInputBindings = {
-		{ .binding = 0, .stride = sizeof(FontVertex), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX }
-	};
-	std::vector<VkVertexInputAttributeDescription> vertexInputAttributes = {
-		{ .location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = offsetof(FontVertex, pos) },
-		{ .location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(FontVertex, uv) }
-	};
-	pipelineBuilder.setVertexInputState(vertexInputBindings, vertexInputAttributes);
 
 	fontPipeline = pipelineBuilder.buildPipeline(m_device);
 
@@ -965,8 +942,9 @@ void VulkanRenderer::destroyBuffer(const AllocatedBuffer& buffer) {
  * Create a staging buffer in CPU memory to hold the vertex + index buffer data.
  * Copy it to the GPU buffer.
  */
-GPUMeshBuffers VulkanRenderer::uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
-	const size_t vertexBufferSize = vertices.size() * sizeof(Vertex);
+template <typename VertexType>
+GPUMeshBuffers VulkanRenderer::uploadMesh(std::span<uint32_t> indices, std::span<VertexType> vertices) {
+	const size_t vertexBufferSize = vertices.size() * sizeof(VertexType);
 	const size_t indexBufferSize = indices.size() * sizeof(uint32_t);
 
 	GPUMeshBuffers newSurface{};
@@ -1285,19 +1263,13 @@ void VulkanRenderer::initFontData() {
 // We are re-creating buffers every frame which is not good?
 // Creates a vertex and index buffer with triangle data containing the chars of the given text
 void VulkanRenderer::generateText(std::string text) {
-	std::vector<FontVertex> vertices;
+	std::vector<UIVertex> vertices;
 	std::vector<uint32_t> indices;
 
 	generateTextFromFont(text, static_cast<float>(fontSDF.width), fontChars, vertices, indices, fontIndexCount);
 
-	// Generate host accessible buffers for the text vertices and indices and upload the data
-	textVertexBuffer = createBuffer(vertices.size() * sizeof(FontVertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	void* vb = textVertexBuffer.allocation->GetMappedData();
-	memcpy(vb, vertices.data(), vertices.size() * sizeof(FontVertex));
-
-	textIndexBuffer = createBuffer(indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	void* ib = textIndexBuffer.allocation->GetMappedData();
-	memcpy(ib, indices.data(), indices.size() * sizeof(uint32_t));
+  // upload vertex/index buffer to GPU and setup BufferDeviceAddress
+  fontMeshBuffers = uploadMesh<UIVertex>(indices, vertices);
 }
 
 void VulkanRenderer::updateUIData() {
@@ -1314,10 +1286,10 @@ void VulkanRenderer::updateUIData() {
 	std::vector<uint32_t> indices;
 
 	// Simple quad with vertex colors
-	vertices.push_back({ { 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 1.0f } });
-	vertices.push_back({ { -1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { -1.0f, 1.0f } });
-	vertices.push_back({ { -1.0f, -1.0f }, { 1.0f, 0.0f, 1.0f }, { -1.0f, -1.0f } });
-	vertices.push_back({ { 1.0f, -1.0f }, { 0.0f, 1.0f, 1.0f }, { 1.0f, -1.0f } });
+	vertices.push_back({ { 1.0f, 1.0f, 0.0f }, 1.0f, { 1.0f, 0.0f, 0.0f }, 1.0f });
+	vertices.push_back({ { -1.0f, 1.0f, 0.0f }, -1.0f, { 0.0f, 1.0f, 0.0f }, 1.0f });
+	vertices.push_back({ { -1.0f, -1.0f, 0.0f }, -1.0f, { 1.0f, 0.0f, 1.0f }, -1.0f });
+	vertices.push_back({ { 1.0f, -1.0f, 0.0f }, 1.0f, { 0.0f, 1.0f, 1.0f }, -1.0f });
 
 	indices.push_back(0);
 	indices.push_back(1);
@@ -1326,21 +1298,25 @@ void VulkanRenderer::updateUIData() {
 	indices.push_back(3);
 	indices.push_back(0);
 
-	// Generate host accessible buffers for the UI vertices and indices and upload the data
-	uiVertexBuffer = createBuffer(vertices.size() * sizeof(UIVertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	void* vb = uiVertexBuffer.allocation->GetMappedData();
-	memcpy(vb, vertices.data(), vertices.size() * sizeof(UIVertex));
-
-	uiIndexBuffer = createBuffer(indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	void* ib = uiIndexBuffer.allocation->GetMappedData();
-	memcpy(ib, indices.data(), indices.size() * sizeof(uint32_t));
+  // upload vertex/index buffer to GPU and setup BufferDeviceAddress
+  uiMeshBuffers = uploadMesh<UIVertex>(indices, vertices);
 }
 
 void VulkanRenderer::initUI() {
 	uiUniformBuffer = createBuffer(sizeof(UIUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
+  m_mainDeletionQueue.push([&]() {
+    destroyBuffer(uiUniformBuffer);
+    destroyBuffer(uiMeshBuffers.vertexBuffer);
+    destroyBuffer(uiMeshBuffers.indexBuffer);
+  });
+
 	updateUIData();
 }
+
+// NOTE: I don't like this. Maybe just create 2 specialized functions.
+template GPUMeshBuffers VulkanRenderer::uploadMesh<UIVertex>(std::span<uint32_t> indices, std::span<UIVertex> vertices);
+template GPUMeshBuffers VulkanRenderer::uploadMesh<Vertex>(std::span<uint32_t> indices, std::span<Vertex> vertices);
 
 
 }// namespace pm

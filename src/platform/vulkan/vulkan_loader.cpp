@@ -193,7 +193,7 @@ std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(pm::Vulkan
 				vtx.color = glm::vec4(vtx.normal, 1.f);
 			}
 		}
-		newmesh.meshBuffers = renderer->uploadMesh(indices, vertices);
+		newmesh.meshBuffers = renderer->uploadMesh<Vertex>(indices, vertices);
 
 		meshes.emplace_back(std::make_shared<MeshAsset>(std::move(newmesh)));
 	}
@@ -465,7 +465,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 			newmesh->surfaces.push_back(newSurface);
 		}
 
-		newmesh->meshBuffers = renderer->uploadMesh(indices, vertices);
+		newmesh->meshBuffers = renderer->uploadMesh<Vertex>(indices, vertices);
 	}
 
 	// load all nodes and their meshes

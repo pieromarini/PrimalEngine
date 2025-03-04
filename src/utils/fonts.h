@@ -1,9 +1,13 @@
+#include "vk_types.h"
 #include <array>
 #include <cassert>
 #include <cstdint>
 #include <fstream>
 #include <sstream>
 #include <vector>
+
+
+namespace pm {
 
 // AngelCode .fnt format structs and classes
 struct bmchar {
@@ -14,19 +18,6 @@ struct bmchar {
 	int32_t yoffset;
 	int32_t xadvance;
 	uint32_t page;
-};
-
-struct FontVertex {
-	float pos[3];
-	float uv[2];
-};
-
-struct TextObject {
-	uint32_t id;
-	uint32_t indexOffset;
-	uint32_t indexCount;
-	float width, height;
-	float posX, posY;
 };
 
 inline int32_t nextValuePair(std::stringstream* stream) {
@@ -76,7 +67,7 @@ inline std::array<bmchar, 255> parsebmFont(std::string_view fileName) {
 	return fontChars;
 }
 
-inline void generateTextFromFont(std::string text, float textureWidth, std::array<bmchar, 255>& fontChars, std::vector<FontVertex>& vertices, std::vector<uint32_t>& indices, uint32_t& indexCount) {
+inline void generateTextFromFont(std::string text, float textureWidth, std::array<bmchar, 255>& fontChars, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices, uint32_t& indexCount) {
 	uint32_t indexOffset = 0;
 
 	float posx = 0.0f;
@@ -105,10 +96,12 @@ inline void generateTextFromFont(std::string text, float textureWidth, std::arra
 
 		posy = yo;
 
-		vertices.push_back({ { posx + dimx + xo, posy + dimy, 0.0f }, { ue, te } });
-		vertices.push_back({ { posx + xo, posy + dimy, 0.0f }, { us, te } });
-		vertices.push_back({ { posx + xo, posy, 0.0f }, { us, ts } });
-		vertices.push_back({ { posx + dimx + xo, posy, 0.0f }, { ue, ts } });
+    auto color = glm::vec3(1.0f, 0.0f, 0.0f);
+
+		vertices.push_back({ { posx + dimx + xo, posy + dimy, 0.0f }, ue, color, te });
+		vertices.push_back({ { posx + xo, posy + dimy, 0.0f }, us, color, te });
+		vertices.push_back({ { posx + xo, posy, 0.0f }, us, color, ts });
+		vertices.push_back({ { posx + dimx + xo, posy, 0.0f }, ue, color, ts });
 
 		std::array<uint32_t, 6> letterIndices = { 0, 1, 2, 2, 3, 0 };
 		for (auto& index : letterIndices) {
@@ -129,3 +122,5 @@ inline void generateTextFromFont(std::string text, float textureWidth, std::arra
 	}
 	*/
 }
+
+}// namespace pm
