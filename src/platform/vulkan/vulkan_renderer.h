@@ -8,27 +8,38 @@
 #include <ranges>
 
 #include "camera.h"
+#include "utils/fonts.h"
 #include "vk_types.h"
 #include "vulkan_descriptor.h"
 #include "vulkan_texture.h"
-#include "utils/fonts.h"
 
 namespace pm {
 
 struct FontUniformData {
 	// Scene matrices
 	glm::mat4 projection;
-	glm::mat4 modelView;
+	glm::mat4 view;
+
 	// Font display options
 	glm::vec4 outlineColor{ 1.0f, 0.0f, 0.0f, 0.0f };
 	float outlineWidth{ 0.6f };
 	float outline{ true };
 };
 
-struct FontPushConstants {
-  glm::vec2 scale;
-  glm::vec2 translate;
+struct UIPushConstants {
+	glm::mat4 transform;
 };
+
+struct UIUniformData {
+	glm::mat4 projection;
+	glm::mat4 view;
+};
+struct UIVertex {
+	glm::vec2 position;
+	glm::vec3 color;
+	glm::vec2 uv;
+};
+
 
 class DeletionQueue {
 public:
@@ -51,7 +62,7 @@ private:
 
 struct RendererStats {
 	float frametime;
-  float uiFrametime;
+	float uiFrametime;
 	int triangleCount;
 	int drawCallCount;
 	float sceneUpdateTime;
@@ -171,7 +182,6 @@ public:
 	void draw(float deltaTime);
 	void drawBackground(VkCommandBuffer commandBuffer);
 	void drawGeometry(VkCommandBuffer commandBuffer);
-  void drawText(VkCommandBuffer commandBuffer);
 
 	void cleanup();
 
@@ -199,10 +209,11 @@ public:
 	DrawContext mainDrawContext;
 	std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;
 
-  // Font Rendering
-  void generateText(std::string text);
+	// Font Rendering
+	void generateText(std::string text);
 	void updateScene(float deltaTime);
-  void updateFontData();
+	void updateFontData();
+	void updateUIData();
 
 	// Image testing
 	AllocatedImage whiteImage;
@@ -226,11 +237,13 @@ private:
 	void initSyncStructures();
 	void initDescriptors();
 	void initPipelines();
-	void initFontStuff();
+	void initFontData();
+	void initUI();
 
 	// specific pipelines
 	void initBackgroundPipelines();
-  void initFontPipeline();
+	void initFontPipeline();
+	void initUIPipeline();
 	void initMeshPipeline();
 
 	VulkanRendererConfig* m_rendererState;
@@ -285,21 +298,32 @@ private:
 	GPUMeshBuffers rectangle;
 	std::vector<std::shared_ptr<MeshAsset>> m_testMeshes;
 
-	// Font rendering
+	// Text rendering
 	VkCommandPool m_fontCommandPool;// TEMP
-  VkCommandBuffer fontCommandBuffer;
+	VkCommandBuffer fontCommandBuffer;
 	Texture2D fontSDF;
-  FontUniformData fontUniformData{};
-  AllocatedBuffer fontUniformBuffer;
+	FontUniformData fontUniformData{};
+	AllocatedBuffer fontUniformBuffer;
 	DescriptorAllocator fontDescriptorAllocator;
-  VkDescriptorSetLayout fontDescriptorLayout;
-  VkDescriptorSet fontDescriptorSet;
-  std::array<bmchar, 255> fontChars;
-  uint32_t fontIndexCount{0};
-  VkPipelineLayout fontPipelineLayout;
-  VkPipeline fontPipeline;
-  AllocatedBuffer vertexBuffer;
-  AllocatedBuffer indexBuffer;
+	VkDescriptorSetLayout fontDescriptorLayout;
+	VkDescriptorSet fontDescriptorSet;
+	std::array<bmchar, 255> fontChars;
+	uint32_t fontIndexCount{ 0 };
+	VkPipelineLayout fontPipelineLayout;
+	VkPipeline fontPipeline;
+	AllocatedBuffer textVertexBuffer;
+	AllocatedBuffer textIndexBuffer;
+
+	// UI Rendering
+	UIUniformData uiUniformData{};
+	AllocatedBuffer uiUniformBuffer;
+	DescriptorAllocator uiDescriptorAllocator;
+	VkDescriptorSetLayout uiDescriptorLayout;
+	VkDescriptorSet uiDescriptorSet;
+	VkPipelineLayout uiPipelineLayout;
+	VkPipeline uiPipeline;
+	AllocatedBuffer uiVertexBuffer;
+	AllocatedBuffer uiIndexBuffer;
 };
 
 }// namespace pm

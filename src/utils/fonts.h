@@ -2,8 +2,6 @@
 #include <cassert>
 #include <cstdint>
 #include <fstream>
-#include <iostream>
-#include <format>
 #include <sstream>
 #include <vector>
 
@@ -21,6 +19,14 @@ struct bmchar {
 struct FontVertex {
 	float pos[3];
 	float uv[2];
+};
+
+struct TextObject {
+	uint32_t id;
+	uint32_t indexOffset;
+	uint32_t indexCount;
+	float width, height;
+	float posX, posY;
 };
 
 inline int32_t nextValuePair(std::stringstream* stream) {
@@ -76,7 +82,7 @@ inline void generateTextFromFont(std::string text, float textureWidth, std::arra
 	float posx = 0.0f;
 	float posy = 0.0f;
 
-  float SCALING_CONSTANT = 1.0f;
+	float SCALING_CONSTANT = 0.5f;
 
 	for (uint32_t i = 0; i < text.size(); i++) {
 		bmchar* charInfo = &fontChars[(int)text[i]];
@@ -84,9 +90,9 @@ inline void generateTextFromFont(std::string text, float textureWidth, std::arra
 		if (charInfo->width == 0)
 			charInfo->width = 36;
 
-		float charw = ((float)(charInfo->width) / SCALING_CONSTANT);
+		float charw = ((float)(charInfo->width) * SCALING_CONSTANT);
 		float dimx = 1.0f * charw;
-		float charh = ((float)(charInfo->height) / SCALING_CONSTANT);
+		float charh = ((float)(charInfo->height) * SCALING_CONSTANT);
 		float dimy = 1.0f * charh;
 
 		float us = charInfo->x / textureWidth;
@@ -94,8 +100,8 @@ inline void generateTextFromFont(std::string text, float textureWidth, std::arra
 		float ts = charInfo->y / textureWidth;
 		float te = (charInfo->y + charInfo->height) / textureWidth;
 
-		float xo = charInfo->xoffset / SCALING_CONSTANT;
-		float yo = charInfo->yoffset / SCALING_CONSTANT;
+		float xo = charInfo->xoffset * SCALING_CONSTANT;
+		float yo = charInfo->yoffset * SCALING_CONSTANT;
 
 		posy = yo;
 
@@ -110,14 +116,16 @@ inline void generateTextFromFont(std::string text, float textureWidth, std::arra
 		}
 		indexOffset += 4;
 
-		float advance = ((float)(charInfo->xadvance) / SCALING_CONSTANT);
+		float advance = ((float)(charInfo->xadvance) * SCALING_CONSTANT);
 		posx += advance;
 	}
 	indexCount = static_cast<uint32_t>(indices.size());
 
+	/* NOTE: Not sure if we want this yet or not.
 	// Center
 	for (auto& v : vertices) {
 		v.pos[0] -= posx / 2.0f;
 		v.pos[1] -= 0.5f;
 	}
+	*/
 }

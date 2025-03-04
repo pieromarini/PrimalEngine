@@ -21,7 +21,8 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	initSwapchain();
 	initCommands();
 	initSyncStructures();
-	initFontStuff();
+	initFontData();
+	initUI();
 	initDescriptors();
 	initPipelines();
 	initDefaultData();
@@ -47,12 +48,12 @@ void VulkanRenderer::resizeSwapchain() {
 	int w{}, h{};
 	SDL_GetWindowSize(m_rendererState->window, &w, &h);
 
-  int displayWidth{}, displayHeight{};
-  SDL_GetWindowSizeInPixels(m_rendererState->window, &displayWidth, &displayHeight);
+	int displayWidth{}, displayHeight{};
+	SDL_GetWindowSizeInPixels(m_rendererState->window, &displayWidth, &displayHeight);
 
 	m_rendererState->windowExtent.width = w;
 	m_rendererState->windowExtent.height = h;
-  m_renderScale = static_cast<float>(displayWidth) / static_cast<float>(w);
+	m_renderScale = static_cast<float>(displayWidth) / static_cast<float>(w);
 
 	createSwapchain(m_rendererState->windowExtent.width, m_rendererState->windowExtent.height);
 
@@ -130,11 +131,11 @@ void VulkanRenderer::initVulkan() {
 	features12.bufferDeviceAddress = true;
 	features12.descriptorIndexing = true;
 
-  // Use sampler anisotropy when loading sdf textures for font rendering
-  // TODO: how to set this up with vkbootstrap?
-  VkPhysicalDeviceFeatures2 features2{};
-  features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-  features2.features.samplerAnisotropy = VK_TRUE;
+	// Use sampler anisotropy when loading sdf textures for font rendering
+	// TODO: how to set this up with vkbootstrap?
+	VkPhysicalDeviceFeatures2 features2{};
+	features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+	features2.features.samplerAnisotropy = VK_TRUE;
 
 	// Use VKBootstrap to select a gpu.
 	// We want a gpu that can write to the SDL surface and supports vulkan 1.3 with the correct features
@@ -322,7 +323,8 @@ void VulkanRenderer::cleanup() {
 
 void VulkanRenderer::draw(float deltaTime) {
 	updateScene(deltaTime);
-  updateFontData();
+	updateUIData();
+	updateFontData();
 	// wait until the gpu has finished rendering the last frame. Timeout of 1 second
 	VK_CHECK(vkWaitForFences(m_device, 1, &getCurrentFrame().m_renderFence, true, 1000000000));
 
@@ -365,7 +367,6 @@ void VulkanRenderer::draw(float deltaTime) {
 	transitionImage(commandBuffer, m_depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
 	drawGeometry(commandBuffer);
-	drawText(commandBuffer);
 
 	// transition the draw image and the swapchain image into their correct transfer layouts
 	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
@@ -564,34 +565,64 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
-  // text rendering commands
+	// Text rendering
 	auto uiStart = std::chrono::system_clock::now();
-	VkDeviceSize offsets[1] = { 0 };
+	VkDeviceSize fontOffsets[1] = { 0 };
 
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, fontPipelineLayout, 0, 1, &fontDescriptorSet, 0, nullptr);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, fontPipeline);
 
-	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer.buffer, offsets);
-  vkCmdBindIndexBuffer(commandBuffer, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &textVertexBuffer.buffer, fontOffsets);
+	vkCmdBindIndexBuffer(commandBuffer, textIndexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-  auto scale = glm::vec2(2.0f / static_cast<float>(m_rendererState->windowExtent.width), 2.0f / static_cast<float>(m_rendererState->windowExtent.height));
-  FontPushConstants fontPushConstants{};
-  fontPushConstants.scale = scale * glm::vec2(0.7f);
-  fontPushConstants.translate = glm::vec2(-250.0f, -520.0f) * scale;
-  vkCmdPushConstants(commandBuffer, fontPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(FontPushConstants), &fontPushConstants);
+	UIPushConstants uiPushConstants{};
+	{
+		float x = 10.0f, y = 10.0f;
+		auto w = 1.0f;
+		auto h = 1.0f;
 
-  vkCmdDrawIndexed(commandBuffer, fontIndexCount, 1, 0, 0, 0);
+		auto transform = glm::mat4(1.0f);
+		transform = glm::translate(transform, glm::vec3(x, y, 0.0f));
+		// transform = glm::rotate(transform, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+		transform = glm::scale(transform, glm::vec3(w, h, 1.0f));
+		uiPushConstants.transform = transform;
+	}
+	vkCmdPushConstants(commandBuffer, fontPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
+
+	vkCmdDrawIndexed(commandBuffer, fontIndexCount, 1, 0, 0, 0);
+
+	// UI rendering
+	VkDeviceSize uiOffsets[1] = { 0 };
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, uiPipelineLayout, 0, 1, &uiDescriptorSet, 0, nullptr);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, uiPipeline);
+
+	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &uiVertexBuffer.buffer, uiOffsets);
+	vkCmdBindIndexBuffer(commandBuffer, uiIndexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+
+	{
+		float x = 1610.0f, y = 300.0f;
+		auto w = 300.0f;
+		auto h = 200.0f;
+
+		auto transform = glm::mat4(1.0f);
+		transform = glm::translate(transform, glm::vec3(x, y, 0.0f));
+		// transform = glm::rotate(transform, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+		transform = glm::scale(transform, glm::vec3(w, h, 1.0f));
+		uiPushConstants.transform = transform;
+	}
+	vkCmdPushConstants(commandBuffer, uiPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
+
+	auto uiIndexCount = 6;
+	vkCmdDrawIndexed(commandBuffer, uiIndexCount, 1, 0, 0, 0);
 
 	auto uiEnd = std::chrono::system_clock::now();
 	auto uiElapsed = std::chrono::duration_cast<std::chrono::microseconds>(uiEnd - uiStart);
 
 	vkCmdEndRendering(commandBuffer);
 
-  m_rendererState->rendererStats.uiFrametime = uiElapsed.count() / 1000.0f;
 	m_rendererState->rendererStats.meshDrawTime = elapsed.count() / 1000.0f;
-}
-
-void VulkanRenderer::drawText(VkCommandBuffer commandBuffer) {
+	m_rendererState->rendererStats.uiFrametime = uiElapsed.count() / 1000.0f;
 }
 
 void VulkanRenderer::initDescriptors() {
@@ -649,11 +680,11 @@ void VulkanRenderer::initDescriptors() {
 	}
 
 	// Font descriptors
-	std::vector<DescriptorAllocator::PoolSizeRatio> poolSizes = {
+	std::vector<DescriptorAllocator::PoolSizeRatio> fontPoolSizes = {
 		{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 2 },
 		{ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio = 2 }
 	};
-	fontDescriptorAllocator.init(m_device, 2, poolSizes);
+	fontDescriptorAllocator.init(m_device, 2, fontPoolSizes);
 	m_mainDeletionQueue.push([&]() {
 		fontDescriptorAllocator.destroyPools(m_device);
 	});
@@ -673,15 +704,42 @@ void VulkanRenderer::initDescriptors() {
 
 	{
 		DescriptorWriter writer;
-		writer.writeBuffer(0, fontUniformBuffer.buffer, sizeof(fontUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+		writer.writeBuffer(0, fontUniformBuffer.buffer, sizeof(FontUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 		writer.writeImage(1, fontSDF.view, fontSDF.sampler, fontSDF.imageLayout, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		writer.updateSet(m_device, fontDescriptorSet);
+	}
+
+	// UI Descriptors
+	std::vector<DescriptorAllocator::PoolSizeRatio> uiPoolSizes = {
+		{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 2 }
+	};
+	uiDescriptorAllocator.init(m_device, 2, uiPoolSizes);
+	m_mainDeletionQueue.push([&]() {
+		uiDescriptorAllocator.destroyPools(m_device);
+	});
+
+	{
+		DescriptorLayoutBuilder builder;
+		builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		uiDescriptorLayout = builder.build(m_device);
+	}
+
+	m_mainDeletionQueue.push([&]() {
+		vkDestroyDescriptorSetLayout(m_device, uiDescriptorLayout, nullptr);
+	});
+
+	uiDescriptorSet = fontDescriptorAllocator.allocate(m_device, uiDescriptorLayout);
+	{
+		DescriptorWriter writer;
+		writer.writeBuffer(0, uiUniformBuffer.buffer, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+		writer.updateSet(m_device, uiDescriptorSet);
 	}
 }
 
 void VulkanRenderer::initPipelines() {
 	initBackgroundPipelines();
 	metalRoughMaterial.buildPipelines(this);
+	initUIPipeline();
 	initFontPipeline();
 }
 
@@ -725,6 +783,72 @@ void VulkanRenderer::initBackgroundPipelines() {
 	});
 }
 
+void VulkanRenderer::initUIPipeline() {
+	VkShaderModule uiFragShader{};
+	if (!loadShaderModule("res/shaders/ui.frag.spv", m_device, &uiFragShader)) {
+		std::cout << std::format("Error when building the UI fragment shader module\n");
+	}
+
+	VkShaderModule uiVertexShader{};
+	if (!loadShaderModule("res/shaders/ui.vert.spv", m_device, &uiVertexShader)) {
+		std::cout << std::format("Error when building the UI vertex shader module\n");
+	}
+
+	VkDescriptorSetLayout layouts[] = {
+		uiDescriptorLayout
+	};
+
+	VkPushConstantRange pushConstantRange{};
+	pushConstantRange.offset = 0;
+	pushConstantRange.size = sizeof(UIPushConstants);
+	pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkPipelineLayoutCreateInfo uiLayoutInfo = pipelineLayoutCreateInfo();
+	uiLayoutInfo.pPushConstantRanges = &pushConstantRange;
+	uiLayoutInfo.pushConstantRangeCount = 1;
+	uiLayoutInfo.setLayoutCount = 1;
+	uiLayoutInfo.pSetLayouts = layouts;
+
+	VK_CHECK(vkCreatePipelineLayout(m_device, &uiLayoutInfo, nullptr, &uiPipelineLayout));
+
+	m_mainDeletionQueue.push([&]() {
+		vkDestroyPipelineLayout(m_device, uiPipelineLayout, nullptr);
+	});
+
+	PipelineBuilder pipelineBuilder;
+	pipelineBuilder.setPipelineLayout(uiPipelineLayout);
+	pipelineBuilder.setShaders(uiVertexShader, uiFragShader);
+	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
+	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	pipelineBuilder.setMultisamplingNone();
+	pipelineBuilder.enableBackgroundBlending();
+	pipelineBuilder.disableDepthTest();
+
+	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
+	pipelineBuilder.setDepthFormat(m_depthImage.imageFormat);
+
+	// TODO: Vertex/Indices data. Should change this to use Buffers
+	std::vector<VkVertexInputBindingDescription> vertexInputBindings = {
+		{ .binding = 0, .stride = sizeof(UIVertex), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX }
+	};
+	std::vector<VkVertexInputAttributeDescription> vertexInputAttributes = {
+		{ .location = 0, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(UIVertex, position) },
+		{ .location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = offsetof(UIVertex, color) },
+		{ .location = 2, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(UIVertex, uv) }
+	};
+	pipelineBuilder.setVertexInputState(vertexInputBindings, vertexInputAttributes);
+
+	uiPipeline = pipelineBuilder.buildPipeline(m_device);
+
+	m_mainDeletionQueue.push([&]() {
+		vkDestroyPipeline(m_device, uiPipeline, nullptr);
+	});
+
+	vkDestroyShaderModule(m_device, uiFragShader, nullptr);
+	vkDestroyShaderModule(m_device, uiVertexShader, nullptr);
+}
+
 void VulkanRenderer::initFontPipeline() {
 	VkShaderModule fontFragShader{};
 	if (!loadShaderModule("res/shaders/sdf_text.frag.spv", m_device, &fontFragShader)) {
@@ -742,12 +866,12 @@ void VulkanRenderer::initFontPipeline() {
 
 	VkPushConstantRange pushConstantRange{};
 	pushConstantRange.offset = 0;
-	pushConstantRange.size = sizeof(FontPushConstants);
+	pushConstantRange.size = sizeof(UIPushConstants);
 	pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
 	VkPipelineLayoutCreateInfo fontLayoutInfo = pipelineLayoutCreateInfo();
-  fontLayoutInfo.pPushConstantRanges = &pushConstantRange;
-  fontLayoutInfo.pushConstantRangeCount = 1;
+	fontLayoutInfo.pPushConstantRanges = &pushConstantRange;
+	fontLayoutInfo.pushConstantRangeCount = 1;
 	fontLayoutInfo.setLayoutCount = 1;
 	fontLayoutInfo.pSetLayouts = layouts;
 
@@ -1123,26 +1247,29 @@ void VulkanRenderer::updateScene(float deltaTime) {
 }
 
 void VulkanRenderer::updateFontData() {
-	fontUniformData.modelView = m_sceneData.view;
-	fontUniformData.projection = m_sceneData.proj;
-  fontUniformData.outline  = 0.0f;
+	fontUniformData.view = glm::mat4(1.0f);
+	fontUniformData.outline = 0.0f;
 
-  auto stats = std::format("Frametime: {:.2f}ms | UI: {:.4f}ms | Update: {:.4f}us | MeshDraw: {:.4f}us | Triangles: {} | DrawCall: {}",
-    m_rendererState->rendererStats.frametime,
-    m_rendererState->rendererStats.uiFrametime,
-    m_rendererState->rendererStats.sceneUpdateTime,
-    m_rendererState->rendererStats.meshDrawTime,
-    m_rendererState->rendererStats.triangleCount,
-    m_rendererState->rendererStats.drawCallCount);
+	auto w = static_cast<float>(m_rendererState->windowExtent.width);
+	auto h = static_cast<float>(m_rendererState->windowExtent.height);
+	fontUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
 
-  generateText(stats);
+	auto stats = std::format("Frametime: {:.2f}ms | UI: {:.4f}ms | Update: {:.4f}us | MeshDraw: {:.4f}us | Triangles: {} | DrawCall: {}",
+		m_rendererState->rendererStats.frametime,
+		m_rendererState->rendererStats.uiFrametime,
+		m_rendererState->rendererStats.sceneUpdateTime,
+		m_rendererState->rendererStats.meshDrawTime,
+		m_rendererState->rendererStats.triangleCount,
+		m_rendererState->rendererStats.drawCallCount);
+
+	generateText(stats);
 
 	// copy data into buffer
 	void* data = fontUniformBuffer.allocation->GetMappedData();
 	memcpy(data, &fontUniformData, sizeof(FontUniformData));
 }
 
-void VulkanRenderer::initFontStuff() {
+void VulkanRenderer::initFontData() {
 	// parse font file
 	fontChars = parsebmFont("res/fonts/font.fnt");
 
@@ -1164,13 +1291,55 @@ void VulkanRenderer::generateText(std::string text) {
 	generateTextFromFont(text, static_cast<float>(fontSDF.width), fontChars, vertices, indices, fontIndexCount);
 
 	// Generate host accessible buffers for the text vertices and indices and upload the data
-	vertexBuffer = createBuffer(vertices.size() * sizeof(FontVertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	void* vb = vertexBuffer.allocation->GetMappedData();
+	textVertexBuffer = createBuffer(vertices.size() * sizeof(FontVertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	void* vb = textVertexBuffer.allocation->GetMappedData();
 	memcpy(vb, vertices.data(), vertices.size() * sizeof(FontVertex));
 
-	indexBuffer = createBuffer(indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	void* ib = indexBuffer.allocation->GetMappedData();
+	textIndexBuffer = createBuffer(indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	void* ib = textIndexBuffer.allocation->GetMappedData();
 	memcpy(ib, indices.data(), indices.size() * sizeof(uint32_t));
+}
+
+void VulkanRenderer::updateUIData() {
+	uiUniformData.view = glm::mat4(1.0f);
+
+	auto w = static_cast<float>(m_rendererState->windowExtent.width);
+	auto h = static_cast<float>(m_rendererState->windowExtent.height);
+	uiUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
+
+	void* data = uiUniformBuffer.allocation->GetMappedData();
+	memcpy(data, &uiUniformData, sizeof(UIUniformData));
+
+	std::vector<UIVertex> vertices;
+	std::vector<uint32_t> indices;
+
+	// Simple quad with vertex colors
+	vertices.push_back({ { 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 1.0f } });
+	vertices.push_back({ { -1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { -1.0f, 1.0f } });
+	vertices.push_back({ { -1.0f, -1.0f }, { 1.0f, 0.0f, 1.0f }, { -1.0f, -1.0f } });
+	vertices.push_back({ { 1.0f, -1.0f }, { 0.0f, 1.0f, 1.0f }, { 1.0f, -1.0f } });
+
+	indices.push_back(0);
+	indices.push_back(1);
+	indices.push_back(2);
+	indices.push_back(2);
+	indices.push_back(3);
+	indices.push_back(0);
+
+	// Generate host accessible buffers for the UI vertices and indices and upload the data
+	uiVertexBuffer = createBuffer(vertices.size() * sizeof(UIVertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	void* vb = uiVertexBuffer.allocation->GetMappedData();
+	memcpy(vb, vertices.data(), vertices.size() * sizeof(UIVertex));
+
+	uiIndexBuffer = createBuffer(indices.size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	void* ib = uiIndexBuffer.allocation->GetMappedData();
+	memcpy(ib, indices.data(), indices.size() * sizeof(uint32_t));
+}
+
+void VulkanRenderer::initUI() {
+	uiUniformBuffer = createBuffer(sizeof(UIUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+
+	updateUIData();
 }
 
 
