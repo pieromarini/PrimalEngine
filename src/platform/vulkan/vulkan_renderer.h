@@ -28,7 +28,7 @@ struct FontUniformData {
 
 struct UIPushConstants {
 	glm::mat4 transform;
-  VkDeviceAddress vertexBufferAddress;
+	VkDeviceAddress vertexBufferAddress;
 };
 
 struct UIUniformData {
@@ -37,7 +37,7 @@ struct UIUniformData {
 };
 
 struct UIElement {
-  GPUMeshBuffers buffers;
+	GPUMeshBuffers buffers;
 };
 
 
@@ -73,7 +73,7 @@ struct VulkanRendererConfig {
 	bool useValidationLayers;
 	VkExtent2D windowExtent;
 	SDL_Window* window;
-	Camera* mainCamera;
+	std::shared_ptr<Camera> mainCamera;
 	bool resizeRequested;
 	RendererStats rendererStats;
 };
@@ -194,7 +194,7 @@ public:
 	AllocatedImage createImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	void destroyImage(const AllocatedImage& img);
 
-  template <typename VertexType>
+	template<typename VertexType>
 	GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<VertexType> vertices);
 
 	void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
@@ -312,7 +312,7 @@ private:
 	uint32_t fontIndexCount{ 0 };
 	VkPipelineLayout fontPipelineLayout;
 	VkPipeline fontPipeline;
-  GPUMeshBuffers fontMeshBuffers;
+	GPUMeshBuffers fontMeshBuffers;
 
 	// UI Rendering
 	UIUniformData uiUniformData{};
@@ -322,7 +322,7 @@ private:
 	VkDescriptorSet uiDescriptorSet;
 	VkPipelineLayout uiPipelineLayout;
 	VkPipeline uiPipeline;
-  GPUMeshBuffers uiMeshBuffers;
+	GPUMeshBuffers uiMeshBuffers;
 };
 
 }// namespace pm

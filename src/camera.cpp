@@ -22,6 +22,19 @@ glm::mat4 Camera::getRotationMatrix() {
 	return glm::toMat4(yawRotation) * glm::toMat4(pitchRotation);
 }
 
+glm::mat4 Camera::getPerspectiveProjection() {
+	return glm::perspective(glm::radians(70.f), static_cast<float>(windowWidth) / static_cast<float>(windowHeight), 10000.f, 0.1f);
+}
+
+glm::mat4 Camera::getOrthographicProjection() {
+	return glm::ortho(0.0f, static_cast<float>(windowWidth), 0.0f, static_cast<float>(windowHeight), -1.0f, 1.0f);
+}
+
+void Camera::onWindowResize(uint32_t width, uint32_t height) {
+	windowWidth = width;
+	windowHeight = height;
+}
+
 void Camera::update(float deltaTime) {
 	glm::mat4 cameraRotation = getRotationMatrix();
 	position += glm::vec3(cameraRotation * glm::vec4(velocity * 0.5f * deltaTime, 0.f));

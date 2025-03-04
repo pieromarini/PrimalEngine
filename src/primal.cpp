@@ -31,12 +31,11 @@ PrimalApp::PrimalApp() {
 
 	SDL_SetWindowRelativeMouseMode(m_window, true);
 
-	m_mainCamera = new Camera();
+	m_mainCamera = std::make_shared<Camera>(m_windowExtent.width, m_windowExtent.height);
 	m_mainCamera->velocity = glm::vec3(0.f);
-	m_mainCamera->position = glm::vec3(0, 0, 5);
-
-	m_mainCamera->pitch = 0;
-	m_mainCamera->yaw = 0;
+	m_mainCamera->position = glm::vec3(-15.f, 3.5f, -1.1f);
+	m_mainCamera->yaw = -4.61;
+	m_mainCamera->pitch = -0.024;
 
 	m_rendererState = {
 		.useValidationLayers = true,
@@ -62,12 +61,12 @@ void PrimalApp::run() {
 	SDL_Event e;
 	bool bQuit = false;
 
-  constexpr unsigned long long int TIME_STEP = 1;
+	constexpr unsigned long long int TIME_STEP = 1;
 
-  const auto step = Time::step(TIME_STEP);
-  const float step_ns = static_cast<float>(step.count() * 1000000);
-  auto lag = Time::lag(step.count());
-  auto t0 = Time::now();
+	const auto step = Time::step(TIME_STEP);
+	const auto step_ns = static_cast<float>(step.count() * 1000000);
+	auto lag = Time::lag(step.count());
+	auto t0 = Time::now();
 
 	while (!bQuit) {
 		auto start = std::chrono::system_clock::now();
@@ -95,17 +94,18 @@ void PrimalApp::run() {
 
 		if (m_rendererState.resizeRequested) {
 			m_renderer.resizeSwapchain();
+			m_mainCamera->onWindowResize(m_rendererState.windowExtent.width, m_rendererState.windowExtent.height);
 		}
 
-    while (lag >= step) {
-        lag -= step;
-    }
-    auto alpha = (float) lag.count() / step_ns;
+		while (lag >= step) {
+			lag -= step;
+		}
+		auto alpha = (float)lag.count() / step_ns;
 		draw(alpha);
 
-    // update lag and current time
-    lag += Time::delta(t0);
-    t0 = Time::now();
+		// update lag and current time
+		lag += Time::delta(t0);
+		t0 = Time::now();
 
 		auto end = std::chrono::system_clock::now();
 		auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);

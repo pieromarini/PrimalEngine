@@ -27,11 +27,6 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	initPipelines();
 	initDefaultData();
 
-	m_rendererState->mainCamera->position = glm::vec3(-15.f, 3.5f, -1.1f);
-	m_rendererState->mainCamera->yaw = -4.61;
-	m_rendererState->mainCamera->pitch = -0.024;
-	m_rendererState->mainCamera->update(0.0);
-
 	const std::string structurePath = { "res/models/structure.glb" };
 	auto structureFile = loadGltf(this, structurePath);
 
@@ -472,13 +467,6 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	scissor.extent.width = m_drawExtent.width;
 	scissor.extent.height = m_drawExtent.height;
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
-	// Calculate view-projection matrix
-	// NOTE: Flipping near and far plane to increase depth testing quality
-	// NOTE: Invert Y projection since Vulkan has the Y coordinate flipped
-	glm::mat4 view = glm::translate(glm::vec3{ 0, 0, -5 });
-	glm::mat4 projection = glm::perspective(glm::radians(70.f), (float)m_drawExtent.width / (float)m_drawExtent.height, 10000.f, 0.1f);
-	projection[1][1] *= -1;
 
 	// allocate a new uniform buffer for the scene data
 	// This should be deleted each frame.
@@ -1207,8 +1195,7 @@ void VulkanRenderer::updateScene(float deltaTime) {
 	mainDrawContext.transparentSurfaces.clear();
 
 	m_sceneData.view = m_rendererState->mainCamera->getViewMatrix();
-	// camera projection
-	m_sceneData.proj = glm::perspective(glm::radians(70.f), (float)m_rendererState->windowExtent.width / (float)m_rendererState->windowExtent.height, 10000.f, 0.1f);
+	m_sceneData.proj = m_rendererState->mainCamera->getPerspectiveProjection();
 
 	// invert the Y direction on projection matrix so that we are more similar
 	// to opengl and gltf axis
@@ -1228,12 +1215,10 @@ void VulkanRenderer::updateScene(float deltaTime) {
 }
 
 void VulkanRenderer::updateFontData() {
-	fontUniformData.view = glm::mat4(1.0f);
 	fontUniformData.outline = 0.0f;
 
-	auto w = static_cast<float>(m_rendererState->windowExtent.width);
-	auto h = static_cast<float>(m_rendererState->windowExtent.height);
-	fontUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
+	fontUniformData.view = glm::mat4(1.0f);
+	fontUniformData.projection = m_rendererState->mainCamera->getOrthographicProjection();
 
 	auto stats = std::format("Frametime: {:.2f}ms | UI: {:.4f}ms | Update: {:.4f}us | MeshDraw: {:.4f}us | Triangles: {} | DrawCall: {}",
 		m_rendererState->rendererStats.frametime,

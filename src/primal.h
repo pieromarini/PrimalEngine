@@ -48,7 +48,7 @@ private:
 	VulkanRendererConfig m_rendererState{};
 
 	SDL_Window* m_window{ nullptr };
-	Camera* m_mainCamera;
+  std::shared_ptr<Camera> m_mainCamera;
 };
 
 }// namespace pm
