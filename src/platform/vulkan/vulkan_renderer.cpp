@@ -231,10 +231,6 @@ void VulkanRenderer::initCommands() {
 		m_mainDeletionQueue.push([frame, this]() { vkDestroyCommandPool(m_device, frame.m_commandPool, nullptr); });
 	}
 
-	// TEMP: create a command pool to load font texture
-	VK_CHECK(vkCreateCommandPool(m_device, &commandPoolInfo, nullptr, &m_fontCommandPool));
-	m_mainDeletionQueue.push([this]() { vkDestroyCommandPool(m_device, m_fontCommandPool, nullptr); });
-
 	// Create command buffer for immediate submits
 	VK_CHECK(vkCreateCommandPool(m_device, &commandPoolInfo, nullptr, &m_immCommandPool));
 	VkCommandBufferAllocateInfo cmdAllocInfo = commandBufferAllocateInfo(m_immCommandPool, 1);
@@ -1240,7 +1236,7 @@ void VulkanRenderer::initFontData() {
 	fontChars = parsebmFont("res/fonts/font.fnt");
 
 	// load ktx texture
-	fontSDF.loadFromFile("res/fonts/font_sdf_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, m_device, m_chosenGPU, m_fontCommandPool, m_graphicsQueue);
+	fontSDF.loadFromFile("res/fonts/font_sdf_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, m_device, m_chosenGPU, getCurrentFrame().m_commandPool, m_graphicsQueue);
 
 	// Create uniform buffer
 	fontUniformBuffer = createBuffer(sizeof(FontUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);

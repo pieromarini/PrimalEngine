@@ -300,7 +300,6 @@ private:
 	std::vector<std::shared_ptr<MeshAsset>> m_testMeshes;
 
 	// Text rendering
-	VkCommandPool m_fontCommandPool;// TEMP
 	VkCommandBuffer fontCommandBuffer;
 	Texture2D fontSDF;
 	FontUniformData fontUniformData{};
