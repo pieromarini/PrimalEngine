@@ -5,6 +5,7 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
+#include "ui/ui_types.h"
 
 
 namespace pm {

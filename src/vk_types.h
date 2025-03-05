@@ -18,7 +18,7 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
-#include <glm/vec4.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 #include <vulkan/vk_enum_string_helper.h>
 
@@ -36,13 +36,6 @@ struct Vertex {
 	glm::vec3 normal;
 	float uv_y;
 	glm::vec4 color;
-};
-
-struct UIVertex {
-	glm::vec3 position;
-  float uv_x;
-	glm::vec3 color;
-  float uv_y;
 };
 
 // holds the resources needed for a mesh

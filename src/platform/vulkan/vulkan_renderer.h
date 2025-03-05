@@ -36,11 +36,6 @@ struct UIUniformData {
 	glm::mat4 view;
 };
 
-struct UIElement {
-	GPUMeshBuffers buffers;
-};
-
-
 class DeletionQueue {
 public:
 	void push(std::function<void()>&& function) {
@@ -322,6 +317,7 @@ private:
 	VkPipelineLayout uiPipelineLayout;
 	VkPipeline uiPipeline;
 	GPUMeshBuffers uiMeshBuffers;
+  std::vector<UIElement> uiElements{};
 };
 
 }// namespace pm
