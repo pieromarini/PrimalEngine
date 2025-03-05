@@ -31,6 +31,11 @@ struct UIPushConstants {
 	VkDeviceAddress vertexBufferAddress;
 };
 
+struct UIIndirectCommand {
+	uint32_t drawId;
+	VkDrawIndexedIndirectCommand command;
+};
+
 struct UIUniformData {
 	glm::mat4 projection;
 	glm::mat4 view;
@@ -317,7 +322,7 @@ private:
 	VkPipelineLayout uiPipelineLayout;
 	VkPipeline uiPipeline;
 	GPUMeshBuffers uiMeshBuffers;
-  std::vector<UIElement> uiElements{};
+	std::vector<UIElement> uiElements{};
 };
 
 }// namespace pm

@@ -5,17 +5,17 @@
 #include "platform/vulkan/vulkan_descriptor.h"
 #include "platform/vulkan/vulkan_images.h"
 #include "platform/vulkan/vulkan_loader.h"
+#include "ui/box.h"
 #include "vk_types.h"
 #include "vulkan_pipeline.h"
 #include "vulkan_renderer.h"
 #include "vulkan_shader.h"
 #include "vulkan_structures_helpers.h"
 #include <SDL3/SDL_vulkan.h>
-#include <ranges>
 #include <cmath>
 #include <glm/gtx/transform.hpp>
+#include <ranges>
 #include <vector>
-#include "ui/box.h"
 
 namespace pm {
 
@@ -122,27 +122,31 @@ void VulkanRenderer::initVulkan() {
 
 	// vulkan 1.3 features
 	VkPhysicalDeviceVulkan13Features features13{};
-	features13.dynamicRendering = true;
-	features13.synchronization2 = true;
+	features13.dynamicRendering = VK_TRUE;
+	features13.synchronization2 = VK_TRUE;
 
 	// vulkan 1.2 features
 	VkPhysicalDeviceVulkan12Features features12{};
-	features12.bufferDeviceAddress = true;
-	features12.descriptorIndexing = true;
+	features12.bufferDeviceAddress = VK_TRUE;
+	features12.descriptorIndexing = VK_TRUE;
+
+	VkPhysicalDeviceVulkan11Features features11{};
+	features11.shaderDrawParameters = VK_TRUE;
 
 	// Use sampler anisotropy when loading sdf textures for font rendering
 	// TODO: how to set this up with vkbootstrap?
-  VkPhysicalDeviceFeatures features{};
-  features.multiDrawIndirect = VK_TRUE;
-  features.drawIndirectFirstInstance = VK_TRUE;
-  features.sampleRateShading = VK_TRUE;
+	VkPhysicalDeviceFeatures features{};
+	features.multiDrawIndirect = VK_TRUE;
+	features.drawIndirectFirstInstance = VK_TRUE;
+	features.sampleRateShading = VK_TRUE;
 
 	// Use VKBootstrap to select a gpu.
 	// We want a gpu that can write to the SDL surface and supports vulkan 1.3 with the correct features
 	vkb::PhysicalDeviceSelector selector{ vkbInstance };
 	vkb::PhysicalDevice physicalDevice = selector
 																				 .set_minimum_version(1, 3)
-                                         .set_required_features(features)
+																				 .set_required_features(features)
+																				 .set_required_features_11(features11)
 																				 .set_required_features_13(features13)
 																				 .set_required_features_12(features12)
 																				 .set_surface(m_surface)
@@ -582,30 +586,69 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	vkCmdDrawIndexed(commandBuffer, fontIndexCount, 1, 0, 0, 0);
 
 	// UI rendering
+	auto uiDrawCommands = std::vector<UIIndirectCommand>();
+	auto transformData = std::vector<glm::mat4>();
+
+	uiDrawCommands.reserve(uiElements.size());
+  transformData.reserve(uiElements.size());
+
+	uint32_t firstIndex = 0;
+	int32_t vertexOffset = 0;
+	for (uint32_t i = 0; i < uiElements.size(); ++i) {
+		auto& uiElement = uiElements.at(i);
+		auto transform = glm::mat4(1.0f);
+		transform = glm::translate(transform, glm::vec3(uiElement.position.x, uiElement.position.y, 0.0f));
+		// transform = glm::rotate(transform, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+		transform = glm::scale(transform, glm::vec3(uiElement.width, uiElement.height, 1.0f));
+
+		transformData.push_back(transform);
+
+		uiDrawCommands.push_back({ .drawId = i,
+			.command = {
+				.indexCount = static_cast<uint32_t>(uiElement.indices.size()),
+				.instanceCount = 1,
+				.firstIndex = firstIndex,
+				.vertexOffset = vertexOffset,
+				.firstInstance = i } });
+
+		firstIndex += uiElement.indices.size();
+		vertexOffset += static_cast<int32_t>(uiElement.vertices.size());
+	}
+	// Set Vertex buffer address
+	uiPushConstants.vertexBufferAddress = uiMeshBuffers.vertexBufferAddress;
+
+	// Create buffer for the draw commands
+	auto uiDrawCommandsBuffer = createBuffer(sizeof(UIIndirectCommand) * uiDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	void* data = uiDrawCommandsBuffer.allocation->GetMappedData();
+	memcpy(data, uiDrawCommands.data(), sizeof(UIIndirectCommand) * uiDrawCommands.size());
+
+	// Create buffer for the transform data
+	auto uiTransformDataBuffer = createBuffer(sizeof(glm::mat4) * transformData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	void* d = uiTransformDataBuffer.allocation->GetMappedData();
+	memcpy(d, transformData.data(), sizeof(glm::mat4) * transformData.size());
+
+	// Write command buffer to UI descriptor layout
+	DescriptorWriter descriptorWriter;
+	writer.writeBuffer(0, uiUniformBuffer.buffer, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	writer.writeBuffer(1, uiDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+	writer.writeBuffer(2, uiTransformDataBuffer.buffer, sizeof(glm::mat4) * transformData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+	writer.updateSet(m_device, uiDescriptorSet);
+
 	VkDeviceSize uiOffsets[1] = { 0 };
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, uiPipelineLayout, 0, 1, &uiDescriptorSet, 0, nullptr);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, uiPipeline);
 
-  uint32_t firstIndex = 0;
-  int32_t vertexOffset = 0;
-  for (auto& uiElement: uiElements) {
-    auto transform = glm::mat4(1.0f);
-    transform = glm::translate(transform, glm::vec3(uiElement.position.x, uiElement.position.y, 0.0f));
-    // transform = glm::rotate(transform, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    transform = glm::scale(transform, glm::vec3(uiElement.width, uiElement.height, 1.0f));
-    uiPushConstants.transform = transform;
-    uiPushConstants.vertexBufferAddress = uiMeshBuffers.vertexBufferAddress;
-    vkCmdPushConstants(commandBuffer, uiPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
-    vkCmdBindIndexBuffer(commandBuffer, uiMeshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-
-    // TODO: change to draw indirect?
-    vkCmdDrawIndexed(commandBuffer, uiElement.indices.size(), 1, firstIndex, vertexOffset, 0);
-    firstIndex += uiElement.indices.size();
-    vertexOffset += static_cast<int32_t>(uiElement.vertices.size());
-  }
+	vkCmdPushConstants(commandBuffer, uiPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
+	vkCmdBindIndexBuffer(commandBuffer, uiMeshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdDrawIndexedIndirect(commandBuffer, uiDrawCommandsBuffer.buffer, offsetof(UIIndirectCommand, command), uiDrawCommands.size(), sizeof(UIIndirectCommand));
 
 	auto uiEnd = std::chrono::system_clock::now();
 	auto uiElapsed = std::chrono::duration_cast<std::chrono::microseconds>(uiEnd - uiStart);
+
+	getCurrentFrame().m_deletionQueue.push([uiDrawCommandsBuffer, uiTransformDataBuffer, this] {
+		destroyBuffer(uiDrawCommandsBuffer);
+    destroyBuffer(uiTransformDataBuffer);
+	});
 
 	vkCmdEndRendering(commandBuffer);
 
@@ -669,7 +712,7 @@ void VulkanRenderer::initDescriptors() {
 
 	// Font descriptors
 	std::vector<DescriptorAllocator::PoolSizeRatio> fontPoolSizes = {
-		{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 2 },
+		{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 4 },
 		{ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio = 2 }
 	};
 	fontDescriptorAllocator.init(m_device, 2, fontPoolSizes);
@@ -699,7 +742,8 @@ void VulkanRenderer::initDescriptors() {
 
 	// UI Descriptors
 	std::vector<DescriptorAllocator::PoolSizeRatio> uiPoolSizes = {
-		{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 2 }
+		{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 2 },
+		{ .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .ratio = 2 }
 	};
 	uiDescriptorAllocator.init(m_device, 2, uiPoolSizes);
 	m_mainDeletionQueue.push([&]() {
@@ -709,6 +753,8 @@ void VulkanRenderer::initDescriptors() {
 	{
 		DescriptorLayoutBuilder builder;
 		builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		builder.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
+		builder.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
 		uiDescriptorLayout = builder.build(m_device);
 	}
 
@@ -717,11 +763,6 @@ void VulkanRenderer::initDescriptors() {
 	});
 
 	uiDescriptorSet = fontDescriptorAllocator.allocate(m_device, uiDescriptorLayout);
-	{
-		DescriptorWriter writer;
-		writer.writeBuffer(0, uiUniformBuffer.buffer, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-		writer.updateSet(m_device, uiDescriptorSet);
-	}
 }
 
 void VulkanRenderer::initPipelines() {
@@ -1274,11 +1315,11 @@ void VulkanRenderer::updateUIData() {
 	std::vector<UIVertex> vertices;
 	std::vector<uint32_t> indices;
 
-  // Copy the vertex data from each UI element into a single buffer
-  for (auto& element: uiElements) {
-    std::ranges::copy(element.vertices.begin(), element.vertices.end(), std::back_inserter(vertices));
-    std::ranges::copy(element.indices.begin(), element.indices.end(), std::back_inserter(indices));
-  }
+	// Copy the vertex data from each UI element into a single buffer
+	for (auto& element : uiElements) {
+		std::ranges::copy(element.vertices.begin(), element.vertices.end(), std::back_inserter(vertices));
+		std::ranges::copy(element.indices.begin(), element.indices.end(), std::back_inserter(indices));
+	}
 
 	uiMeshBuffers = uploadMesh<UIVertex>(indices, vertices);
 }
@@ -1286,15 +1327,15 @@ void VulkanRenderer::updateUIData() {
 void VulkanRenderer::initUI() {
 	uiUniformBuffer = createBuffer(sizeof(UIUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
-  auto box1 = UI::box(300.f, 200.f, { 1610.0f, 300.0f }, { 1.0f, 1.0f }, 0.0f);
-  auto box2 = UI::box(100.f, 50.f, { 400.0f, 100.0f }, { 1.0f, 1.0f }, 0.0f);
-  auto box3 = UI::box(100.f, 100.f, { 800.0f, 600.0f }, { 1.0f, 1.0f }, 0.0f);
-  auto triangle = UI::triangle(300.f, 100.f, { 400.0f, 400.0f }, { 1.0f, 1.0f }, 0.0f);
+	auto box1 = UI::box(300.f, 200.f, { 1610.0f, 300.0f }, { 1.0f, 1.0f }, 0.0f);
+	auto box2 = UI::box(100.f, 50.f, { 400.0f, 100.0f }, { 1.0f, 1.0f }, 0.0f);
+	auto box3 = UI::box(100.f, 100.f, { 800.0f, 600.0f }, { 1.0f, 1.0f }, 0.0f);
+	auto triangle = UI::triangle(300.f, 100.f, { 400.0f, 400.0f }, { 1.0f, 1.0f }, 0.0f);
 
-  uiElements.push_back(box1);
-  uiElements.push_back(box2);
-  uiElements.push_back(box3);
-  uiElements.push_back(triangle);
+	uiElements.push_back(box1);
+	uiElements.push_back(box2);
+	uiElements.push_back(box3);
+	uiElements.push_back(triangle);
 
 	m_mainDeletionQueue.push([&]() {
 		destroyBuffer(uiUniformBuffer);
