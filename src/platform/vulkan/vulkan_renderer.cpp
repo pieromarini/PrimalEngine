@@ -117,9 +117,9 @@ void VulkanRenderer::initVulkan() {
 	SDL_Vulkan_CreateSurface(m_rendererState->window, m_instance, nullptr, &m_surface);
 
 	// vulkan 1.3 features
-	VkPhysicalDeviceVulkan13Features features{};
-	features.dynamicRendering = true;
-	features.synchronization2 = true;
+	VkPhysicalDeviceVulkan13Features features13{};
+	features13.dynamicRendering = true;
+	features13.synchronization2 = true;
 
 	// vulkan 1.2 features
 	VkPhysicalDeviceVulkan12Features features12{};
@@ -128,16 +128,18 @@ void VulkanRenderer::initVulkan() {
 
 	// Use sampler anisotropy when loading sdf textures for font rendering
 	// TODO: how to set this up with vkbootstrap?
-	VkPhysicalDeviceFeatures2 features2{};
-	features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-	features2.features.samplerAnisotropy = VK_TRUE;
+  VkPhysicalDeviceFeatures features{};
+  features.multiDrawIndirect = VK_TRUE;
+  features.drawIndirectFirstInstance = VK_TRUE;
+  features.sampleRateShading = VK_TRUE;
 
 	// Use VKBootstrap to select a gpu.
 	// We want a gpu that can write to the SDL surface and supports vulkan 1.3 with the correct features
 	vkb::PhysicalDeviceSelector selector{ vkbInstance };
 	vkb::PhysicalDevice physicalDevice = selector
 																				 .set_minimum_version(1, 3)
-																				 .set_required_features_13(features)
+                                         .set_required_features(features)
+																				 .set_required_features_13(features13)
 																				 .set_required_features_12(features12)
 																				 .set_surface(m_surface)
 																				 .select()
