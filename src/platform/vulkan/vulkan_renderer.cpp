@@ -661,7 +661,9 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	auto uiEnd = std::chrono::system_clock::now();
 	auto uiElapsed = std::chrono::duration_cast<std::chrono::microseconds>(uiEnd - uiStart);
 
-	getCurrentFrame().m_deletionQueue.push([uiDrawCommandsBuffer, uiTransformDataBuffer, this] {
+	getCurrentFrame().m_deletionQueue.push([textDrawCommandsBuffer, textTransformDataBuffer, uiDrawCommandsBuffer, uiTransformDataBuffer, this] {
+		destroyBuffer(textDrawCommandsBuffer);
+		destroyBuffer(textTransformDataBuffer);
 		destroyBuffer(uiDrawCommandsBuffer);
 		destroyBuffer(uiTransformDataBuffer);
 	});
