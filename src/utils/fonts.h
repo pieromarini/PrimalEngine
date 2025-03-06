@@ -1,7 +1,6 @@
 #pragma once
 
 #include "ui/ui_types.h"
-#include "vk_types.h"
 #include <array>
 #include <cassert>
 #include <cstdint>

@@ -38,7 +38,7 @@ void main() {
   //       The whole `IndirectCommandData` structure is returned with 0's when inspected in RenderDoc
   //       but when inspecting the actual buffer, the data is present.
   //       For now, using gl_DrawIDARB instead just works, but maybe we want to rely on drawId later on.
-  uint cmds = drawCommands[gl_DrawIDARB].drawId;
+  uint drawId = drawCommands[gl_DrawIDARB].drawId;
   UIVertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
 
   outUV = vec2(v.uv_x, v.uv_y);

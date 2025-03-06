@@ -19,6 +19,35 @@
 
 namespace pm {
 
+// Temporary. Commands should be generated in the GPU.
+void generateUIIndirectDrawCommands(std::vector<UIElement>& elements, std::vector<UIIndirectCommand>& drawCommands, std::vector<glm::mat4>& transformData) {
+	drawCommands.reserve(elements.size());
+	transformData.reserve(elements.size());
+
+	uint32_t firstIndex = 0;
+	int32_t vertexOffset = 0;
+	for (uint32_t i = 0; i < elements.size(); ++i) {
+		auto& textElement = elements.at(i);
+
+		auto transform = glm::mat4(1.0f);
+		transform = glm::translate(transform, glm::vec3(textElement.position.x, textElement.position.y, 0.0f));
+		// transform = glm::rotate(transform, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+		transform = glm::scale(transform, glm::vec3(textElement.width, textElement.height, 1.0f));
+		transformData.push_back(transform);
+
+		drawCommands.push_back({ .drawId = i,
+			.command = {
+				.indexCount = static_cast<uint32_t>(textElement.indices.size()),
+				.instanceCount = 1,
+				.firstIndex = firstIndex,
+				.vertexOffset = vertexOffset,
+				.firstInstance = i } });
+
+		firstIndex += textElement.indices.size();
+		vertexOffset += static_cast<int32_t>(textElement.vertices.size());
+	}
+}
+
 void VulkanRenderer::init(VulkanRendererConfig* state) {
 	m_rendererState = state;
 	initVulkan();
@@ -31,7 +60,7 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	initPipelines();
 	initDefaultData();
 
-	const std::string modelPath = { "res/models/bistro.glb" };
+	const std::string modelPath = { "res/models/structure.glb" };
 
 	auto start = std::chrono::system_clock::now();
 	auto loadedGLTF = loadGltf(this, modelPath);
@@ -196,7 +225,6 @@ void VulkanRenderer::initSwapchain() {
 		1
 	};
 
-	// hardcoding the draw format to 32 bit float
 	m_drawImage.imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 	m_drawImage.imageExtent = drawImageExtent;
 
@@ -283,9 +311,7 @@ void VulkanRenderer::createSwapchain(uint32_t width, uint32_t height) {
 	m_swapchainImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
 
 	vkb::Swapchain vkbSwapchain = swapchainBuilder
-																	//.use_default_format_selection()
 																	.set_desired_format(VkSurfaceFormatKHR{ .format = m_swapchainImageFormat, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR })
-																	// use vsync present mode
 																	.set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
 																	.set_desired_extent(width, height)
 																	.add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
@@ -383,7 +409,6 @@ void VulkanRenderer::draw(float deltaTime) {
 	// set swapchain image layout to Present so we can show it on the screen
 	transitionImage(commandBuffer, m_swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
-	// finalize the command buffer (we can no longer add commands, but it can now be executed)
 	VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
 	// prepare the submission to the queue.
@@ -570,31 +595,7 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	auto textDrawCommands = std::vector<UIIndirectCommand>();
 	auto textTransformData = std::vector<glm::mat4>();
 
-	textDrawCommands.reserve(textElements.size());
-	textTransformData.reserve(textElements.size());
-
-	uint32_t firstIndex = 0;
-	int32_t vertexOffset = 0;
-	for (uint32_t i = 0; i < textElements.size(); ++i) {
-		auto& textElement = textElements.at(i);
-
-		auto transform = glm::mat4(1.0f);
-		transform = glm::translate(transform, glm::vec3(textElement.position.x, textElement.position.y, 0.0f));
-		// transform = glm::rotate(transform, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		transform = glm::scale(transform, glm::vec3(textElement.width, textElement.height, 1.0f));
-		textTransformData.push_back(transform);
-
-		textDrawCommands.push_back({ .drawId = i,
-			.command = {
-				.indexCount = static_cast<uint32_t>(textElement.indices.size()),
-				.instanceCount = 1,
-				.firstIndex = firstIndex,
-				.vertexOffset = vertexOffset,
-				.firstInstance = i } });
-
-		firstIndex += textElement.indices.size();
-		vertexOffset += static_cast<int32_t>(textElement.vertices.size());
-	}
+	generateUIIndirectDrawCommands(textElements, textDrawCommands, textTransformData);
 
 	// Set Vertex buffer address
 	UIPushConstants uiPushConstants{};
@@ -624,36 +625,11 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	vkCmdBindIndexBuffer(commandBuffer, fontMeshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 	vkCmdDrawIndexedIndirect(commandBuffer, textDrawCommandsBuffer.buffer, offsetof(UIIndirectCommand, command), textDrawCommands.size(), sizeof(UIIndirectCommand));
 
-
 	// UI rendering
 	auto uiDrawCommands = std::vector<UIIndirectCommand>();
 	auto uiTransformData = std::vector<glm::mat4>();
 
-	uiDrawCommands.reserve(uiElements.size());
-	uiTransformData.reserve(uiElements.size());
-
-	firstIndex = 0;
-	vertexOffset = 0;
-	for (uint32_t i = 0; i < uiElements.size(); ++i) {
-		auto& uiElement = uiElements.at(i);
-		auto transform = glm::mat4(1.0f);
-		transform = glm::translate(transform, glm::vec3(uiElement.position.x, uiElement.position.y, 0.0f));
-		// transform = glm::rotate(transform, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		transform = glm::scale(transform, glm::vec3(uiElement.width, uiElement.height, 1.0f));
-
-		uiTransformData.push_back(transform);
-
-		uiDrawCommands.push_back({ .drawId = i,
-			.command = {
-				.indexCount = static_cast<uint32_t>(uiElement.indices.size()),
-				.instanceCount = 1,
-				.firstIndex = firstIndex,
-				.vertexOffset = vertexOffset,
-				.firstInstance = i } });
-
-		firstIndex += uiElement.indices.size();
-		vertexOffset += static_cast<int32_t>(uiElement.vertices.size());
-	}
+	generateUIIndirectDrawCommands(uiElements, uiDrawCommands, uiTransformData);
 
 	// Set Vertex buffer address
 	uiPushConstants.vertexBufferAddress = uiMeshBuffers.vertexBufferAddress;
@@ -692,8 +668,8 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 
 	vkCmdEndRendering(commandBuffer);
 
-	m_rendererState->rendererStats.meshDrawTime = elapsed.count() / 1000.0f;
-	m_rendererState->rendererStats.uiFrametime = uiElapsed.count() / 1000.0f;
+	m_rendererState->rendererStats.meshDrawTime = static_cast<float>(elapsed.count()) / 1000.0f;
+	m_rendererState->rendererStats.uiFrametime = static_cast<float>(uiElapsed.count()) / 1000.0f;
 }
 
 void VulkanRenderer::initDescriptors() {

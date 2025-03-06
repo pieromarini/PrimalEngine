@@ -10,7 +10,7 @@
 
 namespace pm {
 
-static uint32_t getMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeBits, VkMemoryPropertyFlags properties, VkBool32* memTypeFound) {
+inline uint32_t getMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeBits, VkMemoryPropertyFlags properties, VkBool32* memTypeFound) {
 	VkPhysicalDeviceMemoryProperties memoryProperties{};
 	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
 
@@ -202,8 +202,6 @@ void Texture2D::loadFromFile(std::string filename, VkFormat format, VkDevice dev
 		subresourceRange,
 		VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
 		VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
-
-	// flushCommandBuffer(copyCmd, copyQueue);
 
 	if (copyCmd == VK_NULL_HANDLE) {
 		return;
