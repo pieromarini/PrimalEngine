@@ -251,10 +251,8 @@ void Texture2D::loadFromFile(std::string filename, VkFormat format, VkDevice dev
 	// Max level-of-detail should match mip level count
 	samplerCreateInfo.maxLod = (float)mipLevels;
 
-	// TODO: Get from device properties
-	// samplerCreateInfo.maxAnisotropy = device->enabledFeatures.samplerAnisotropy ? device->properties.limits.maxSamplerAnisotropy : 1.0f;
 	samplerCreateInfo.maxAnisotropy = 1.0f;
-	samplerCreateInfo.anisotropyEnable = false;
+	samplerCreateInfo.anisotropyEnable = true;
 
 	samplerCreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
 

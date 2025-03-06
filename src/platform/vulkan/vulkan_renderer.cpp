@@ -138,12 +138,11 @@ void VulkanRenderer::initVulkan() {
 	VkPhysicalDeviceVulkan11Features features11{};
 	features11.shaderDrawParameters = VK_TRUE;
 
-	// Use sampler anisotropy when loading sdf textures for font rendering
-	// TODO: how to set this up with vkbootstrap?
 	VkPhysicalDeviceFeatures features{};
 	features.multiDrawIndirect = VK_TRUE;
 	features.drawIndirectFirstInstance = VK_TRUE;
 	features.sampleRateShading = VK_TRUE;
+	features.samplerAnisotropy = VK_TRUE;
 
 	// Use VKBootstrap to select a gpu.
 	// We want a gpu that can write to the SDL surface and supports vulkan 1.3 with the correct features

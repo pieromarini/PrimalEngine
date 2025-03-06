@@ -27,7 +27,7 @@ BreakConstructorInitializersBeforeComma: false
 BreakStringLiterals: true
 ColumnLimit: 0
 CommentPragmas: '^ IWYU pragma:'
-CompactNamespaces: false
+CompactNamespaces: true
 ConstructorInitializerAllOnOneLineOrOnePerLine: false
 ConstructorInitializerIndentWidth: 2
 ContinuationIndentWidth: 2
