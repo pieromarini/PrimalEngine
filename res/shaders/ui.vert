@@ -1,38 +1,25 @@
 #version 450
 
+#extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_buffer_reference: require
 #extension GL_ARB_shader_draw_parameters: require
 
-struct UIVertex {
-	vec3 position;
-  float uv_x;
-	vec3 color;
-  float uv_y;
-};
-
-struct IndirectCommandData {
-  uint drawId;
-
-	// VkDrawIndexedIndirectCommand
-	uint indexCount;
-	uint instanceCount;
-	uint firstIndex;
-	int vertexOffset;
-	uint firstInstance;
-};
+#include "ui_structures.h"
 
 layout (buffer_reference , std430, buffer_reference_align=8) readonly buffer UIVertexBuffer {
   UIVertex vertices[];
 };
 
 layout (push_constant) uniform constants {
-  mat4 transform;
   UIVertexBuffer vertexBuffer;
 } PushConstants;
 
 layout (binding = 0) uniform UBO {
   mat4 projection;
   mat4 view;
+  vec4 outlineColor;
+  float outlineWidth;
+  float outline;
 } ubo;
 
 layout (std140, binding = 1) readonly buffer DrawCommands {

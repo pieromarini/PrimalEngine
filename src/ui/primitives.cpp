@@ -1,5 +1,4 @@
-#include "box.h"
-
+#include "primitives.h"
 
 namespace pm::UI {
 
@@ -43,6 +42,20 @@ UIElement triangle(float width, float height, glm::vec2 position, glm::vec2 scal
 	element.indices.push_back(0);
 	element.indices.push_back(1);
 	element.indices.push_back(2);
+
+	return element;
+}
+
+UIElement text(std::string_view text, float width, float height, glm::vec2 position, glm::vec2 scale, float rotationInRadians, float textureWidth, std::array<bmchar, 255>& fontChars) {
+	auto element = UIElement{
+		.position = position,
+		.scale = scale,
+		.rotation = rotationInRadians,
+		.width = width,
+		.height = height
+	};
+
+	generateTextFromFont(text, textureWidth, fontChars, element.vertices, element.indices);
 
 	return element;
 }

@@ -1,11 +1,14 @@
+#pragma once
+
+#include "ui/ui_types.h"
 #include "vk_types.h"
 #include <array>
 #include <cassert>
 #include <cstdint>
 #include <fstream>
 #include <sstream>
+#include <string_view>
 #include <vector>
-#include "ui/ui_types.h"
 
 
 namespace pm {
@@ -68,7 +71,7 @@ inline std::array<bmchar, 255> parsebmFont(std::string_view fileName) {
 	return fontChars;
 }
 
-inline void generateTextFromFont(std::string text, float textureWidth, std::array<bmchar, 255>& fontChars, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices, uint32_t& indexCount) {
+inline void generateTextFromFont(std::string_view text, float textureWidth, std::array<bmchar, 255>& fontChars, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices) {
 	uint32_t indexOffset = 0;
 
 	float posx = 0.0f;
@@ -97,7 +100,7 @@ inline void generateTextFromFont(std::string text, float textureWidth, std::arra
 
 		posy = yo;
 
-    auto color = glm::vec3(1.0f, 0.0f, 0.0f);
+		auto color = glm::vec3(1.0f, 0.0f, 0.0f);
 
 		vertices.push_back({ { posx + dimx + xo, posy + dimy, 0.0f }, ue, color, te });
 		vertices.push_back({ { posx + xo, posy + dimy, 0.0f }, us, color, te });
@@ -113,7 +116,6 @@ inline void generateTextFromFont(std::string text, float textureWidth, std::arra
 		float advance = ((float)(charInfo->xadvance) * SCALING_CONSTANT);
 		posx += advance;
 	}
-	indexCount = static_cast<uint32_t>(indices.size());
 
 	/* NOTE: Not sure if we want this yet or not.
 	// Center

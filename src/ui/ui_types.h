@@ -20,6 +20,7 @@ struct UIElement {
 	float rotation;
 	float width;
 	float height;
+	// TODO: this is very wasteful. We should just store ids to reference them at render time
 	std::vector<UIVertex> vertices{};
 	std::vector<uint32_t> indices{};
 };

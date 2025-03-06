@@ -27,7 +27,6 @@ struct FontUniformData {
 };
 
 struct UIPushConstants {
-	glm::mat4 transform;
 	VkDeviceAddress vertexBufferAddress;
 };
 
@@ -211,7 +210,7 @@ public:
 	std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;
 
 	// Font Rendering
-	void generateText(std::string text);
+	void generateText(std::string stats, std::string fps);
 	void updateScene(float deltaTime);
 	void updateFontData();
 	void updateUIData();
@@ -312,6 +311,7 @@ private:
 	VkPipelineLayout fontPipelineLayout;
 	VkPipeline fontPipeline;
 	GPUMeshBuffers fontMeshBuffers;
+	std::vector<UIElement> textElements{};
 
 	// UI Rendering
 	UIUniformData uiUniformData{};
