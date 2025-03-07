@@ -24,7 +24,6 @@ layout(buffer_reference, std430) readonly buffer VertexBuffer {
 };
 
 layout(push_constant) uniform constants {
-	uint drawIdOffset;
 	VertexBuffer vertexBuffer;
 } PushConstants;
 

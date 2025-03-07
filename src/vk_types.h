@@ -47,7 +47,6 @@ struct GPUMeshBuffers {
 
 // push constants for our mesh object draws
 struct GPUDrawPushConstants {
-	uint32_t drawIdOffset;
 	// NOTE: sending pointer to vertex data as PushConstants for now.
 	// We might want to set SSBOs using DescriptorSets instead.
 	VkDeviceAddress vertexBuffer;

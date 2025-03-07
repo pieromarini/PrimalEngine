@@ -515,7 +515,6 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	}
 
 	int triangleCount = 0;
-	uint32_t drawIdOffset = 0;
 
 	for (const auto& [materialName, modelDraw] : mainDrawContext.opaqueDraws) {
 		auto meshDrawCommands = std::vector<MeshIndirectCommand>();
@@ -561,14 +560,12 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelDraw.material->pipeline->layout, 2, 1, &drawContextDescriptor, 0, nullptr);
 
 		GPUDrawPushConstants pushConstants{};
-		pushConstants.drawIdOffset = drawIdOffset;
 		pushConstants.vertexBuffer = modelDraw.modelBuffers->vertexBufferAddress;
 
 		vkCmdBindIndexBuffer(commandBuffer, modelDraw.modelBuffers->indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdPushConstants(commandBuffer, modelDraw.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 
 		vkCmdDrawIndexedIndirect(commandBuffer, meshDrawCommandsBuffer.buffer, offsetof(MeshIndirectCommand, command), meshDrawCommands.size(), sizeof(MeshIndirectCommand));
-		drawIdOffset += meshDrawCommands.size();
 	}
 
 	for (const auto& [materialName, modelDraw] : mainDrawContext.transparentDraws) {
@@ -615,14 +612,12 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelDraw.material->pipeline->layout, 2, 1, &drawContextDescriptor, 0, nullptr);
 
 		GPUDrawPushConstants pushConstants{};
-		pushConstants.drawIdOffset = drawIdOffset;
 		pushConstants.vertexBuffer = modelDraw.modelBuffers->vertexBufferAddress;
 
 		vkCmdBindIndexBuffer(commandBuffer, modelDraw.modelBuffers->indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdPushConstants(commandBuffer, modelDraw.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 
 		vkCmdDrawIndexedIndirect(commandBuffer, meshDrawCommandsBuffer.buffer, offsetof(MeshIndirectCommand, command), meshDrawCommands.size(), sizeof(MeshIndirectCommand));
-		drawIdOffset += meshDrawCommands.size();
 	}
 
 	m_rendererState->rendererStats.triangleCount = triangleCount;
