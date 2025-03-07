@@ -3,7 +3,7 @@
 #include <vulkan/vulkan_core.h>
 #define VMA_IMPLEMENTATION
 
-#define VMA_DEBUG_LOG_FORMAT(format, ...) do { \
+#define VMA_LEAK_LOG_FORMAT(format, ...) do { \
 	 printf((format), __VA_ARGS__); \
 	 printf("\n"); \
 } while(false)
@@ -363,6 +363,7 @@ void VulkanRenderer::draw(float deltaTime) {
 	updateScene(deltaTime);
 	updateUIData();
 	updateFontData();
+
 	// wait until the gpu has finished rendering the last frame. Timeout of 1 second
 	VK_CHECK(vkWaitForFences(m_device, 1, &getCurrentFrame().m_renderFence, true, 1000000000));
 
@@ -451,7 +452,7 @@ void VulkanRenderer::draw(float deltaTime) {
 		m_rendererState->resizeRequested = true;
 	}
 
-	// increase the number of frames drawn
+	// move to the next frame.
 	m_frameNumber++;
 }
 
@@ -566,6 +567,11 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 		vkCmdPushConstants(commandBuffer, modelDraw.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 
 		vkCmdDrawIndexedIndirect(commandBuffer, meshDrawCommandsBuffer.buffer, offsetof(MeshIndirectCommand, command), meshDrawCommands.size(), sizeof(MeshIndirectCommand));
+
+		getCurrentFrame().m_deletionQueue.push([meshDrawCommandsBuffer, meshTransformDataBuffer, this]() {
+			destroyBuffer(meshDrawCommandsBuffer);
+			destroyBuffer(meshTransformDataBuffer);
+		});
 	}
 
 	for (const auto& [materialName, modelDraw] : mainDrawContext.transparentDraws) {
@@ -618,6 +624,11 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 		vkCmdPushConstants(commandBuffer, modelDraw.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 
 		vkCmdDrawIndexedIndirect(commandBuffer, meshDrawCommandsBuffer.buffer, offsetof(MeshIndirectCommand, command), meshDrawCommands.size(), sizeof(MeshIndirectCommand));
+
+		getCurrentFrame().m_deletionQueue.push([meshDrawCommandsBuffer, meshTransformDataBuffer, this]() {
+			destroyBuffer(meshDrawCommandsBuffer);
+			destroyBuffer(meshTransformDataBuffer);
+		});
 	}
 
 	m_rendererState->rendererStats.triangleCount = triangleCount;
@@ -633,6 +644,9 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	auto textTransformData = std::vector<glm::mat4>();
 
 	generateUIIndirectDrawCommands(textElements, textDrawCommands, textTransformData);
+
+	// Create buffers for font mesh data
+	auto fontMeshBuffers = uploadMesh<UIVertex>(fontIndices, fontVertices, "fontMeshBuffers");
 
 	// Set Vertex buffer address
 	UIPushConstants uiPushConstants{};
@@ -670,6 +684,9 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 
 	generateUIIndirectDrawCommands(uiElements, uiDrawCommands, uiTransformData);
 
+	// Create buffers for ui mesh data
+	auto uiMeshBuffers = uploadMesh<UIVertex>(uiIndices, uiVertices, "uiMeshBuffers");
+
 	// Set Vertex buffer address
 	uiPushConstants.vertexBufferAddress = uiMeshBuffers.vertexBufferAddress;
 
@@ -702,11 +719,17 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	auto uiEnd = std::chrono::system_clock::now();
 	auto uiElapsed = std::chrono::duration_cast<std::chrono::microseconds>(uiEnd - uiStart);
 
-	getCurrentFrame().m_deletionQueue.push([textDrawCommandsBuffer, textTransformDataBuffer, uiDrawCommandsBuffer, uiTransformDataBuffer, this] {
+	getCurrentFrame().m_deletionQueue.push([textDrawCommandsBuffer, textTransformDataBuffer, uiDrawCommandsBuffer, uiTransformDataBuffer, fontMeshBuffers, uiMeshBuffers, this] {
 		destroyBuffer(textDrawCommandsBuffer);
 		destroyBuffer(textTransformDataBuffer);
 		destroyBuffer(uiDrawCommandsBuffer);
 		destroyBuffer(uiTransformDataBuffer);
+
+		// This is very hacky but it correctly deletes the buffers
+		destroyBuffer(fontMeshBuffers.indexBuffer);
+		destroyBuffer(fontMeshBuffers.vertexBuffer);
+		destroyBuffer(uiMeshBuffers.indexBuffer);
+		destroyBuffer(uiMeshBuffers.vertexBuffer);
 	});
 
 	vkCmdEndRendering(commandBuffer);
@@ -1040,14 +1063,14 @@ void VulkanRenderer::destroyBuffer(const AllocatedBuffer& buffer) {
  * Copy it to the GPU buffer.
  */
 template<typename VertexType>
-GPUMeshBuffers VulkanRenderer::uploadMesh(std::span<uint32_t> indices, std::span<VertexType> vertices) {
+GPUMeshBuffers VulkanRenderer::uploadMesh(std::span<uint32_t> indices, std::span<VertexType> vertices, std::string name) {
 	const auto vertexBufferSize = vertices.size() * sizeof(VertexType);
 	const auto indexBufferSize = indices.size() * sizeof(uint32_t);
 
 	GPUMeshBuffers newSurface{};
 
 	// create vertex buffer
-	newSurface.vertexBuffer = createBuffer("MeshVertexBuffer", vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+	newSurface.vertexBuffer = createBuffer(name + " MeshVertexBuffer", vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 
 	// find the adress of the vertex buffer
 	VkBufferDeviceAddressInfo deviceAdressInfo{
@@ -1057,9 +1080,9 @@ GPUMeshBuffers VulkanRenderer::uploadMesh(std::span<uint32_t> indices, std::span
 	newSurface.vertexBufferAddress = vkGetBufferDeviceAddress(m_device, &deviceAdressInfo);
 
 	// create index buffer
-	newSurface.indexBuffer = createBuffer("MeshIndexBuffer", indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+	newSurface.indexBuffer = createBuffer(name + " MeshIndexBuffer", indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 
-	AllocatedBuffer staging = createBuffer("Mesh staging", vertexBufferSize + indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	AllocatedBuffer staging = createBuffer(name + " Mesh staging", vertexBufferSize + indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
 	// Get a pointer to which we can write to
 	void* data = staging.allocation->GetMappedData();
@@ -1369,6 +1392,7 @@ void VulkanRenderer::initFontData() {
 
 	m_mainDeletionQueue.push([&]() {
 		destroyBuffer(fontUniformBuffer);
+		fontSDF.destroy(m_device);
 	});
 }
 
@@ -1376,9 +1400,8 @@ void VulkanRenderer::initFontData() {
 // Creates a vertex and index buffer with triangle data containing the chars of the given text
 void VulkanRenderer::generateText(std::string stats, std::string fps) {
 	textElements.clear();
-
-	std::vector<UIVertex> vertices;
-	std::vector<uint32_t> indices;
+	fontVertices.clear();
+	fontIndices.clear();
 
 	float width = 1.0f;
 	float height = 1.0f;
@@ -1390,19 +1413,15 @@ void VulkanRenderer::generateText(std::string stats, std::string fps) {
 	textElements.push_back(textElement2);
 
 	for (auto& element : textElements) {
-		std::ranges::copy(element.vertices.begin(), element.vertices.end(), std::back_inserter(vertices));
-		std::ranges::copy(element.indices.begin(), element.indices.end(), std::back_inserter(indices));
+		std::ranges::copy(element.vertices.begin(), element.vertices.end(), std::back_inserter(fontVertices));
+		std::ranges::copy(element.indices.begin(), element.indices.end(), std::back_inserter(fontIndices));
 	}
-
-	destroyBuffer(fontMeshBuffers.vertexBuffer);
-	destroyBuffer(fontMeshBuffers.indexBuffer);
-
-	// Copy the vertex data from each text element into a single buffer
-	fontMeshBuffers = uploadMesh<UIVertex>(indices, vertices);
 }
 
 void VulkanRenderer::updateUIData() {
 	uiUniformData.view = glm::mat4(1.0f);
+	uiVertices.clear();
+	uiIndices.clear();
 
 	auto w = static_cast<float>(m_rendererState->windowExtent.width);
 	auto h = static_cast<float>(m_rendererState->windowExtent.height);
@@ -1411,16 +1430,11 @@ void VulkanRenderer::updateUIData() {
 	void* data = uiUniformBuffer.allocation->GetMappedData();
 	memcpy(data, &uiUniformData, sizeof(UIUniformData));
 
-	std::vector<UIVertex> vertices;
-	std::vector<uint32_t> indices;
-
 	// Copy the vertex data from each UI element into a single buffer
 	for (auto& element : uiElements) {
-		std::ranges::copy(element.vertices.begin(), element.vertices.end(), std::back_inserter(vertices));
-		std::ranges::copy(element.indices.begin(), element.indices.end(), std::back_inserter(indices));
+		std::ranges::copy(element.vertices.begin(), element.vertices.end(), std::back_inserter(uiVertices));
+		std::ranges::copy(element.indices.begin(), element.indices.end(), std::back_inserter(uiIndices));
 	}
-
-	uiMeshBuffers = uploadMesh<UIVertex>(indices, vertices);
 }
 
 void VulkanRenderer::initUI() {
@@ -1438,16 +1452,14 @@ void VulkanRenderer::initUI() {
 
 	m_mainDeletionQueue.push([&]() {
 		destroyBuffer(uiUniformBuffer);
-		destroyBuffer(uiMeshBuffers.vertexBuffer);
-		destroyBuffer(uiMeshBuffers.indexBuffer);
 	});
 
 	updateUIData();
 }
 
 // NOTE: I don't like this. Maybe just create 2 specialized functions.
-template GPUMeshBuffers VulkanRenderer::uploadMesh<UIVertex>(std::span<uint32_t> indices, std::span<UIVertex> vertices);
-template GPUMeshBuffers VulkanRenderer::uploadMesh<Vertex>(std::span<uint32_t> indices, std::span<Vertex> vertices);
+template GPUMeshBuffers VulkanRenderer::uploadMesh<UIVertex>(std::span<uint32_t> indices, std::span<UIVertex> vertices, std::string name);
+template GPUMeshBuffers VulkanRenderer::uploadMesh<Vertex>(std::span<uint32_t> indices, std::span<Vertex> vertices, std::string name);
 
 
 }// namespace pm

@@ -207,7 +207,7 @@ public:
 	void destroyImage(const AllocatedImage& img);
 
 	template<typename VertexType>
-	GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<VertexType> vertices);
+	GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<VertexType> vertices, std::string name);
 
 	void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
 	void resizeSwapchain();
@@ -318,7 +318,8 @@ private:
 	uint32_t fontIndexCount{ 0 };
 	VkPipelineLayout fontPipelineLayout;
 	VkPipeline fontPipeline;
-	GPUMeshBuffers fontMeshBuffers;
+	std::vector<UIVertex> fontVertices;
+	std::vector<uint32_t> fontIndices;
 	std::vector<UIElement> textElements{};
 
 	// UI Rendering
@@ -329,7 +330,8 @@ private:
 	VkDescriptorSet uiDescriptorSet;
 	VkPipelineLayout uiPipelineLayout;
 	VkPipeline uiPipeline;
-	GPUMeshBuffers uiMeshBuffers;
+	std::vector<UIVertex> uiVertices;
+	std::vector<uint32_t> uiIndices;
 	std::vector<UIElement> uiElements{};
 };
 

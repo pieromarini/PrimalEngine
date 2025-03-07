@@ -118,7 +118,7 @@ void PrimalApp::draw(float deltaTime) {
 }
 
 GPUMeshBuffers PrimalApp::uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
-	return m_renderer.uploadMesh(indices, vertices);
+	return m_renderer.uploadMesh(indices, vertices, "PrimalEngine");
 }
 
 }// namespace pm

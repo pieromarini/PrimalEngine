@@ -354,7 +354,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 	}
 	// Upload all the vertex/index data for the loaded model
 	
-	file.modelBuffers = renderer->uploadMesh<Vertex>(indices, vertices);
+	file.modelBuffers = renderer->uploadMesh<Vertex>(indices, vertices, "modelBuffers");
 
 	// load all nodes and their meshes
 	for (fastgltf::Node& node : gltf.nodes) {
