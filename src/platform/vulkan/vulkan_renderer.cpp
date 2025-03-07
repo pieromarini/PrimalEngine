@@ -2,6 +2,12 @@
 #include <iterator>
 #include <vulkan/vulkan_core.h>
 #define VMA_IMPLEMENTATION
+
+#define VMA_DEBUG_LOG_FORMAT(format, ...) do { \
+	 printf((format), __VA_ARGS__); \
+	 printf("\n"); \
+} while(false)
+
 #include "platform/vulkan/vulkan_descriptor.h"
 #include "platform/vulkan/vulkan_images.h"
 #include "platform/vulkan/vulkan_loader.h"
@@ -97,13 +103,13 @@ void VulkanRenderer::resizeSwapchain() {
 void VulkanRenderer::initDefaultData() {
 	// 3 default textures, white, grey, black. 1 pixel each
 	uint32_t white = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
-	whiteImage = createImage((void*)&white, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	whiteImage = createImage("whiteImage", (void*)&white, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
 	uint32_t grey = glm::packUnorm4x8(glm::vec4(0.66f, 0.66f, 0.66f, 1));
-	greyImage = createImage((void*)&grey, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	greyImage = createImage("greyImage", (void*)&grey, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
 	uint32_t black = glm::packUnorm4x8(glm::vec4(0, 0, 0, 0));
-	blackImage = createImage((void*)&black, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	blackImage = createImage("blackImage", (void*)&black, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
 	// checkerboard image
 	uint32_t magenta = glm::packUnorm4x8(glm::vec4(1, 0, 1, 1));
@@ -113,7 +119,7 @@ void VulkanRenderer::initDefaultData() {
 			pixels.at(y * 16 + x) = ((x % 2) ^ (y % 2)) ? magenta : black;
 		}
 	}
-	errorCheckerboardImage = createImage(pixels.data(), VkExtent3D{ 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	errorCheckerboardImage = createImage("errorCheckedboardImage", pixels.data(), VkExtent3D{ 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
 	VkSamplerCreateInfo sampl = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 
@@ -489,7 +495,7 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 
 	// allocate a new uniform buffer for the scene data
 	// This should be deleted each frame.
-	AllocatedBuffer gpuSceneDataBuffer = createBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	AllocatedBuffer gpuSceneDataBuffer = createBuffer("gpuSceneDataBuffer", sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
 	// write the buffer
 	auto* sceneUniformData = static_cast<GPUSceneData*>(gpuSceneDataBuffer.allocation->GetMappedData());
@@ -530,12 +536,12 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 			triangleCount += static_cast<int32_t>(renderObject.indexCount) / 3;
 		}
 		// Create indirect commands buffer
-		auto meshDrawCommandsBuffer = createBuffer(sizeof(MeshIndirectCommand) * meshDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		auto meshDrawCommandsBuffer = createBuffer("meshDrawCommandsBuffer", sizeof(MeshIndirectCommand) * meshDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		void* uiData = meshDrawCommandsBuffer.allocation->GetMappedData();
 		memcpy(uiData, meshDrawCommands.data(), sizeof(MeshIndirectCommand) * meshDrawCommands.size());
 
 		// Create buffer for the transform data
-		auto meshTransformDataBuffer = createBuffer(sizeof(glm::mat4) * transforms.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		auto meshTransformDataBuffer = createBuffer("meshTransformBuffer", sizeof(glm::mat4) * transforms.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		void* mtd = meshTransformDataBuffer.allocation->GetMappedData();
 		memcpy(mtd, transforms.data(), sizeof(glm::mat4) * transforms.size());
 
@@ -584,12 +590,12 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 			triangleCount += static_cast<int32_t>(renderObject.indexCount) / 3;
 		}
 		// Create indirect commands buffer
-		auto meshDrawCommandsBuffer = createBuffer(sizeof(MeshIndirectCommand) * meshDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		auto meshDrawCommandsBuffer = createBuffer("meshDrawCommandsBuffer", sizeof(MeshIndirectCommand) * meshDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		void* uiData = meshDrawCommandsBuffer.allocation->GetMappedData();
 		memcpy(uiData, meshDrawCommands.data(), sizeof(MeshIndirectCommand) * meshDrawCommands.size());
 
 		// Create buffer for the transform data
-		auto meshTransformDataBuffer = createBuffer(sizeof(glm::mat4) * transforms.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		auto meshTransformDataBuffer = createBuffer("meshTransformBuffer", sizeof(glm::mat4) * transforms.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		void* mtd = meshTransformDataBuffer.allocation->GetMappedData();
 		memcpy(mtd, transforms.data(), sizeof(glm::mat4) * transforms.size());
 
@@ -638,12 +644,12 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	uiPushConstants.vertexBufferAddress = fontMeshBuffers.vertexBufferAddress;
 
 	// Create buffer for the draw commands
-	auto textDrawCommandsBuffer = createBuffer(sizeof(UIIndirectCommand) * textDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	auto textDrawCommandsBuffer = createBuffer("textDrawCommandsBuffer", sizeof(UIIndirectCommand) * textDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	void* data = textDrawCommandsBuffer.allocation->GetMappedData();
 	memcpy(data, textDrawCommands.data(), sizeof(UIIndirectCommand) * textDrawCommands.size());
 
 	// Create buffer for the transform data
-	auto textTransformDataBuffer = createBuffer(sizeof(glm::mat4) * textTransformData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	auto textTransformDataBuffer = createBuffer("textTransformBuffer", sizeof(glm::mat4) * textTransformData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	void* d = textTransformDataBuffer.allocation->GetMappedData();
 	memcpy(d, textTransformData.data(), sizeof(glm::mat4) * textTransformData.size());
 
@@ -673,12 +679,12 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	uiPushConstants.vertexBufferAddress = uiMeshBuffers.vertexBufferAddress;
 
 	// Create buffer for the draw commands
-	auto uiDrawCommandsBuffer = createBuffer(sizeof(UIIndirectCommand) * uiDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	auto uiDrawCommandsBuffer = createBuffer("uiDrawCommandsBuffer", sizeof(UIIndirectCommand) * uiDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	void* uiData = uiDrawCommandsBuffer.allocation->GetMappedData();
 	memcpy(uiData, uiDrawCommands.data(), sizeof(UIIndirectCommand) * uiDrawCommands.size());
 
 	// Create buffer for the transform data
-	auto uiTransformDataBuffer = createBuffer(sizeof(glm::mat4) * uiTransformData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	auto uiTransformDataBuffer = createBuffer("uiTransformBuffer", sizeof(glm::mat4) * uiTransformData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	void* uiD = uiTransformDataBuffer.allocation->GetMappedData();
 	memcpy(uiD, uiTransformData.data(), sizeof(glm::mat4) * uiTransformData.size());
 
@@ -1009,7 +1015,7 @@ void VulkanRenderer::immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& 
 	VK_CHECK(vkWaitForFences(m_device, 1, &m_immFence, true, 9999999999));
 }
 
-AllocatedBuffer VulkanRenderer::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) {
+AllocatedBuffer VulkanRenderer::createBuffer(std::string name, size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) {
 	// allocate buffer
 	VkBufferCreateInfo bufferInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 	bufferInfo.pNext = nullptr;
@@ -1024,6 +1030,8 @@ AllocatedBuffer VulkanRenderer::createBuffer(size_t allocSize, VkBufferUsageFlag
 
 	// allocate the buffer
 	VK_CHECK(vmaCreateBuffer(m_allocator, &bufferInfo, &vmaallocInfo, &newBuffer.buffer, &newBuffer.allocation, &newBuffer.info));
+
+	vmaSetAllocationName(m_allocator, newBuffer.allocation, name.c_str());
 
 	return newBuffer;
 }
@@ -1044,7 +1052,7 @@ GPUMeshBuffers VulkanRenderer::uploadMesh(std::span<uint32_t> indices, std::span
 	GPUMeshBuffers newSurface{};
 
 	// create vertex buffer
-	newSurface.vertexBuffer = createBuffer(vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+	newSurface.vertexBuffer = createBuffer("MeshVertexBuffer", vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 
 	// find the adress of the vertex buffer
 	VkBufferDeviceAddressInfo deviceAdressInfo{
@@ -1054,9 +1062,9 @@ GPUMeshBuffers VulkanRenderer::uploadMesh(std::span<uint32_t> indices, std::span
 	newSurface.vertexBufferAddress = vkGetBufferDeviceAddress(m_device, &deviceAdressInfo);
 
 	// create index buffer
-	newSurface.indexBuffer = createBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+	newSurface.indexBuffer = createBuffer("MeshIndexBuffer", indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 
-	AllocatedBuffer staging = createBuffer(vertexBufferSize + indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	AllocatedBuffer staging = createBuffer("Mesh staging", vertexBufferSize + indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
 	// Get a pointer to which we can write to
 	void* data = staging.allocation->GetMappedData();
@@ -1088,7 +1096,7 @@ GPUMeshBuffers VulkanRenderer::uploadMesh(std::span<uint32_t> indices, std::span
 }
 
 
-AllocatedImage VulkanRenderer::createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) {
+AllocatedImage VulkanRenderer::createImage(std::string name, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) {
 	AllocatedImage newImage{};
 	newImage.imageFormat = format;
 	newImage.imageExtent = size;
@@ -1106,6 +1114,8 @@ AllocatedImage VulkanRenderer::createImage(VkExtent3D size, VkFormat format, VkI
 	// allocate and create the image
 	VK_CHECK(vmaCreateImage(m_allocator, &img_info, &allocinfo, &newImage.image, &newImage.allocation, nullptr));
 
+	vmaSetAllocationName(m_allocator, newImage.allocation, name.c_str());
+
 	// if the format is a depth format, we will need to have it use the correct
 	// aspect flag
 	VkImageAspectFlags aspectFlag = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -1122,13 +1132,13 @@ AllocatedImage VulkanRenderer::createImage(VkExtent3D size, VkFormat format, VkI
 	return newImage;
 }
 
-AllocatedImage VulkanRenderer::createImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) {
+AllocatedImage VulkanRenderer::createImage(std::string name, void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) {
 	size_t data_size = size.depth * size.width * size.height * 4;
-	AllocatedBuffer uploadbuffer = createBuffer(data_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	AllocatedBuffer uploadbuffer = createBuffer("createImage uploadBuffer", data_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
 	memcpy(uploadbuffer.info.pMappedData, data, data_size);
 
-	AllocatedImage newImage = createImage(size, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipmapped);
+	AllocatedImage newImage = createImage(name, size, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipmapped);
 
 	immediateSubmit([&](VkCommandBuffer cmd) {
 		transitionImage(cmd, newImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -1358,7 +1368,7 @@ void VulkanRenderer::initFontData() {
 	fontSDF.loadFromFile("res/fonts/font_sdf_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, m_device, m_chosenGPU, getCurrentFrame().m_commandPool, m_graphicsQueue);
 
 	// Create uniform buffer
-	fontUniformBuffer = createBuffer(sizeof(FontUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	fontUniformBuffer = createBuffer("fontUniformBuffer", sizeof(FontUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
 	updateFontData();
 
@@ -1419,7 +1429,7 @@ void VulkanRenderer::updateUIData() {
 }
 
 void VulkanRenderer::initUI() {
-	uiUniformBuffer = createBuffer(sizeof(UIUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	uiUniformBuffer = createBuffer("uiUniformBuffer", sizeof(UIUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
 	auto box1 = UI::box(300.f, 200.f, { 1610.0f, 300.0f }, { 1.0f, 1.0f }, 0.0f);
 	auto box2 = UI::box(100.f, 50.f, { 400.0f, 100.0f }, { 1.0f, 1.0f }, 0.0f);
