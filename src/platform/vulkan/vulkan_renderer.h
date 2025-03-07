@@ -30,7 +30,14 @@ struct UIPushConstants {
 	VkDeviceAddress vertexBufferAddress;
 };
 
+
+// NOTE: keeping these separate because we might want to include extra stuff here later on.
 struct UIIndirectCommand {
+	uint32_t drawId;
+	VkDrawIndexedIndirectCommand command;
+};
+
+struct MeshIndirectCommand {
 	uint32_t drawId;
 	VkDrawIndexedIndirectCommand command;
 };
@@ -153,19 +160,25 @@ struct MeshNode : public Node {
 };
 
 struct RenderObject {
-	uint32_t indexCount;
+	uint32_t drawId;
 	uint32_t firstIndex;
-	VkBuffer indexBuffer;
+	int32_t vertexOffset;
+	uint32_t indexCount;
+	glm::mat4 transform;
+};
 
+struct ModelDrawRender {
+	GPUMeshBuffers* modelBuffers;
 	MaterialInstance* material;
 
-	glm::mat4 transform;
-	VkDeviceAddress vertexBufferAddress;
+	std::vector<RenderObject> renderObjects;
 };
 
 struct DrawContext {
-	std::vector<RenderObject> opaqueSurfaces;
-	std::vector<RenderObject> transparentSurfaces;
+	std::unordered_map<std::string, ModelDrawRender> opaqueDraws{};
+	std::unordered_map<std::string, ModelDrawRender> transparentDraws{};
+	std::vector<glm::mat4> transformData{};
+	uint32_t nodeCount = 0;
 };
 
 constexpr uint32_t FRAME_OVERLAP = 2;
@@ -201,13 +214,13 @@ public:
 
 	VkDevice m_device;
 	VkDescriptorSetLayout m_gpuSceneDataDescriptorLayout;
+	VkDescriptorSetLayout m_modelDrawDescriptorLayout;
 	AllocatedImage m_drawImage;
 	AllocatedImage m_depthImage;
 
 	DeletionQueue m_mainDeletionQueue;
 
 	DrawContext mainDrawContext;
-	std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;
 
 	// Font Rendering
 	void generateText(std::string stats, std::string fps);
@@ -244,7 +257,6 @@ private:
 	void initBackgroundPipelines();
 	void initFontPipeline();
 	void initUIPipeline();
-	void initMeshPipeline();
 
 	VulkanRendererConfig* m_rendererState;
 	float m_renderScale{ 1.0f };
@@ -287,16 +299,12 @@ private:
 	VkDescriptorSet m_drawImageDescriptors;
 	VkDescriptorSetLayout m_drawImageDescriptorLayout;
 
-	// Scene data tied to DescriptorSetLayout
+	// Global scene data for all meshes
 	GPUSceneData m_sceneData;
 
 	// Compute pipeline
 	VkPipeline m_skyPipeline;
 	VkPipelineLayout m_skyPipelineLayout;
-
-	// Loaded meshes from GLTF file
-	GPUMeshBuffers rectangle;
-	std::vector<std::shared_ptr<MeshAsset>> m_testMeshes;
 
 	// Text rendering
 	VkCommandBuffer fontCommandBuffer;

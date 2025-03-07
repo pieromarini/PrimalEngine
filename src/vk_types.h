@@ -16,9 +16,9 @@
 #include <vulkan/vulkan.h>
 
 #define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/quaternion.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
-#include <glm/gtx/quaternion.hpp>
 
 #include <vulkan/vk_enum_string_helper.h>
 
@@ -47,8 +47,7 @@ struct GPUMeshBuffers {
 
 // push constants for our mesh object draws
 struct GPUDrawPushConstants {
-	glm::mat4 worldMatrix;
-
+	uint32_t drawIdOffset;
 	// NOTE: sending pointer to vertex data as PushConstants for now.
 	// We might want to set SSBOs using DescriptorSets instead.
 	VkDeviceAddress vertexBuffer;
@@ -57,7 +56,7 @@ struct GPUDrawPushConstants {
 enum class MaterialPass : uint8_t {
 	MainColor,
 	Transparent,
-  DoubleSided,
+	DoubleSided,
 	Other
 };
 struct MaterialPipeline {
@@ -75,6 +74,10 @@ struct DrawContext;
 
 // base class for a renderable dynamic object
 class IRenderable {
+public:
+	virtual ~IRenderable() noexcept = default;
+
+private:
 	virtual void draw(const glm::mat4& topMatrix, DrawContext& ctx) = 0;
 };
 

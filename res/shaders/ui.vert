@@ -22,11 +22,11 @@ layout (binding = 0) uniform UBO {
   float outline;
 } ubo;
 
-layout (std140, binding = 1) readonly buffer DrawCommands {
+layout (binding = 1, std140) readonly buffer DrawCommands {
   IndirectCommandData drawCommands[];
 };
 
-layout (std140, binding = 2) readonly buffer Transform {
+layout (binding = 2, std140) readonly buffer Transform {
   mat4 transforms[];
 };
 

@@ -6,26 +6,28 @@
 #include <fastgltf/parser.hpp>
 #include <fastgltf/tools.hpp>
 #include <filesystem>
+#include <utility>
 
 namespace pm {
 
 struct GLTFMaterial {
 	GLTFMaterial() = default;
-	GLTFMaterial(const MaterialInstance& d) : data{ d } {}
+	GLTFMaterial(std::string n, const MaterialInstance& d) : name{ std::move(n) }, data{ d } {}
+
+	std::string name;
 	MaterialInstance data;
 };
 
 struct GeoSurface {
-	uint32_t startIndex;
-	uint32_t count;
+	uint32_t firstIndex;
+	int32_t vertexOffset;
+	uint32_t indexCount;
 	std::shared_ptr<GLTFMaterial> material;
 };
 
 struct MeshAsset {
 	std::string name;
-
 	std::vector<GeoSurface> surfaces;
-	GPUMeshBuffers meshBuffers;
 };
 
 
@@ -48,6 +50,7 @@ struct LoadedGLTF : public IRenderable {
 
 	DescriptorAllocator descriptorPool;
 
+	GPUMeshBuffers modelBuffers;
 	AllocatedBuffer materialDataBuffer;
 
 	VulkanRenderer* renderer;

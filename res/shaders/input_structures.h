@@ -1,3 +1,14 @@
+struct IndirectCommandData {
+  uint drawId;
+
+	// VkDrawIndexedIndirectCommand
+	uint indexCount;
+	uint instanceCount;
+	uint firstIndex;
+	int vertexOffset;
+	uint firstInstance;
+};
+
 layout(set = 0, binding = 0) uniform SceneData {
 	mat4 view;
 	mat4 proj;
@@ -14,3 +25,4 @@ layout(set = 1, binding = 0) uniform GLTFMaterialData {
 
 layout(set = 1, binding = 1) uniform sampler2D colorTex;
 layout(set = 1, binding = 2) uniform sampler2D metalRoughTex;
+
