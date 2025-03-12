@@ -208,12 +208,6 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 	for (fastgltf::Image& image : gltf.images) {
 		auto img = loadImage(renderer, gltf, image);
 		if (img.has_value()) {
-			if (image.name == "Vespa_BaseColor-Vespa_BaseColor") {
-				std::cout << "Loading Vespa_BaseColor-Vespa_BaseColor at index: " << images.size() << '\n';
-			} else if (image.name == "Vespa_Odometer_BaseColor-Vespa_Odometer_BaseColor") {
-				std::cout << "Loading Vespa_Odometer_BaseColor-Vespa_Odometer_BaseColor at index: " << images.size() << '\n';
-			}
-
 			images.push_back(*img);
 			file.images[image.name.c_str()] = *img;
 		} else {
@@ -252,6 +246,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 	renderer->metalRoughMaterial.writeBindlessTextureToGlobalDescriptor(renderer->m_device, renderer->bindlessTexturesDescriptorSet, images[0], file.samplers[0], 0);
 	defaultMat->data = renderer->metalRoughMaterial.writeMaterials(renderer->m_device, MaterialPass::MainColor, file.descriptorPool);
 
+	auto start = std::chrono::system_clock::now();
 	// Load materials
 	int materialDataIndex = 1;
 	uint32_t bindlessTextureIndex = 1;
@@ -295,12 +290,6 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 			auto textureIndex = mat.pbrData.baseColorTexture.value().textureIndex;
 			size_t img = gltf.textures[textureIndex].imageIndex.value() + 1;
 			size_t sampler = gltf.textures[textureIndex].samplerIndex.value() + 1;
-			if (mat.name == "Vespa") {
-				std::cout << "Vespa Texture index: " << textureIndex << " img: " << img << '\n';
-			} else if (mat.name == "Vespa_Odometer") {
-				std::cout << "Vespa_Odometer Texture index: " << textureIndex << " img: " << img << '\n';
-			}
-
 			materialData.albedoTexture = bindlessTextureIndex;
 			// TODO: We are writing textures 1 by 1. We should batch these.
 			renderer->metalRoughMaterial.writeBindlessTextureToGlobalDescriptor(renderer->m_device, renderer->bindlessTexturesDescriptorSet, images[img], file.samplers[sampler], bindlessTextureIndex);
@@ -316,7 +305,10 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 
 		materialDataIndex++;
 	}
-	std::cout << std::format("Loaded {} materials\n", materials.size());
+
+	auto end = std::chrono::system_clock::now();
+	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+	std::cout << std::format("Loaded {} materials in {} us\n", materials.size(), elapsed.count());
 
 	std::vector<uint32_t> indices;
 	std::vector<Vertex> vertices;
@@ -395,10 +387,6 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 			} else {
 				newSurface.material = materials[0];// set default material
 				newSurface.material->data.materialIndex = 0;
-			}
-
-			if (mesh.name == "Bistro_Research_Exterior__lod0_Vespa_3937") {
-				std::cout << "Loading Bistro_Research_Exterior__lod0_Vespa_3937 with material index: " << p.materialIndex.value() << '\n';
 			}
 
 			newmesh->surfaces.push_back(newSurface);
