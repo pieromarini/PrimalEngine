@@ -27,17 +27,25 @@ layout(push_constant) uniform constants {
 	VertexBuffer vertexBuffer;
 } PushConstants;
 
-layout (set = 2, binding = 0, std140) readonly buffer DrawCommands {
+layout (set = 2, binding = 0) readonly buffer GLTFMaterialData {
+	MaterialData materialData[];
+};
+
+layout (set = 2, binding = 1) readonly buffer DrawCommands {
   IndirectCommandData drawCommands[];
 };
 
-layout (set = 2, binding = 1, std140) readonly buffer Transform {
-  mat4 transforms[];
+layout (std430, set = 2, binding = 2) readonly buffer Draws {
+  MeshDraw draws[];
 };
 
 void main() {
   uint drawId = drawCommands[gl_DrawIDARB].drawId;
-	mat4 transform = transforms[gl_DrawIDARB];
+	MeshDraw meshDraw = draws[drawId];
+
+	mat4 transform = meshDraw.transform;
+	uint materialIndex = meshDraw.materialIndex;
+
 	Vertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
 	
 	vec4 position = vec4(v.position, 1.0f);
@@ -45,7 +53,7 @@ void main() {
 	gl_Position =  sceneData.viewproj * transform * position;
 
 	outNormal = (transform * vec4(v.normal, 0.f)).xyz;
-	outColor = v.color.xyz * materialData.colorFactors.xyz;	
+	outColor = v.color.xyz * materialData[materialIndex].colorFactors.xyz;
 	outUV.x = v.uv_x;
 	outUV.y = v.uv_y;
 	outDrawId = drawId;

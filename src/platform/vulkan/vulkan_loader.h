@@ -30,6 +30,12 @@ struct MeshAsset {
 	std::vector<GeoSurface> surfaces;
 };
 
+struct alignas(16) MeshDraw {
+	glm::mat4 transform{};
+	uint32_t materialIndex{};
+	float padding[3]{ 0.0f, 0.0f, 0.0f };
+};
+
 
 struct AllocatedImage;
 class VulkanRenderer;
@@ -55,7 +61,7 @@ struct LoadedGLTF : public IRenderable {
 
 	VulkanRenderer* renderer;
 
-	virtual ~LoadedGLTF() { clearAll(); };
+	~LoadedGLTF() override { clearAll(); };
 
 	void draw(const glm::mat4& topMatrix, DrawContext& ctx) override;
 

@@ -1,6 +1,7 @@
 #version 450
 
 #extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_nonuniform_qualifier : require
 
 #include "input_structures.h"
 
@@ -13,6 +14,20 @@ layout (location = 3) in flat uint drawId;
 
 layout (location = 0) out vec4 outFragColor;
 
+layout (set = 1, binding = 0) uniform sampler2D textures[];
+
+layout (set = 2, binding = 0) readonly buffer GLTFMaterialData {
+	MaterialData materialData[];
+};
+
+layout (set = 2, binding = 1) readonly buffer DrawCommands {
+  IndirectCommandData drawCommands[];
+};
+
+layout (std430, set = 2, binding = 2) readonly buffer Draws {
+  MeshDraw draws[];
+};
+
 uint hash(uint a) {
    a = (a+0x7ed55d16) + (a<<12);
    a = (a^0xc761c23c) ^ (a>>19);
@@ -24,9 +39,16 @@ uint hash(uint a) {
 }
 
 void main() {
+	MeshDraw meshDraw = draws[drawId];
+	MaterialData material = materialData[meshDraw.materialIndex];
+
 	float lightValue = max(dot(inNormal, sceneData.sunlightDirection.xyz), 0.9f);
 
-	vec3 color = inColor * texture(colorTex, inUV).xyz * sceneData.sunlightColor.xyz * lightValue;
+	vec3 color = inColor * sceneData.sunlightColor.xyz * lightValue;
+	if (material.albedoTexture > 0) {
+		color *= texture(textures[nonuniformEXT(material.albedoTexture)], inUV).xyz;
+	}
+
 	vec3 ambient = color * sceneData.ambientColor.xyz;
 
 	outFragColor = vec4(color * sceneData.sunlightColor.w + ambient, 1.0f);

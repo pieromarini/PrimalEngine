@@ -122,6 +122,18 @@ struct ComputePushConstants {
 	glm::vec4 data4;
 };
 
+
+struct alignas(16) MaterialData {
+	uint32_t albedoTexture{};
+	uint32_t normalTexture{};
+	uint32_t specularTexture{};
+	uint32_t emissiveTexture{};
+	glm::vec4 colorFactors;
+	glm::vec4 metalRoughFactors;
+	// padding, we need it anyway for uniform buffers
+	// glm::vec4 padding[13];
+};
+
 struct GLTFMetallic_Roughness {
 	MaterialPipeline opaquePipeline;
 	MaterialPipeline transparentPipeline;
@@ -129,28 +141,13 @@ struct GLTFMetallic_Roughness {
 
 	VkDescriptorSetLayout materialLayout;
 
-	struct MaterialConstants {
-		glm::vec4 colorFactors;
-		glm::vec4 metalRoughFactors;
-		// padding, we need it anyway for uniform buffers
-		glm::vec4 padding[14];
-	};
-
-	struct MaterialResources {
-		AllocatedImage colorImage;
-		VkSampler colorSampler;
-		AllocatedImage metalRoughImage;
-		VkSampler metalRoughSampler;
-		VkBuffer dataBuffer;
-		uint32_t dataBufferOffset;
-	};
-
 	DescriptorWriter writer;
 
 	void buildPipelines(VulkanRenderer* renderer);
 	void clearResources(VkDevice device);
 
-	MaterialInstance writeMaterial(VkDevice device, MaterialPass pass, const MaterialResources& resources, DescriptorAllocator& descriptorAllocator);
+	MaterialInstance writeMaterials(VkDevice device, MaterialPass pass, DescriptorAllocator& descriptorAllocator);
+	void writeBindlessTextureToGlobalDescriptor(VkDevice device, VkDescriptorSet bindlessTextureSet, AllocatedImage& image, VkSampler sampler, uint32_t index);
 };
 
 struct MeshNode : public Node {
@@ -165,19 +162,20 @@ struct RenderObject {
 	int32_t vertexOffset;
 	uint32_t indexCount;
 	glm::mat4 transform;
+	uint32_t materialIndex;
 };
 
 struct ModelDrawRender {
-	GPUMeshBuffers* modelBuffers;
 	MaterialInstance* material;
 
-	std::vector<RenderObject> renderObjects;
+	std::vector<RenderObject> renderObjects{};
 };
 
 struct DrawContext {
-	std::unordered_map<std::string, ModelDrawRender> opaqueDraws{};
-	std::unordered_map<std::string, ModelDrawRender> transparentDraws{};
-	std::vector<glm::mat4> transformData{};
+	ModelDrawRender opaqueDraws{};
+	ModelDrawRender transparentDraws{};
+
+	GPUMeshBuffers* modelBuffers;
 	uint32_t nodeCount = 0;
 };
 
@@ -243,6 +241,16 @@ public:
 
 	std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes;
 
+
+	// bindless textures
+	VkDescriptorPool bindlessPool;
+	VkDescriptorSetLayout bindlessTexturesSetLayout;
+	VkDescriptorSet bindlessTexturesDescriptorSet;
+
+	VkDescriptorSet materialsDescriptor;
+	AllocatedBuffer globalMaterialDataBuffer;
+	std::vector<MaterialData> globalMaterialData;
+
 private:
 	void initVulkan();
 	void initSwapchain();
@@ -252,6 +260,7 @@ private:
 	void initPipelines();
 	void initFontData();
 	void initUI();
+	void initBindlessTextureDescriptor();
 
 	// specific pipelines
 	void initBackgroundPipelines();
@@ -301,7 +310,7 @@ private:
 
 	// Global scene data for all meshes
 	GPUSceneData m_sceneData;
-
+	
 	// Compute pipeline
 	VkPipeline m_skyPipeline;
 	VkPipelineLayout m_skyPipelineLayout;

@@ -64,8 +64,8 @@ struct MaterialPipeline {
 };
 
 struct MaterialInstance {
+	uint32_t materialIndex;
 	MaterialPipeline* pipeline;
-	VkDescriptorSet materialSet;
 	MaterialPass passType;
 };
 
