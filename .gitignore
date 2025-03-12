@@ -39,4 +39,4 @@ extern/sdl*
 
 # Compiled SPV shaders
 res/shaders/*.spv
-res/models/bistro.glb
+res/models/bistro

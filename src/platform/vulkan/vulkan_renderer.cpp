@@ -69,7 +69,7 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	initPipelines();
 	initDefaultData();
 
-	const std::string modelPath = { "res/models/bistro.glb" };
+	const std::string modelPath = { "res/models/bistro/bistro.glb" };
 
 	auto start = std::chrono::system_clock::now();
 	auto loadedGLTF = loadGltf(this, modelPath);
