@@ -511,8 +511,8 @@ void VulkanRenderer::draw(float deltaTime) {
 
 	double frameGpuBegin = double(timestampResults[0]) * physicalDeviceTimestampPeriod * 1e-6;
 	double frameGpuEnd = double(timestampResults[1]) * physicalDeviceTimestampPeriod * 1e-6;
-	getCurrentFrame().frameGpuTime = frameGpuEnd - frameGpuBegin;
-	getCurrentFrame().triangleCount = pipelineStatisticsResults[0];
+	m_rendererState->rendererStats.frameGpuTimeAvg = m_rendererState->rendererStats.frameGpuTimeAvg * 0.95 + (frameGpuEnd - frameGpuBegin) * 0.05;
+	m_rendererState->rendererStats.triangleCount = pipelineStatisticsResults[0];
 
 	// move to the next frame.
 	m_frameNumber++;
@@ -530,7 +530,6 @@ void VulkanRenderer::drawBackground(VkCommandBuffer commandBuffer) {
 
 void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	m_rendererState->rendererStats.drawCallCount = 0;
-	m_rendererState->rendererStats.triangleCount = 0;
 
 	auto start = std::chrono::system_clock::now();
 
@@ -577,8 +576,6 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 		writer.updateSet(m_device, globalDescriptor);
 	}
 
-	int triangleCount = 0;
-
 	{
 		ModelDrawRender modelDraw = mainDrawContext.opaqueDraws;
 
@@ -597,7 +594,6 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 					.vertexOffset = renderObject.vertexOffset,
 					.firstInstance = renderObject.drawId } });
 			meshDraws.push_back({ .transform = renderObject.transform, .materialIndex = renderObject.materialIndex });
-			triangleCount += static_cast<int32_t>(renderObject.indexCount) / 3;
 		}
 		// Create indirect commands buffer
 		auto meshIndirectCommandsBuffer = createBuffer("meshDrawCommandsBuffer", sizeof(MeshIndirectCommand) * meshIndirectCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
@@ -657,7 +653,6 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 					.vertexOffset = renderObject.vertexOffset,
 					.firstInstance = renderObject.drawId } });
 			meshDraws.push_back({ .transform = renderObject.transform, .materialIndex = renderObject.materialIndex });
-			triangleCount += static_cast<int32_t>(renderObject.indexCount) / 3;
 		}
 		// Create indirect commands buffer
 		auto meshIndirectCommandsBuffer = createBuffer("meshDrawCommandsBuffer", sizeof(MeshIndirectCommand) * meshIndirectCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
@@ -699,7 +694,6 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 		});
 	}
 
-	m_rendererState->rendererStats.triangleCount = triangleCount;
 	m_rendererState->rendererStats.drawCallCount = static_cast<int32_t>(mainDrawContext.opaqueDraws.renderObjects.size() + mainDrawContext.transparentDraws.renderObjects.size());
 
 	auto end = std::chrono::system_clock::now();
@@ -802,8 +796,8 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 
 	vkCmdEndRendering(commandBuffer);
 
-	m_rendererState->rendererStats.meshDrawTime = static_cast<float>(elapsed.count()) / 1000.0f;
-	m_rendererState->rendererStats.uiFrametime = static_cast<float>(uiElapsed.count()) / 1000.0f;
+	m_rendererState->rendererStats.meshDrawTimeAvg = m_rendererState->rendererStats.meshDrawTimeAvg * 0.95 + (static_cast<float>(elapsed.count()) / 1000.0f) * 0.05;
+	m_rendererState->rendererStats.uiFrametimeAvg = m_rendererState->rendererStats.uiFrametimeAvg * 0.95 + (static_cast<float>(uiElapsed.count()) / 1000.0f) * 0.05;
 }
 
 void VulkanRenderer::initDescriptors() {
@@ -1480,7 +1474,7 @@ void VulkanRenderer::updateScene(float deltaTime) {
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-	m_rendererState->rendererStats.sceneUpdateTime = static_cast<float>(elapsed.count()) / 1000.0f;
+	m_rendererState->rendererStats.sceneUpdateTimeAvg = m_rendererState->rendererStats.sceneUpdateTimeAvg * 0.95 + (static_cast<float>(elapsed.count()) / 1000.0f) * 0.05;
 }
 
 void VulkanRenderer::updateFontData() {
@@ -1489,14 +1483,13 @@ void VulkanRenderer::updateFontData() {
 	fontUniformData.view = glm::mat4(1.0f);
 	fontUniformData.projection = m_rendererState->mainCamera->getOrthographicProjection();
 
-	auto stats = std::format("Frametime: {:.2f}ms | GPU: {:.2f}ms | UI: {:.4f}ms | Update: {:.4f}us | MeshDraw: {:.4f}us | Triangles: {:.2f}M | TrianglesGPU: {:.2f}M | DrawCall: {}",
+	auto stats = std::format("Frametime: {:.2f}ms | GPU: {:.2f}ms | UI: {:.4f}ms | Update: {:.4f}us | MeshDraw: {:.4f}us | Triangles: {:.2f}M | DrawCall: {}",
 		m_rendererState->rendererStats.frametime,
-		getCurrentFrame().frameGpuTime,
-		m_rendererState->rendererStats.uiFrametime,
-		m_rendererState->rendererStats.sceneUpdateTime,
-		m_rendererState->rendererStats.meshDrawTime,
-		m_rendererState->rendererStats.triangleCount / 1e6,
-		getCurrentFrame().triangleCount * 1e-6,
+		m_rendererState->rendererStats.frameGpuTimeAvg,
+		m_rendererState->rendererStats.uiFrametimeAvg,
+		m_rendererState->rendererStats.sceneUpdateTimeAvg,
+		m_rendererState->rendererStats.meshDrawTimeAvg,
+		m_rendererState->rendererStats.triangleCount * 1e-6,
 		m_rendererState->rendererStats.drawCallCount);
 
 	auto fps = std::format("FPS: {}", static_cast<int>(1000.0f / m_rendererState->rendererStats.frametime));

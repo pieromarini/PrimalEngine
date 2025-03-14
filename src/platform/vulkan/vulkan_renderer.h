@@ -67,12 +67,14 @@ private:
 };
 
 struct RendererStats {
-	float frametime;
-	float uiFrametime;
-	int triangleCount;
-	int drawCallCount;
-	float sceneUpdateTime;
-	float meshDrawTime;
+	double frametime{};
+	double frameGpuTimeAvg{};
+	double uiFrametimeAvg{};
+	double sceneUpdateTimeAvg{};
+	double meshDrawTimeAvg{};
+
+	uint32_t triangleCount{};
+	uint32_t drawCallCount{};
 };
 
 struct VulkanRendererConfig {
@@ -96,9 +98,6 @@ struct FrameData {
 	DeletionQueue m_deletionQueue;
 
 	DescriptorAllocator m_frameDescriptors;
-
-	double frameGpuTime{};
-	uint32_t triangleCount{};
 };
 
 struct AllocatedImage {
