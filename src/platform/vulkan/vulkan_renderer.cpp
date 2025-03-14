@@ -67,6 +67,7 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	initDescriptors();
 	initBindlessTextureDescriptor();
 	initPipelines();
+	initQueryPools();
 	initDefaultData();
 
 	const std::string modelPath = { "res/models/bistro/bistro.glb" };
@@ -80,6 +81,19 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	assert(loadedGLTF.has_value());
 
 	loadedScenes["loadedGLTF"] = *loadedGLTF;
+}
+
+void VulkanRenderer::initQueryPools() {
+	timestampPool = createQueryPool(m_device, 128, VK_QUERY_TYPE_TIMESTAMP);
+	assert(timestampPool);
+
+	pipelineStatisticsPool = createQueryPool(m_device, 1, VK_QUERY_TYPE_PIPELINE_STATISTICS);
+	assert(pipelineStatisticsPool);
+
+	m_mainDeletionQueue.push([&]() {
+		vkDestroyQueryPool(m_device, timestampPool, nullptr);
+		vkDestroyQueryPool(m_device, pipelineStatisticsPool, nullptr);
+	});
 }
 
 void VulkanRenderer::resizeSwapchain() {
@@ -167,6 +181,7 @@ void VulkanRenderer::initVulkan() {
 	VkPhysicalDeviceVulkan13Features features13{};
 	features13.dynamicRendering = VK_TRUE;
 	features13.synchronization2 = VK_TRUE;
+	features13.maintenance4 = VK_TRUE;
 
 	// vulkan 1.2 features
 	VkPhysicalDeviceVulkan12Features features12{};
@@ -187,6 +202,7 @@ void VulkanRenderer::initVulkan() {
 	features.drawIndirectFirstInstance = VK_TRUE;
 	features.sampleRateShading = VK_TRUE;
 	features.samplerAnisotropy = VK_TRUE;
+	features.pipelineStatisticsQuery = VK_TRUE;
 
 	// Use VKBootstrap to select a gpu.
 	// We want a gpu that can write to the SDL surface and supports vulkan 1.3 with the correct features
@@ -212,6 +228,10 @@ void VulkanRenderer::initVulkan() {
 	// Get the VkDevice handle used in the rest of a vulkan application
 	m_device = vkbDevice.device;
 	m_chosenGPU = physicalDevice.physical_device;
+
+	// Make sure we can timestamp and get update period
+	assert(physicalDevice.properties.limits.timestampComputeAndGraphics);
+	physicalDeviceTimestampPeriod = physicalDevice.properties.limits.timestampPeriod;
 
 	// Get graphics queue with VKBootstrap
 	m_graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
@@ -404,6 +424,10 @@ void VulkanRenderer::draw(float deltaTime) {
 
 	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &commandBeginInfo));
 
+	vkCmdResetQueryPool(commandBuffer, timestampPool, 0, 128);
+	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampPool, 0);
+
+
 	// transition our main draw image into general layout so we can write into it
 	// we will overwrite it all so we dont care about what was the older layout
 	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
@@ -414,7 +438,12 @@ void VulkanRenderer::draw(float deltaTime) {
 	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	transitionImage(commandBuffer, m_depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
+	vkCmdResetQueryPool(commandBuffer, pipelineStatisticsPool, 0, 1);
+	vkCmdBeginQuery(commandBuffer, pipelineStatisticsPool, 0, 0);
+
 	drawGeometry(commandBuffer);
+
+	vkCmdEndQuery(commandBuffer, pipelineStatisticsPool, 0);
 
 	// transition the draw image and the swapchain image into their correct transfer layouts
 	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
@@ -425,6 +454,9 @@ void VulkanRenderer::draw(float deltaTime) {
 
 	// set swapchain image layout to Present so we can show it on the screen
 	transitionImage(commandBuffer, m_swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+
+	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampPool, 1);
 
 	VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
@@ -460,6 +492,22 @@ void VulkanRenderer::draw(float deltaTime) {
 	if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
 		m_rendererState->resizeRequested = true;
 	}
+
+	// TODO: we are waiting on fences twice inside this function. Need to rework this logic.
+	// This is just here so we can query timestamp results.
+	VK_CHECK(vkWaitForFences(m_device, 1, &getCurrentFrame().m_renderFence, VK_TRUE, ~0ull));
+
+	// Get timestamp results
+	std::array<uint64_t, 2> timestampResults{};
+	VK_CHECK(vkGetQueryPoolResults(m_device, timestampPool, 0, timestampResults.size(), timestampResults.size() * sizeof(uint64_t), timestampResults.data(), sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
+
+	std::array<uint64_t, 1> pipelineStatisticsResults{};
+	VK_CHECK(vkGetQueryPoolResults(m_device, pipelineStatisticsPool, 0, pipelineStatisticsResults.size(), pipelineStatisticsResults.size() * sizeof(uint64_t), pipelineStatisticsResults.data(), sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
+
+	double frameGpuBegin = double(timestampResults[0]) * physicalDeviceTimestampPeriod * 1e-6;
+	double frameGpuEnd = double(timestampResults[1]) * physicalDeviceTimestampPeriod * 1e-6;
+	getCurrentFrame().frameGpuTime = frameGpuEnd - frameGpuBegin;
+	getCurrentFrame().triangleCount = pipelineStatisticsResults[0];
 
 	// move to the next frame.
 	m_frameNumber++;
@@ -1436,12 +1484,14 @@ void VulkanRenderer::updateFontData() {
 	fontUniformData.view = glm::mat4(1.0f);
 	fontUniformData.projection = m_rendererState->mainCamera->getOrthographicProjection();
 
-	auto stats = std::format("Frametime: {:.2f}ms | UI: {:.4f}ms | Update: {:.4f}us | MeshDraw: {:.4f}us | Triangles: {:.2f}M | DrawCall: {}",
+	auto stats = std::format("Frametime: {:.2f}ms | GPU: {:.2f}ms | UI: {:.4f}ms | Update: {:.4f}us | MeshDraw: {:.4f}us | Triangles: {:.2f}M | TrianglesGPU: {:.2f}M | DrawCall: {}",
 		m_rendererState->rendererStats.frametime,
+		getCurrentFrame().frameGpuTime,
 		m_rendererState->rendererStats.uiFrametime,
 		m_rendererState->rendererStats.sceneUpdateTime,
 		m_rendererState->rendererStats.meshDrawTime,
 		m_rendererState->rendererStats.triangleCount / 1e6,
+		getCurrentFrame().triangleCount * 1e-6,
 		m_rendererState->rendererStats.drawCallCount);
 
 	auto fps = std::format("FPS: {}", static_cast<int>(1000.0f / m_rendererState->rendererStats.frametime));

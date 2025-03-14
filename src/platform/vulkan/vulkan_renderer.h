@@ -96,6 +96,9 @@ struct FrameData {
 	DeletionQueue m_deletionQueue;
 
 	DescriptorAllocator m_frameDescriptors;
+
+	double frameGpuTime{};
+	uint32_t triangleCount{};
 };
 
 struct AllocatedImage {
@@ -261,6 +264,7 @@ private:
 	void initFontData();
 	void initUI();
 	void initBindlessTextureDescriptor();
+	void initQueryPools();
 
 	// specific pipelines
 	void initBackgroundPipelines();
@@ -342,6 +346,11 @@ private:
 	std::vector<UIVertex> uiVertices;
 	std::vector<uint32_t> uiIndices;
 	std::vector<UIElement> uiElements{};
+
+	// Timestamp
+	float physicalDeviceTimestampPeriod{};
+	VkQueryPool timestampPool;
+	VkQueryPool pipelineStatisticsPool;
 };
 
 }// namespace pm

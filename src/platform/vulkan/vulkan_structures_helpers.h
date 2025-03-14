@@ -214,3 +214,18 @@ inline VkRenderingInfo renderingInfo(VkExtent2D renderExtent, VkRenderingAttachm
 
 	return renderInfo;
 }
+
+inline VkQueryPool createQueryPool(VkDevice device, uint32_t queryCount, VkQueryType queryType) {
+	VkQueryPoolCreateInfo createInfo = { VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO };
+	createInfo.queryType = queryType;
+	createInfo.queryCount = queryCount;
+
+	if (queryType == VK_QUERY_TYPE_PIPELINE_STATISTICS) {
+		createInfo.pipelineStatistics = VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT;
+	}
+
+	VkQueryPool queryPool = 0;
+	VK_CHECK(vkCreateQueryPool(device, &createInfo, 0, &queryPool));
+
+	return queryPool;
+}
