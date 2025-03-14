@@ -9,6 +9,7 @@
 		printf("\n");                        \
 	} while (false)
 
+#include "config.h"
 #include "platform/vulkan/vulkan_descriptor.h"
 #include "platform/vulkan/vulkan_images.h"
 #include "platform/vulkan/vulkan_loader.h"
@@ -348,7 +349,11 @@ void VulkanRenderer::createSwapchain(uint32_t width, uint32_t height) {
 
 	vkb::Swapchain vkbSwapchain = swapchainBuilder
 																	.set_desired_format(VkSurfaceFormatKHR{ .format = m_swapchainImageFormat, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR })
+#if VSYNC
+																	.set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+#else
 																	.set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
+#endif
 																	.set_desired_extent(width, height)
 																	.add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
 																	.build()
