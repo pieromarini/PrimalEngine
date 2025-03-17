@@ -71,7 +71,7 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	initQueryPools();
 	initDefaultData();
 
-	const std::string modelPath = { "res/models/bistro/bistro.glb" };
+	const std::string modelPath = { "res/models/bistro/bistro_ktx2.glb" };
 
 	auto start = std::chrono::system_clock::now();
 	auto loadedGLTF = loadGltf(this, modelPath);

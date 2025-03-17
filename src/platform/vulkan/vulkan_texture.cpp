@@ -3,6 +3,7 @@
 #include "platform/vulkan/vulkan_structures_helpers.h"
 
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <format>
@@ -53,22 +54,24 @@ void destroyBuffer(VmaAllocator allocator, const AllocatedBuffer& buffer) {
 	vmaDestroyBuffer(allocator, buffer.buffer, buffer.allocation);
 }
 
-std::optional<AllocatedImage> loadKTX2Image(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VmaAllocator allocator, std::string path, VkFormat format, VkImageUsageFlags imageUsageFlags, VkImageLayout imageLayout) {
+std::optional<AllocatedImage> loadKTX2Image(std::string_view imageName, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue copyQueue, VmaAllocator allocator, void* imageData, uint32_t imageDataSize, VkFormat format, VkImageUsageFlags imageUsageFlags, VkImageLayout imageLayout) {
 	AllocatedImage allocatedImage{};
 
 	ktxTexture2* ktxTex{};
-	auto result = ktxTexture_CreateFromNamedFile(path.c_str(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, reinterpret_cast<ktxTexture**>(&ktxTex));
+	auto result = ktxTexture2_CreateFromMemory((uint8_t*)imageData, imageDataSize, KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktxTex);
 	if (result != KTX_SUCCESS) {
-		std::cout << "Could not load the requested KTX image file: " << path << '\n';
+		std::cout << std::format("Could not load the requested KTX image file: {}\n", imageName);
 		return {};
 	}
 
+	std::cout << std::format("Compressed: {} | Supercompression: {}\n", ktxTex->isCompressed, (int32_t)ktxTex->supercompressionScheme);
+
 	if (ktxTexture2_NeedsTranscoding(ktxTex)) {
 		auto start = std::chrono::high_resolution_clock::now();
-		result = ktxTexture2_TranscodeBasis(ktxTex, KTX_TTF_BC7_RGBA, 0);// TODO: get format dynamically?
+		result = ktxTexture2_TranscodeBasis(ktxTex, KTX_TTF_BC7_RGBA, 0); // TODO: get format dynamically?
 		auto transcodeTime = std::chrono::duration<float, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
 		if (result != KTX_SUCCESS) {
-			std::cout << "Could not transcode the input texture to the selected target format\n";
+			std::cout << std::format("Could not transcode the input texture to the selected target format: {}\n", imageName);
 			return {};
 		}
 		std::cout << std::format("Transcode time: {:.2f}ms\n", transcodeTime);
@@ -93,7 +96,7 @@ std::optional<AllocatedImage> loadKTX2Image(VkDevice device, VkPhysicalDevice ph
 
 	for (uint32_t i = 0; i < allocatedImage.mipLevels; i++) {
 		ktx_size_t offset = 0;
-		auto result = ktxTexture_GetImageOffset(reinterpret_cast<ktxTexture*>(ktxTex), i, 0, 0, &offset);
+		auto result = ktxTexture2_GetImageOffset(ktxTex, i, 0, 0, &offset);
 		assert(result == KTX_SUCCESS);
 
 		VkBufferImageCopy bufferCopyRegion = {};
@@ -101,8 +104,8 @@ std::optional<AllocatedImage> loadKTX2Image(VkDevice device, VkPhysicalDevice ph
 		bufferCopyRegion.imageSubresource.mipLevel = i;
 		bufferCopyRegion.imageSubresource.baseArrayLayer = 0;
 		bufferCopyRegion.imageSubresource.layerCount = 1;
-		bufferCopyRegion.imageExtent.width = std::max(1u, ktxTex->baseWidth >> i);
-		bufferCopyRegion.imageExtent.height = std::max(1u, ktxTex->baseHeight >> i);
+		bufferCopyRegion.imageExtent.width = ktxTex->baseWidth >> i;
+		bufferCopyRegion.imageExtent.height = ktxTex->baseHeight >> i;
 		bufferCopyRegion.imageExtent.depth = 1;
 		bufferCopyRegion.bufferOffset = offset;
 
@@ -110,7 +113,6 @@ std::optional<AllocatedImage> loadKTX2Image(VkDevice device, VkPhysicalDevice ph
 	}
 
 	VkImageCreateInfo imgInfo = {};
-
 	imgInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	imgInfo.pNext = nullptr;
 	imgInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -179,8 +181,28 @@ std::optional<AllocatedImage> loadKTX2Image(VkDevice device, VkPhysicalDevice ph
 
 	VK_CHECK(vkEndCommandBuffer(copyCmd));
 
+	VkSubmitInfo submitInfo{};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &copyCmd;
+
+	// Create fence to ensure that the command buffer has finished executing
+	VkFenceCreateInfo fenceCreateInfo{};
+	fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	fenceCreateInfo.flags = 0;
+
+	VkFence fence = nullptr;
+	VK_CHECK(vkCreateFence(device, &fenceCreateInfo, nullptr, &fence));
+	// Submit to the queue
+	VK_CHECK(vkQueueSubmit(copyQueue, 1, &submitInfo, fence));
+	// Wait for the fence to signal that command buffer has finished executing
+	VK_CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, 100000000000));
+	vkDestroyFence(device, fence, nullptr);
+
 	// Cleanup staging buffer
 	destroyBuffer(allocator, stagingBuffer);
+
+	ktxTexture2_Destroy(ktxTex);
 
 	/*
 	// Calculate valid filter and mipmap modes

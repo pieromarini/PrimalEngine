@@ -1,3 +1,4 @@
+#include "fastgltf/parser.hpp"
 #include "fastgltf/types.hpp"
 #include <vulkan/vulkan_core.h>
 #define STB_IMAGE_IMPLEMENTATION
@@ -21,16 +22,13 @@ std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asse
 		fastgltf::visitor{
 			[](auto& arg) {},
 			[&](fastgltf::sources::URI& filePath) {
-				assert(filePath.fileByteOffset == 0); // We don't support offsets with stbi.
-				assert(filePath.uri.isLocalPath()); // We're only capable of loading local files.
+				assert(filePath.fileByteOffset == 0);// We don't support offsets with stbi.
+				assert(filePath.uri.isLocalPath());// We're only capable of loading local files.
 
 				const std::string path(filePath.uri.path().begin(), filePath.uri.path().end());
 
 				if (filePath.mimeType == fastgltf::MimeType::KTX2) {
-					auto texture = loadKTX2Image(renderer->m_device, renderer->m_chosenGPU, renderer->getCurrentFrame().m_commandPool, renderer->m_allocator, path, VK_FORMAT_BC7_SRGB_BLOCK, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-					if (texture.has_value()) {
-						newImage = texture.value();
-					}
+					// TODO
 				} else {
 					unsigned char* data = stbi_load(path.c_str(), &width, &height, &nrChannels, 4);
 					if (data) {
@@ -67,21 +65,28 @@ std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asse
 																			// are already loaded into a vector.
 										 [](auto& arg) {},
 										 [&](fastgltf::sources::Vector& vector) {
-											 unsigned char* data = stbi_load_from_memory(vector.bytes.data() + bufferView.byteOffset,
-												 static_cast<int>(bufferView.byteLength),
-												 &width,
-												 &height,
-												 &nrChannels,
-												 4);
-											 if (data) {
-												 VkExtent3D imagesize;
-												 imagesize.width = width;
-												 imagesize.height = height;
-												 imagesize.depth = 1;
+											 if (vector.mimeType == fastgltf::MimeType::GltfBuffer) {
+												 auto texture = loadKTX2Image(image.name.c_str(), renderer->m_device, renderer->m_chosenGPU, renderer->getCurrentFrame().m_commandPool, renderer->m_graphicsQueue, renderer->m_allocator, vector.bytes.data() + bufferView.byteOffset, bufferView.byteLength, VK_FORMAT_BC7_SRGB_BLOCK, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+												 if (texture.has_value()) {
+													 newImage = texture.value();
+												 }
+											 } else {
+												 unsigned char* data = stbi_load_from_memory(vector.bytes.data() + bufferView.byteOffset,
+													 static_cast<int>(bufferView.byteLength),
+													 &width,
+													 &height,
+													 &nrChannels,
+													 4);
+												 if (data) {
+													 VkExtent3D imagesize;
+													 imagesize.width = width;
+													 imagesize.height = height;
+													 imagesize.depth = 1;
 
-												 newImage = renderer->createImage(image.name.c_str(), data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+													 newImage = renderer->createImage(image.name.c_str(), data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 
-												 stbi_image_free(data);
+													 stbi_image_free(data);
+												 }
 											 }
 										 } },
 					buffer.data);
@@ -139,7 +144,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 	scene->renderer = renderer;
 	LoadedGLTF& file = *scene.get();
 
-	fastgltf::Parser parser{};
+	fastgltf::Parser parser{ fastgltf::Extensions::KHR_texture_basisu };
 
 	constexpr auto gltfOptions = fastgltf::Options::DontRequireValidAssetMember | fastgltf::Options::AllowDouble | fastgltf::Options::LoadGLBBuffers | fastgltf::Options::LoadExternalBuffers;
 	// fastgltf::Options::LoadExternalImages;
@@ -295,7 +300,8 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 		// TODO: Set rest of the textures
 		if (mat.pbrData.baseColorTexture.has_value()) {
 			auto textureIndex = mat.pbrData.baseColorTexture.value().textureIndex;
-			size_t img = gltf.textures[textureIndex].imageIndex.value() + 1;
+			// Using `basisuImageIndex` instead of `imageIndex`. For now, we can only load images with basisu extension.
+			size_t img = gltf.textures[textureIndex].basisuImageIndex.value() + 1;
 			size_t sampler = gltf.textures[textureIndex].samplerIndex.value() + 1;
 			materialData.albedoTexture = bindlessTextureIndex;
 			// TODO: We are writing textures 1 by 1. We should batch these.
