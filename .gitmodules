@@ -11,3 +11,6 @@
 	path = extern/fastgltf
 	url = https://github.com/spnda/fastgltf
 	branch = v0.6.x
+[submodule "extern/KTX-Software"]
+	path = extern/KTX-Software
+	url = https://github.com/KhronosGroup/KTX-Software
