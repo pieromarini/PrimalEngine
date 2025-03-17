@@ -183,7 +183,7 @@ target_compile_definitions(ktx PUBLIC BASISU_NO_ITERATOR_DEBUG_LEVEL)
 
 target_link_libraries(ktx PUBLIC "${Vulkan_LIBRARY}")
 
-target_include_directories(ktx SYSTEM PUBLIC ${KTX_INCLUDE_DIRS})
+target_include_directories(ktx SYSTEM PUBLIC ${KTX_INCLUDE_DIRS} ${Vulkan_INCLUDE_DIRS})
 # set_target_properties(ktx PROPERTIES FOLDER "ThirdParty" POSITION_INDEPENDENT_CODE ON)
 
 # target_include_directories(${ENGINE_LIB} PUBLIC "${KTX_DIR}/include" "${KTX_DIR}/other_include")
