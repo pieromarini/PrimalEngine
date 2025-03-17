@@ -244,13 +244,11 @@ void VulkanRenderer::initVulkan() {
 	// Block compression
 	if (physicalDevice.features.textureCompressionBC) {
 		if (formatSupported(VK_FORMAT_BC7_SRGB_BLOCK)) {
-			std::cout << "KTX_TTF_BC7_RGBA\n";
 			availableTargetFormats.emplace_back(KTX_TTF_BC7_RGBA);
 			availableTargetFormatsNames.emplace_back("KTX_TTF_BC7_RGBA");
 		}
 
 		if (formatSupported(VK_FORMAT_BC3_SRGB_BLOCK)) {
-			std::cout << "KTX_TTF_BC3_RGBA\n";
 			availableTargetFormats.emplace_back(KTX_TTF_BC3_RGBA);
 			availableTargetFormatsNames.emplace_back("KTX_TTF_BC3_RGBA");
 		}
@@ -259,7 +257,6 @@ void VulkanRenderer::initVulkan() {
 	// Adaptive scalable texture compression
 	if (physicalDevice.features.textureCompressionASTC_LDR) {
 		if (formatSupported(VK_FORMAT_ASTC_4x4_SRGB_BLOCK)) {
-			std::cout << "KTX_TTF_ASTC_4x4_RGBA\n";
 			availableTargetFormats.emplace_back(KTX_TTF_ASTC_4x4_RGBA);
 			availableTargetFormatsNames.emplace_back("KTX_TTF_ASTC_4x4_RGBA");
 		}
@@ -268,7 +265,6 @@ void VulkanRenderer::initVulkan() {
 	// Ericsson texture compression
 	if (physicalDevice.features.textureCompressionETC2) {
 		if (formatSupported(VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK)) {
-			std::cout << "KTX_TTF_ETC2_RGBA\n";
 			availableTargetFormats.emplace_back(KTX_TTF_ETC2_RGBA);
 			availableTargetFormatsNames.emplace_back("KTX_TTF_ETC2_RGBA");
 		}
