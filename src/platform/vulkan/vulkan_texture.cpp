@@ -64,8 +64,6 @@ std::optional<AllocatedImage> loadKTX2Image(std::string_view imageName, VkDevice
 		return {};
 	}
 
-	std::cout << std::format("Compressed: {} | Supercompression: {}\n", ktxTex->isCompressed, (int32_t)ktxTex->supercompressionScheme);
-
 	if (ktxTexture2_NeedsTranscoding(ktxTex)) {
 		auto start = std::chrono::high_resolution_clock::now();
 		result = ktxTexture2_TranscodeBasis(ktxTex, KTX_TTF_BC7_RGBA, 0); // TODO: get format dynamically?
