@@ -7,10 +7,231 @@
 #include <filesystem>
 #include <format>
 #include <iostream>
+#include <ktx.h>
+#include <ranges>
 
 namespace pm {
+void getValidFilters(VkPhysicalDevice physicalDevice, VkFormat format, VkFilter* filter, VkSamplerMipmapMode* mipmapMode) {
+	// Not all formats support linear filtering, so we need to adjust them if they don't
+	if (*filter == VK_FILTER_NEAREST && (mipmapMode == nullptr || *mipmapMode == VK_SAMPLER_MIPMAP_MODE_NEAREST)) {
+		return;
+	}
 
-inline uint32_t getMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeBits, VkMemoryPropertyFlags properties, VkBool32* memTypeFound) {
+	VkFormatProperties properties;
+	vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &properties);
+
+	if (!(properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
+		*filter = VK_FILTER_NEAREST;
+		if (mipmapMode) {
+			*mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+		}
+	}
+}
+
+AllocatedBuffer createBuffer(std::string name, size_t allocSize, VmaAllocator allocator, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) {
+	// allocate buffer
+	VkBufferCreateInfo bufferInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+	bufferInfo.pNext = nullptr;
+	bufferInfo.size = allocSize;
+
+	bufferInfo.usage = usage;
+
+	VmaAllocationCreateInfo vmaallocInfo = {};
+	vmaallocInfo.usage = memoryUsage;
+	vmaallocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+	AllocatedBuffer newBuffer{};
+
+	// allocate the buffer
+	VK_CHECK(vmaCreateBuffer(allocator, &bufferInfo, &vmaallocInfo, &newBuffer.buffer, &newBuffer.allocation, &newBuffer.info));
+
+	vmaSetAllocationName(allocator, newBuffer.allocation, name.c_str());
+
+	return newBuffer;
+}
+
+void destroyBuffer(VmaAllocator allocator, const AllocatedBuffer& buffer) {
+	vmaDestroyBuffer(allocator, buffer.buffer, buffer.allocation);
+}
+
+std::optional<AllocatedImage> loadKTX2Image(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VmaAllocator allocator, std::string path, VkFormat format, VkImageUsageFlags imageUsageFlags, VkImageLayout imageLayout) {
+	AllocatedImage allocatedImage{};
+
+	ktxTexture2* ktxTex{};
+	auto result = ktxTexture_CreateFromNamedFile(path.c_str(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, reinterpret_cast<ktxTexture**>(&ktxTex));
+	if (result != KTX_SUCCESS) {
+		std::cout << "Could not load the requested KTX image file: " << path << '\n';
+		return {};
+	}
+
+	if (ktxTexture2_NeedsTranscoding(ktxTex)) {
+		auto start = std::chrono::high_resolution_clock::now();
+		result = ktxTexture2_TranscodeBasis(ktxTex, KTX_TTF_BC7_RGBA, 0);// TODO: get format dynamically?
+		auto transcodeTime = std::chrono::duration<float, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
+		if (result != KTX_SUCCESS) {
+			std::cout << "Could not transcode the input texture to the selected target format\n";
+			return {};
+		}
+		std::cout << std::format("Transcode time: {:.2f}ms\n", transcodeTime);
+	}
+
+	allocatedImage.mipLevels = ktxTex->numLevels;
+
+	allocatedImage.imageExtent = {
+		.width = ktxTex->baseWidth,
+		.height = ktxTex->baseHeight,
+		.depth = ktxTex->baseDepth
+	};
+
+	allocatedImage.imageFormat = static_cast<VkFormat>(ktxTex->vkFormat);
+
+	AllocatedBuffer stagingBuffer = createBuffer("loadKTX2Texture uploadBuffer", ktxTex->dataSize, allocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	auto data = stagingBuffer.info.pMappedData;
+	memcpy(data, ktxTex->pData, ktxTex->dataSize);
+
+	// Setup buffer copy regions for each mip level
+	std::vector<VkBufferImageCopy> bufferCopyRegions;
+
+	for (uint32_t i = 0; i < allocatedImage.mipLevels; i++) {
+		ktx_size_t offset = 0;
+		auto result = ktxTexture_GetImageOffset(reinterpret_cast<ktxTexture*>(ktxTex), i, 0, 0, &offset);
+		assert(result == KTX_SUCCESS);
+
+		VkBufferImageCopy bufferCopyRegion = {};
+		bufferCopyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		bufferCopyRegion.imageSubresource.mipLevel = i;
+		bufferCopyRegion.imageSubresource.baseArrayLayer = 0;
+		bufferCopyRegion.imageSubresource.layerCount = 1;
+		bufferCopyRegion.imageExtent.width = std::max(1u, ktxTex->baseWidth >> i);
+		bufferCopyRegion.imageExtent.height = std::max(1u, ktxTex->baseHeight >> i);
+		bufferCopyRegion.imageExtent.depth = 1;
+		bufferCopyRegion.bufferOffset = offset;
+
+		bufferCopyRegions.push_back(bufferCopyRegion);
+	}
+
+	VkImageCreateInfo imgInfo = {};
+
+	imgInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	imgInfo.pNext = nullptr;
+	imgInfo.imageType = VK_IMAGE_TYPE_2D;
+	imgInfo.format = format;
+	imgInfo.mipLevels = allocatedImage.mipLevels;
+	imgInfo.arrayLayers = 1;
+	imgInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+	imgInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+	imgInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	// Set initial layout of the image to undefined
+	imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	imgInfo.extent = {
+		.width = allocatedImage.imageExtent.width,
+		.height = allocatedImage.imageExtent.height,
+		.depth = 1
+	};
+	imgInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+	VmaAllocationCreateInfo allocinfo = {};
+	allocinfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+	allocinfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+	VK_CHECK(vmaCreateImage(allocator, &imgInfo, &allocinfo, &allocatedImage.image, &allocatedImage.allocation, nullptr));
+
+	auto commandAllocateInfo = commandBufferAllocateInfo(commandPool, 1);
+	VkCommandBuffer copyCmd = nullptr;
+	VK_CHECK(vkAllocateCommandBuffers(device, &commandAllocateInfo, &copyCmd));
+
+	auto cmdBufferBeginInfo = commandBufferBeginInfo();
+	VK_CHECK(vkBeginCommandBuffer(copyCmd, &cmdBufferBeginInfo));
+
+	VkImageSubresourceRange subresourceRange = {};
+	subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	subresourceRange.baseMipLevel = 0;
+	subresourceRange.levelCount = allocatedImage.mipLevels;
+	subresourceRange.layerCount = 1;
+
+	// Image barrier for optimal image (target)
+	// Optimal image will be used as destination for the copy
+	setImageLayout(
+		copyCmd,
+		allocatedImage.image,
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		subresourceRange);
+
+	// Copy mip levels from staging buffer
+	vkCmdCopyBufferToImage(
+		copyCmd,
+		stagingBuffer.buffer,
+		allocatedImage.image,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		static_cast<uint32_t>(bufferCopyRegions.size()),
+		bufferCopyRegions.data());
+
+	// Change texture image layout to shader read after all mip levels have been copied
+	setImageLayout(
+		copyCmd,
+		allocatedImage.image,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		imageLayout,
+		subresourceRange);
+
+	allocatedImage.imageLayout = imageLayout;
+
+	VK_CHECK(vkEndCommandBuffer(copyCmd));
+
+	// Cleanup staging buffer
+	destroyBuffer(allocator, stagingBuffer);
+
+	/*
+	// Calculate valid filter and mipmap modes
+	VkFilter filter = VK_FILTER_LINEAR;
+	VkSamplerMipmapMode mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+	getValidFilters(physicalDevice, format, &filter, &mipmapMode);
+
+	VkSamplerCreateInfo samplerCreateInfo{};
+	samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	samplerCreateInfo.maxAnisotropy = 1.0f;
+	samplerCreateInfo.magFilter = filter;
+	samplerCreateInfo.minFilter = filter;
+	samplerCreateInfo.mipmapMode = mipmapMode;
+	samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	samplerCreateInfo.mipLodBias = 0.0f;
+	samplerCreateInfo.compareOp = VK_COMPARE_OP_NEVER;
+	samplerCreateInfo.minLod = 0.0f;
+	samplerCreateInfo.maxLod = static_cast<float>(allocatedImage.mipLevels);
+
+	if (false) {
+		// TODO: get max level of anisotropy
+		samplerCreateInfo.maxAnisotropy = 1.0f;
+		samplerCreateInfo.anisotropyEnable = VK_TRUE;
+	} else {
+		samplerCreateInfo.maxAnisotropy = 1.0;
+		samplerCreateInfo.anisotropyEnable = VK_FALSE;
+	}
+	VK_CHECK(vkCreateSampler(device, &samplerCreateInfo, nullptr, &allocatedImage.sampler));
+	*/
+
+	// Create image view
+	VkImageViewCreateInfo imageViewCreateInfo{};
+	imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	imageViewCreateInfo.format = format;
+	imageViewCreateInfo.components = { .r = VK_COMPONENT_SWIZZLE_R, .g = VK_COMPONENT_SWIZZLE_G, .b = VK_COMPONENT_SWIZZLE_B, .a = VK_COMPONENT_SWIZZLE_A };
+	imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+	imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+	imageViewCreateInfo.subresourceRange.layerCount = 1;
+	imageViewCreateInfo.subresourceRange.levelCount = allocatedImage.mipLevels;
+	imageViewCreateInfo.image = allocatedImage.image;
+
+	VK_CHECK(vkCreateImageView(device, &imageViewCreateInfo, nullptr, &allocatedImage.imageView));
+
+	return allocatedImage;
+}
+
+uint32_t getMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeBits, VkMemoryPropertyFlags properties, VkBool32* memTypeFound) {
 	VkPhysicalDeviceMemoryProperties memoryProperties{};
 	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
 

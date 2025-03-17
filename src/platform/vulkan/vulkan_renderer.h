@@ -100,14 +100,6 @@ struct FrameData {
 	DescriptorAllocator m_frameDescriptors;
 };
 
-struct AllocatedImage {
-	VkImage image;
-	VkImageView imageView;
-	VmaAllocation allocation;
-	VkExtent3D imageExtent;
-	VkFormat imageFormat;
-};
-
 struct GPUSceneData {
 	glm::mat4 view;
 	glm::mat4 proj;
@@ -253,6 +245,17 @@ public:
 	AllocatedBuffer globalMaterialDataBuffer;
 	std::vector<MaterialData> globalMaterialData;
 
+	VkPhysicalDevice m_chosenGPU;
+	FrameData& getCurrentFrame() { return m_frames[m_frameNumber % FRAME_OVERLAP]; };
+	VkQueue m_graphicsQueue{};
+
+	// KTX2 formats
+	std::vector<ktx_transcode_fmt_e> availableTargetFormats{};
+	std::vector<std::string> availableTargetFormatsNames{};
+
+	// Allocator
+	VmaAllocator m_allocator;
+
 private:
 	void initVulkan();
 	void initSwapchain();
@@ -281,7 +284,6 @@ private:
 	// Vulkan init stuff
 	VkInstance m_instance;
 	VkDebugUtilsMessengerEXT m_debug_messenger;
-	VkPhysicalDevice m_chosenGPU;
 	VkSurfaceKHR m_surface;
 
 	// Swapchain
@@ -296,12 +298,7 @@ private:
 	// Commands
 	FrameData m_frames[FRAME_OVERLAP]{};
 	uint32_t m_frameNumber{};
-	FrameData& getCurrentFrame() { return m_frames[m_frameNumber % FRAME_OVERLAP]; };
-	VkQueue m_graphicsQueue{};
 	uint32_t m_graphicsQueueFamily{};
-
-	// Allocator
-	VmaAllocator m_allocator;
 
 	// Draw resources
 	VkExtent2D m_drawExtent;

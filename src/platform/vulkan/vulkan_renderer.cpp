@@ -193,12 +193,13 @@ void VulkanRenderer::initVulkan() {
 	features12.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
 	features12.descriptorBindingVariableDescriptorCount = VK_TRUE;
 	features12.uniformBufferStandardLayout = VK_TRUE;
-	features12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE; // nonuniformEXT on fragment shader
+	features12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;// nonuniformEXT on fragment shader
 
 	VkPhysicalDeviceVulkan11Features features11{};
 	features11.shaderDrawParameters = VK_TRUE;
 
 	VkPhysicalDeviceFeatures features{};
+	features.textureCompressionBC = VK_TRUE;
 	features.multiDrawIndirect = VK_TRUE;
 	features.drawIndirectFirstInstance = VK_TRUE;
 	features.sampleRateShading = VK_TRUE;
@@ -221,7 +222,6 @@ void VulkanRenderer::initVulkan() {
 
 	std::cout << std::format("GPU: {}\n", physicalDevice.name);
 
-
 	// create the final vulkan device
 	vkb::DeviceBuilder deviceBuilder{ physicalDevice };
 	vkb::Device vkbDevice = deviceBuilder.build().value();
@@ -233,6 +233,46 @@ void VulkanRenderer::initVulkan() {
 	// Make sure we can timestamp and get update period
 	assert(physicalDevice.properties.limits.timestampComputeAndGraphics);
 	physicalDeviceTimestampPeriod = physicalDevice.properties.limits.timestampPeriod;
+
+	// Check supported native GPU formats for KTX2
+	auto formatSupported = [&](VkFormat format) {
+		VkFormatProperties formatProperties;
+		vkGetPhysicalDeviceFormatProperties(physicalDevice.physical_device, format, &formatProperties);
+		return ((formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) && (formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT));
+	};
+
+	// Block compression
+	if (physicalDevice.features.textureCompressionBC) {
+		if (formatSupported(VK_FORMAT_BC7_SRGB_BLOCK)) {
+			std::cout << "KTX_TTF_BC7_RGBA\n";
+			availableTargetFormats.emplace_back(KTX_TTF_BC7_RGBA);
+			availableTargetFormatsNames.emplace_back("KTX_TTF_BC7_RGBA");
+		}
+
+		if (formatSupported(VK_FORMAT_BC3_SRGB_BLOCK)) {
+			std::cout << "KTX_TTF_BC3_RGBA\n";
+			availableTargetFormats.emplace_back(KTX_TTF_BC3_RGBA);
+			availableTargetFormatsNames.emplace_back("KTX_TTF_BC3_RGBA");
+		}
+	}
+
+	// Adaptive scalable texture compression
+	if (physicalDevice.features.textureCompressionASTC_LDR) {
+		if (formatSupported(VK_FORMAT_ASTC_4x4_SRGB_BLOCK)) {
+			std::cout << "KTX_TTF_ASTC_4x4_RGBA\n";
+			availableTargetFormats.emplace_back(KTX_TTF_ASTC_4x4_RGBA);
+			availableTargetFormatsNames.emplace_back("KTX_TTF_ASTC_4x4_RGBA");
+		}
+	}
+
+	// Ericsson texture compression
+	if (physicalDevice.features.textureCompressionETC2) {
+		if (formatSupported(VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK)) {
+			std::cout << "KTX_TTF_ETC2_RGBA\n";
+			availableTargetFormats.emplace_back(KTX_TTF_ETC2_RGBA);
+			availableTargetFormatsNames.emplace_back("KTX_TTF_ETC2_RGBA");
+		}
+	}
 
 	// Get graphics queue with VKBootstrap
 	m_graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();

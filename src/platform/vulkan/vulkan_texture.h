@@ -1,10 +1,20 @@
 #include <string>
 #include <vulkan/vulkan.h>
 
+#include "vk_types.h"
+
 #include "ktx.h"
-#include "ktxvulkan.h"
 
 namespace pm {
+
+void getValidFilters(VkPhysicalDevice physicalDevice, VkFormat format, VkFilter* filter, VkSamplerMipmapMode* mipmapMode);
+
+AllocatedBuffer createBuffer(std::string name, size_t allocSize, VmaAllocator allocator, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+void destroyBuffer(VmaAllocator allocator, const AllocatedBuffer& buffer);
+
+std::optional<AllocatedImage> loadKTX2Image(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VmaAllocator allocator, std::string path, VkFormat format, VkImageUsageFlags imageUsageFlags, VkImageLayout imageLayout);
+
+uint32_t getMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeBits, VkMemoryPropertyFlags properties, VkBool32* memTypeFound);
 
 class Texture {
 public:

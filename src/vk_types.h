@@ -30,6 +30,16 @@ struct AllocatedBuffer {
 	VmaAllocationInfo info;
 };
 
+struct AllocatedImage {
+	VkImage image;
+	VkImageView imageView;
+	VmaAllocation allocation;
+	VkExtent3D imageExtent;
+	VkFormat imageFormat;
+	VkImageLayout imageLayout;
+	uint32_t mipLevels;
+};
+
 struct Vertex {
 	glm::vec3 position;
 	float uv_x;

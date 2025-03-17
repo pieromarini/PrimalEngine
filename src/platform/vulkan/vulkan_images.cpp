@@ -3,6 +3,34 @@
 
 namespace pm {
 
+VkPipelineStageFlags getPipelineStageFlags(VkImageLayout layout) {
+	switch (layout) {
+	case VK_IMAGE_LAYOUT_UNDEFINED:
+		return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+	case VK_IMAGE_LAYOUT_PREINITIALIZED:
+		return VK_PIPELINE_STAGE_HOST_BIT;
+	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+	case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+		return VK_PIPELINE_STAGE_TRANSFER_BIT;
+	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+		return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL:
+		return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+	case VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR:
+		return VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+		return VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
+		return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+	case VK_IMAGE_LAYOUT_GENERAL:
+		assert(false && "Don't know how to get a meaningful VkPipelineStageFlags for VK_IMAGE_LAYOUT_GENERAL! Don't use it!");
+		return 0;
+	default:
+		assert(false);
+		return 0;
+	}
+}
+
 void transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout) {
 	VkImageMemoryBarrier2 imageBarrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
 
@@ -25,6 +53,13 @@ void transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout currentLa
 	depInfo.pImageMemoryBarriers = &imageBarrier;
 
 	vkCmdPipelineBarrier2(cmd, &depInfo);
+}
+
+void setImageLayout(VkCommandBuffer cmdbuffer, VkImage image, VkImageLayout oldImageLayout, VkImageLayout newImageLayout, VkImageSubresourceRange subresourceRange) {
+	auto srcStageMask = getPipelineStageFlags(oldImageLayout);
+	auto dstStageMask = getPipelineStageFlags(newImageLayout);
+
+	setImageLayout(cmdbuffer, image, oldImageLayout, newImageLayout, subresourceRange, srcStageMask, dstStageMask);
 }
 
 void setImageLayout(VkCommandBuffer cmdbuffer, VkImage image, VkImageLayout oldImageLayout, VkImageLayout newImageLayout, VkImageSubresourceRange subresourceRange, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask) {
@@ -212,7 +247,7 @@ void generateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSize) {
 			.pImageMemoryBarriers = &imageBarrier
 		};
 
-    vkCmdPipelineBarrier2(cmd, &depInfo);
+		vkCmdPipelineBarrier2(cmd, &depInfo);
 
 		if (mip < mipLevels - 1) {
 			VkImageBlit2 blitRegion{ .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2, .pNext = nullptr };

@@ -21,21 +21,28 @@ std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asse
 		fastgltf::visitor{
 			[](auto& arg) {},
 			[&](fastgltf::sources::URI& filePath) {
-				assert(filePath.fileByteOffset == 0);// We don't support offsets with stbi.
-				assert(filePath.uri.isLocalPath());// We're only capable of loading
-																					 // local files.
+				assert(filePath.fileByteOffset == 0); // We don't support offsets with stbi.
+				assert(filePath.uri.isLocalPath()); // We're only capable of loading local files.
 
 				const std::string path(filePath.uri.path().begin(), filePath.uri.path().end());
-				unsigned char* data = stbi_load(path.c_str(), &width, &height, &nrChannels, 4);
-				if (data) {
-					VkExtent3D imagesize;
-					imagesize.width = width;
-					imagesize.height = height;
-					imagesize.depth = 1;
 
-					newImage = renderer->createImage(image.name.c_str(), data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+				if (filePath.mimeType == fastgltf::MimeType::KTX2) {
+					auto texture = loadKTX2Image(renderer->m_device, renderer->m_chosenGPU, renderer->getCurrentFrame().m_commandPool, renderer->m_allocator, path, VK_FORMAT_BC7_SRGB_BLOCK, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+					if (texture.has_value()) {
+						newImage = texture.value();
+					}
+				} else {
+					unsigned char* data = stbi_load(path.c_str(), &width, &height, &nrChannels, 4);
+					if (data) {
+						VkExtent3D imagesize;
+						imagesize.width = width;
+						imagesize.height = height;
+						imagesize.depth = 1;
 
-					stbi_image_free(data);
+						newImage = renderer->createImage(image.name.c_str(), data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+
+						stbi_image_free(data);
+					}
 				}
 			},
 			[&](fastgltf::sources::Vector& vector) {
