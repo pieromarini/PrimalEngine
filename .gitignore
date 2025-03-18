@@ -26,6 +26,7 @@ cmake_uninstall.cmake
 
 # Build folders
 build/
+build_nvim/
 target/
 
 # Renderdoc capture/debugging settings
