@@ -60,9 +60,7 @@ std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asse
 				auto& bufferView = asset.bufferViews[view.bufferViewIndex];
 				auto& buffer = asset.buffers[bufferView.bufferIndex];
 
-				std::visit(fastgltf::visitor{ // We only care about VectorWithMime here, because we
-																			// specify LoadExternalBuffers, meaning all buffers
-																			// are already loaded into a vector.
+				std::visit(fastgltf::visitor{
 										 [](auto& arg) {},
 										 [&](fastgltf::sources::Vector& vector) {
 											 if (view.mimeType == fastgltf::MimeType::KTX2) {
@@ -284,12 +282,6 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 			passType = MaterialPass::DoubleSided;
 		}
 
-		// default the material textures
-		// materialResources.colorImage = renderer->whiteImage;
-		// materialResources.colorSampler = renderer->defaultSamplerLinear;
-		// materialResources.metalRoughImage = renderer->whiteImage;
-		// materialResources.metalRoughSampler = renderer->defaultSamplerLinear;
-
 		// Set textures to "Default"
 		materialData.albedoTexture = 0;
 		materialData.normalTexture = 0;
@@ -303,7 +295,6 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 			auto texture = gltf.textures[textureIndex];
 			size_t img{};
 
-			// Using `basisuImageIndex` instead of `imageIndex`. For now, we can only load images with basisu extension.
 			// TODO: Don't like this. Should we store metadata about type of textures?
 			if (texture.basisuImageIndex.has_value()) {
 				img = gltf.textures[textureIndex].basisuImageIndex.value() + 1;
