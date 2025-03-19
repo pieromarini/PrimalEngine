@@ -452,15 +452,10 @@ void VulkanRenderer::draw(float deltaTime) {
 
 	VK_CHECK(vkResetFences(m_device, 1, &getCurrentFrame().m_renderFence));
 
-	// naming it cmd for shorter writing
 	auto commandBuffer = getCurrentFrame().m_commandBuffer;
 
-	// now that we are sure that the commands finished executing, we can safely
-	// reset the command buffer to begin recording again.
 	VK_CHECK(vkResetCommandBuffer(commandBuffer, 0));
 
-	// begin the command buffer recording. We will use this command buffer exactly once,
-	// so we want to let vulkan know that
 	auto commandBeginInfo = commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
 	m_drawExtent.width = std::min(m_swapchainExtent.width, m_drawImage.imageExtent.width) * m_renderScale;
@@ -470,7 +465,6 @@ void VulkanRenderer::draw(float deltaTime) {
 
 	vkCmdResetQueryPool(commandBuffer, timestampPool, 0, 128);
 	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampPool, 0);
-
 
 	// transition our main draw image into general layout so we can write into it
 	// we will overwrite it all so we dont care about what was the older layout
