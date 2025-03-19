@@ -37,7 +37,7 @@ void Camera::onWindowResize(uint32_t width, uint32_t height) {
 
 void Camera::update(float deltaTime) {
 	glm::mat4 cameraRotation = getRotationMatrix();
-	position += glm::vec3(cameraRotation * glm::vec4(velocity * 0.5f * deltaTime, 0.f));
+	position += glm::vec3(cameraRotation * glm::vec4(velocity * 0.01f * deltaTime, 0.f));
 }
 
 void Camera::processSDLEvent(SDL_Event& e) {

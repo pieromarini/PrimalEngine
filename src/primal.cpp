@@ -1,5 +1,6 @@
 #include <chrono>
 #include <thread>
+#include <format>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_mouse.h>
@@ -61,15 +62,13 @@ void PrimalApp::run() {
 	SDL_Event e;
 	bool bQuit = false;
 
-	constexpr unsigned long long int TIME_STEP = 1;
-
-	const auto step = Time::step(TIME_STEP);
-	const auto step_ns = static_cast<float>(step.count() * 1000000);
-	auto lag = Time::lag(step.count());
-	auto t0 = Time::now();
+	auto t0 = std::chrono::high_resolution_clock::now();
 
 	while (!bQuit) {
 		auto start = std::chrono::system_clock::now();
+
+		auto deltaTime = std::chrono::duration<float, std::milli>(std::chrono::high_resolution_clock::now() - t0).count();
+		t0 = std::chrono::high_resolution_clock::now();
 
 		while (SDL_PollEvent(&e) != 0) {
 			if (e.type == SDL_EVENT_QUIT)
@@ -97,15 +96,7 @@ void PrimalApp::run() {
 			m_mainCamera->onWindowResize(m_rendererState.windowExtent.width, m_rendererState.windowExtent.height);
 		}
 
-		while (lag >= step) {
-			lag -= step;
-		}
-		auto alpha = (float)lag.count() / step_ns;
-		draw(alpha);
-
-		// update lag and current time
-		lag += Time::delta(t0);
-		t0 = Time::now();
+		draw(deltaTime);
 
 		auto end = std::chrono::system_clock::now();
 		auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
