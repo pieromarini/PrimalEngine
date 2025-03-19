@@ -65,7 +65,7 @@ std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asse
 																			// are already loaded into a vector.
 										 [](auto& arg) {},
 										 [&](fastgltf::sources::Vector& vector) {
-											 if (vector.mimeType == fastgltf::MimeType::GltfBuffer) {
+											 if (view.mimeType == fastgltf::MimeType::KTX2) {
 												 auto texture = loadKTX2Image(image.name.c_str(), renderer->m_device, renderer->m_chosenGPU, renderer->getCurrentFrame().m_commandPool, renderer->m_graphicsQueue, renderer->m_allocator, vector.bytes.data() + bufferView.byteOffset, bufferView.byteLength, VK_FORMAT_BC7_SRGB_BLOCK, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 												 if (texture.has_value()) {
 													 newImage = texture.value();
@@ -300,8 +300,16 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 		// TODO: Set rest of the textures
 		if (mat.pbrData.baseColorTexture.has_value()) {
 			auto textureIndex = mat.pbrData.baseColorTexture.value().textureIndex;
+			auto texture = gltf.textures[textureIndex];
+			size_t img{};
+
 			// Using `basisuImageIndex` instead of `imageIndex`. For now, we can only load images with basisu extension.
-			size_t img = gltf.textures[textureIndex].basisuImageIndex.value() + 1;
+			// TODO: Don't like this. Should we store metadata about type of textures?
+			if (texture.basisuImageIndex.has_value()) {
+				img = gltf.textures[textureIndex].basisuImageIndex.value() + 1;
+			} else {
+				img = gltf.textures[textureIndex].imageIndex.value() + 1;
+			}
 			size_t sampler = gltf.textures[textureIndex].samplerIndex.value() + 1;
 			materialData.albedoTexture = bindlessTextureIndex;
 			// TODO: We are writing textures 1 by 1. We should batch these.
