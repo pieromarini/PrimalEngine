@@ -112,8 +112,6 @@ void VulkanRenderer::resizeSwapchain() {
 	m_rendererState->windowExtent.height = h;
 	m_renderScale = static_cast<float>(displayWidth) / static_cast<float>(w);
 
-	std::cout << std::format("[Resize] Size: {}x{} | Display: {}x{} | Scale: {}\n", w, h, displayWidth, displayHeight, m_renderScale);
-
 	createSwapchain(m_rendererState->windowExtent.width, m_rendererState->windowExtent.height);
 
 	m_rendererState->resizeRequested = false;
@@ -1522,7 +1520,10 @@ void VulkanRenderer::updateFontData() {
 	fontUniformData.outline = 0.0f;
 
 	fontUniformData.view = glm::mat4(1.0f);
-	fontUniformData.projection = m_rendererState->mainCamera->getOrthographicProjection();
+
+	auto w = static_cast<float>(m_rendererState->windowExtent.width);
+	auto h = static_cast<float>(m_rendererState->windowExtent.height);
+	fontUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
 
 	auto stats = std::format("Frametime: {:.2f}ms | GPU: {:.2f}ms | UI: {:.4f}ms | Update: {:.4f}us | MeshDraw: {:.4f}us | Triangles: {:.2f}M | DrawCall: {}",
 		m_rendererState->rendererStats.frametime,
@@ -1547,7 +1548,7 @@ void VulkanRenderer::initFontData() {
 	fontChars = parsebmFont("res/fonts/font.fnt");
 
 	// load ktx texture
-	fontSDF.loadFromFile("res/fonts/font_sdf_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, m_device, m_chosenGPU, getCurrentFrame().m_commandPool, m_graphicsQueue);
+	fontSDF.loadFromFile("res/fonts/font_sdf_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, m_device, m_chosenGPU, getCurrentFrame().m_commandPool, m_graphicsQueue, maxSamplerAnisotropy);
 
 	// Create uniform buffer
 	fontUniformBuffer = createBuffer("fontUniformBuffer", sizeof(FontUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);

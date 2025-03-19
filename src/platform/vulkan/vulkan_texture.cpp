@@ -268,7 +268,7 @@ ktxResult Texture::loadKTXFile(std::string filename, ktxTexture** target) {
 	return result;
 }
 
-void Texture2D::loadFromFile(std::string filename, VkFormat format, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue copyQueue, VkImageUsageFlags imageUsageFlags, VkImageLayout imageLayout) {
+void Texture2D::loadFromFile(std::string filename, VkFormat format, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue copyQueue, float maxAnisotropy, VkImageUsageFlags imageUsageFlags, VkImageLayout imageLayout) {
 	ktxTexture* ktxTexture = nullptr;
 	ktxResult result = loadKTXFile(filename, &ktxTexture);
 	assert(result == KTX_SUCCESS);
@@ -459,7 +459,7 @@ void Texture2D::loadFromFile(std::string filename, VkFormat format, VkDevice dev
 	// Max level-of-detail should match mip level count
 	samplerCreateInfo.maxLod = (float)mipLevels;
 
-	samplerCreateInfo.maxAnisotropy = 1.0f;
+	samplerCreateInfo.maxAnisotropy = maxAnisotropy;
 	samplerCreateInfo.anisotropyEnable = true;
 
 	samplerCreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
