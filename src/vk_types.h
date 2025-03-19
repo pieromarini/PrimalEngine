@@ -37,6 +37,7 @@ struct AllocatedImage {
 	VkExtent3D imageExtent;
 	VkFormat imageFormat;
 	VkImageLayout imageLayout;
+	VkSampler sampler;
 	uint32_t mipLevels;
 };
 

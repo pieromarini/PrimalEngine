@@ -20,9 +20,11 @@ private:
 	bool m_isInitialized{ false };
 	int m_frameNumber{ 0 };
 	bool m_stopRendering{ false };
-	VkExtent2D m_windowExtent{ 1920, 1080 };
+	VkExtent2D m_windowExtent{ 2048, 1080 };
 	VulkanRenderer m_renderer;
 	VulkanRendererConfig m_rendererState{};
+
+	bool windowRelativeMouseMode{ true };
 
 	SDL_Window* m_window{ nullptr };
   std::shared_ptr<Camera> m_mainCamera;

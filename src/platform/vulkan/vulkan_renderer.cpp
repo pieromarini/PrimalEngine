@@ -112,6 +112,8 @@ void VulkanRenderer::resizeSwapchain() {
 	m_rendererState->windowExtent.height = h;
 	m_renderScale = static_cast<float>(displayWidth) / static_cast<float>(w);
 
+	std::cout << std::format("[Resize] Size: {}x{} | Display: {}x{} | Scale: {}\n", w, h, displayWidth, displayHeight, m_renderScale);
+
 	createSwapchain(m_rendererState->windowExtent.width, m_rendererState->windowExtent.height);
 
 	m_rendererState->resizeRequested = false;
@@ -233,6 +235,9 @@ void VulkanRenderer::initVulkan() {
 	// Make sure we can timestamp and get update period
 	assert(physicalDevice.properties.limits.timestampComputeAndGraphics);
 	physicalDeviceTimestampPeriod = physicalDevice.properties.limits.timestampPeriod;
+
+	anisotropyEnabled = physicalDevice.features.samplerAnisotropy;
+	maxSamplerAnisotropy = physicalDevice.properties.limits.maxSamplerAnisotropy;
 
 	// Check supported native GPU formats for KTX2
 	auto formatSupported = [&](VkFormat format) {
@@ -1555,7 +1560,6 @@ void VulkanRenderer::initFontData() {
 	});
 }
 
-// We are re-creating buffers every frame which is not good?
 // Creates a vertex and index buffer with triangle data containing the chars of the given text
 void VulkanRenderer::generateText(std::string stats, std::string fps) {
 	textElements.clear();

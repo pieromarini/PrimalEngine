@@ -7,6 +7,7 @@
 #include <SDL3/SDL_vulkan.h>
 
 #include "primal.h"
+#include "SDL3/SDL_keycode.h"
 
 constexpr bool bUseValidationLayers = true;
 
@@ -30,7 +31,7 @@ PrimalApp::PrimalApp() {
 		static_cast<int32_t>(m_windowExtent.height),
 		window_flags);
 
-	SDL_SetWindowRelativeMouseMode(m_window, true);
+	SDL_SetWindowRelativeMouseMode(m_window, windowRelativeMouseMode);
 
 	m_mainCamera = std::make_shared<Camera>(m_windowExtent.width, m_windowExtent.height);
 	m_mainCamera->velocity = glm::vec3(0.f);
@@ -79,6 +80,13 @@ void PrimalApp::run() {
 			}
 			if (e.type == SDL_EVENT_WINDOW_RESTORED || e.type == SDL_EVENT_WINDOW_FOCUS_GAINED) {
 				m_stopRendering = false;
+			}
+
+			if (e.type == SDL_EVENT_KEY_UP) {
+				if (e.key.key == SDLK_ESCAPE) {
+					windowRelativeMouseMode = !windowRelativeMouseMode;
+					SDL_SetWindowRelativeMouseMode(m_window, windowRelativeMouseMode);
+				}
 			}
 
 			m_mainCamera->processSDLEvent(e);

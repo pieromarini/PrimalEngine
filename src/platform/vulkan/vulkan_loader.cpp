@@ -64,7 +64,7 @@ std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asse
 										 [](auto& arg) {},
 										 [&](fastgltf::sources::Vector& vector) {
 											 if (view.mimeType == fastgltf::MimeType::KTX2) {
-												 auto texture = createKTX2Image(image.name.c_str(), renderer->m_device, renderer->m_chosenGPU, renderer->getCurrentFrame().m_commandPool, renderer->m_graphicsQueue, renderer->m_allocator, vector.bytes.data() + bufferView.byteOffset, bufferView.byteLength, VK_FORMAT_BC7_SRGB_BLOCK, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+												 auto texture = createKTX2Image(image.name.c_str(), renderer->m_device, renderer->getCurrentFrame().m_commandPool, renderer->m_graphicsQueue, renderer->m_allocator, vector.bytes.data() + bufferView.byteOffset, bufferView.byteLength, VK_FORMAT_BC7_SRGB_BLOCK, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 												 if (texture.has_value()) {
 													 newImage = texture.value();
 												 }
@@ -196,6 +196,8 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 		samplerCreateInfo.minFilter = extractFilter(sampler.minFilter.value_or(fastgltf::Filter::Nearest));
 
 		samplerCreateInfo.mipmapMode = extractMipmapMode(sampler.minFilter.value_or(fastgltf::Filter::Nearest));
+		samplerCreateInfo.maxAnisotropy = renderer->maxSamplerAnisotropy;
+		samplerCreateInfo.anisotropyEnable = renderer->anisotropyEnabled;
 
 		VkSampler newSampler{};
 		vkCreateSampler(renderer->m_device, &samplerCreateInfo, nullptr, &newSampler);
@@ -303,8 +305,11 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 			}
 			size_t sampler = gltf.textures[textureIndex].samplerIndex.value() + 1;
 			materialData.albedoTexture = bindlessTextureIndex;
+
+			auto imageSampler = images[img].sampler ? images[img].sampler : file.samplers[sampler];
+
 			// TODO: We are writing textures 1 by 1. We should batch these.
-			renderer->metalRoughMaterial.writeBindlessTextureToGlobalDescriptor(renderer->m_device, renderer->bindlessTexturesDescriptorSet, images[img], file.samplers[sampler], bindlessTextureIndex);
+			renderer->metalRoughMaterial.writeBindlessTextureToGlobalDescriptor(renderer->m_device, renderer->bindlessTexturesDescriptorSet, images[img], imageSampler, bindlessTextureIndex);
 			bindlessTextureIndex++;
 		}
 

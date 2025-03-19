@@ -54,7 +54,7 @@ void destroyBuffer(VmaAllocator allocator, const AllocatedBuffer& buffer) {
 	vmaDestroyBuffer(allocator, buffer.buffer, buffer.allocation);
 }
 
-std::optional<AllocatedImage> createKTX2Image(std::string_view imageName, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue copyQueue, VmaAllocator allocator, void* imageData, uint32_t imageDataSize, VkFormat format, VkImageUsageFlags imageUsageFlags, VkImageLayout imageLayout) {
+std::optional<AllocatedImage> createKTX2Image(std::string_view imageName, VkDevice device, VkCommandPool commandPool, VkQueue copyQueue, VmaAllocator allocator, void* imageData, uint32_t imageDataSize, VkFormat format, VkImageUsageFlags imageUsageFlags, VkImageLayout imageLayout) {
 	AllocatedImage allocatedImage{};
 
 	ktxTexture2* ktxTex{};
@@ -128,7 +128,7 @@ std::optional<AllocatedImage> createKTX2Image(std::string_view imageName, VkDevi
 		.height = allocatedImage.imageExtent.height,
 		.depth = 1
 	};
-	imgInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	imgInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | imageUsageFlags;
 
 	VmaAllocationCreateInfo allocinfo = {};
 	allocinfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
@@ -201,37 +201,6 @@ std::optional<AllocatedImage> createKTX2Image(std::string_view imageName, VkDevi
 	destroyBuffer(allocator, stagingBuffer);
 
 	ktxTexture2_Destroy(ktxTex);
-
-	/*
-	// Calculate valid filter and mipmap modes
-	VkFilter filter = VK_FILTER_LINEAR;
-	VkSamplerMipmapMode mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-	getValidFilters(physicalDevice, format, &filter, &mipmapMode);
-
-	VkSamplerCreateInfo samplerCreateInfo{};
-	samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-	samplerCreateInfo.maxAnisotropy = 1.0f;
-	samplerCreateInfo.magFilter = filter;
-	samplerCreateInfo.minFilter = filter;
-	samplerCreateInfo.mipmapMode = mipmapMode;
-	samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-	samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-	samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-	samplerCreateInfo.mipLodBias = 0.0f;
-	samplerCreateInfo.compareOp = VK_COMPARE_OP_NEVER;
-	samplerCreateInfo.minLod = 0.0f;
-	samplerCreateInfo.maxLod = static_cast<float>(allocatedImage.mipLevels);
-
-	if (false) {
-		// TODO: get max level of anisotropy
-		samplerCreateInfo.maxAnisotropy = 1.0f;
-		samplerCreateInfo.anisotropyEnable = VK_TRUE;
-	} else {
-		samplerCreateInfo.maxAnisotropy = 1.0;
-		samplerCreateInfo.anisotropyEnable = VK_FALSE;
-	}
-	VK_CHECK(vkCreateSampler(device, &samplerCreateInfo, nullptr, &allocatedImage.sampler));
-	*/
 
 	// Create image view
 	VkImageViewCreateInfo imageViewCreateInfo{};

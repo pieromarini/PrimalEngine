@@ -256,6 +256,9 @@ public:
 	// Allocator
 	VmaAllocator m_allocator;
 
+	bool anisotropyEnabled;
+	float maxSamplerAnisotropy;
+
 private:
 	void initVulkan();
 	void initSwapchain();
