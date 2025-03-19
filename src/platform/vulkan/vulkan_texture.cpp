@@ -54,7 +54,7 @@ void destroyBuffer(VmaAllocator allocator, const AllocatedBuffer& buffer) {
 	vmaDestroyBuffer(allocator, buffer.buffer, buffer.allocation);
 }
 
-std::optional<AllocatedImage> loadKTX2Image(std::string_view imageName, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue copyQueue, VmaAllocator allocator, void* imageData, uint32_t imageDataSize, VkFormat format, VkImageUsageFlags imageUsageFlags, VkImageLayout imageLayout) {
+std::optional<AllocatedImage> createKTX2Image(std::string_view imageName, VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue copyQueue, VmaAllocator allocator, void* imageData, uint32_t imageDataSize, VkFormat format, VkImageUsageFlags imageUsageFlags, VkImageLayout imageLayout) {
 	AllocatedImage allocatedImage{};
 
 	ktxTexture2* ktxTex{};

@@ -64,7 +64,7 @@ std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asse
 										 [](auto& arg) {},
 										 [&](fastgltf::sources::Vector& vector) {
 											 if (view.mimeType == fastgltf::MimeType::KTX2) {
-												 auto texture = loadKTX2Image(image.name.c_str(), renderer->m_device, renderer->m_chosenGPU, renderer->getCurrentFrame().m_commandPool, renderer->m_graphicsQueue, renderer->m_allocator, vector.bytes.data() + bufferView.byteOffset, bufferView.byteLength, VK_FORMAT_BC7_SRGB_BLOCK, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+												 auto texture = createKTX2Image(image.name.c_str(), renderer->m_device, renderer->m_chosenGPU, renderer->getCurrentFrame().m_commandPool, renderer->m_graphicsQueue, renderer->m_allocator, vector.bytes.data() + bufferView.byteOffset, bufferView.byteLength, VK_FORMAT_BC7_SRGB_BLOCK, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 												 if (texture.has_value()) {
 													 newImage = texture.value();
 												 }
