@@ -11,10 +11,10 @@ UIElement box(float width, float height, glm::vec2 position, glm::vec2 scale, fl
 		.height = height
 	};
 
-	element.vertices.push_back({ { 1.0f, 1.0f, 0.0f }, 1.0f, { 1.0f, 0.0f, 0.0f }, 1.0f });
-	element.vertices.push_back({ { -1.0f, 1.0f, 0.0f }, -1.0f, { 0.0f, 1.0f, 0.0f }, 1.0f });
-	element.vertices.push_back({ { -1.0f, -1.0f, 0.0f }, -1.0f, { 1.0f, 0.0f, 1.0f }, -1.0f });
-	element.vertices.push_back({ { 1.0f, -1.0f, 0.0f }, 1.0f, { 0.0f, 1.0f, 1.0f }, -1.0f });
+	element.vertices.push_back({ .position = { 1.0f, 1.0f, 0.0f }, .uv_x = 1.0f, .color = { 1.0f, 0.0f, 0.0f }, .uv_y = 1.0f });
+	element.vertices.push_back({ .position = { -1.0f, 1.0f, 0.0f }, .uv_x = -1.0f, .color = { 0.0f, 1.0f, 0.0f }, .uv_y = 1.0f });
+	element.vertices.push_back({ .position = { -1.0f, -1.0f, 0.0f }, .uv_x = -1.0f, .color = { 1.0f, 0.0f, 1.0f }, .uv_y = -1.0f });
+	element.vertices.push_back({ .position = { 1.0f, -1.0f, 0.0f }, .uv_x = 1.0f, .color = { 0.0f, 1.0f, 1.0f }, .uv_y = -1.0f });
 
 	element.indices.push_back(0);
 	element.indices.push_back(1);
@@ -35,9 +35,9 @@ UIElement triangle(float width, float height, glm::vec2 position, glm::vec2 scal
 		.height = height
 	};
 
-	element.vertices.push_back({ { 1.0f, 1.0f, 0.0f }, 1.0f, { 1.0f, 0.0f, 0.0f }, 1.0f });
-	element.vertices.push_back({ { -1.0f, 1.0f, 0.0f }, -1.0f, { 0.0f, 1.0f, 0.0f }, 1.0f });
-	element.vertices.push_back({ { -1.0f, -1.0f, 0.0f }, -1.0f, { 1.0f, 0.0f, 1.0f }, -1.0f });
+	element.vertices.push_back({ .position = { 1.0f, 1.0f, 0.0f }, .uv_x = 1.0f, .color = { 1.0f, 0.0f, 0.0f }, .uv_y = 1.0f });
+	element.vertices.push_back({ .position = { -1.0f, 1.0f, 0.0f }, .uv_x = -1.0f, .color = { 0.0f, 1.0f, 0.0f }, .uv_y = 1.0f });
+	element.vertices.push_back({ .position = { -1.0f, -1.0f, 0.0f }, .uv_x = -1.0f, .color = { 1.0f, 0.0f, 1.0f }, .uv_y = -1.0f });
 
 	element.indices.push_back(0);
 	element.indices.push_back(1);
