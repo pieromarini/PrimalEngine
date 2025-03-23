@@ -116,36 +116,8 @@ struct ComputePushConstants {
 	glm::vec4 data4;
 };
 
-
-struct alignas(16) MaterialData {
-	uint32_t albedoTexture{};
-	uint32_t normalTexture{};
-	uint32_t specularTexture{};
-	uint32_t emissiveTexture{};
-	glm::vec4 colorFactors;
-	glm::vec4 metalRoughFactors;
-	// padding, we need it anyway for uniform buffers
-	// glm::vec4 padding[13];
-};
-
-struct GLTFMetallic_Roughness {
-	MaterialPipeline opaquePipeline;
-	MaterialPipeline transparentPipeline;
-	MaterialPipeline doubleSidedPipeline;
-
-	VkDescriptorSetLayout materialLayout;
-
-	DescriptorWriter writer;
-
-	void buildPipelines(VulkanRenderer* renderer);
-	void clearResources(VkDevice device);
-
-	MaterialInstance writeMaterials(VkDevice device, MaterialPass pass, DescriptorAllocator& descriptorAllocator);
-	void writeBindlessTextureToGlobalDescriptor(VkDevice device, VkDescriptorSet bindlessTextureSet, AllocatedImage& image, VkSampler sampler, uint32_t index);
-};
-
 struct MeshNode : public Node {
-	std::shared_ptr<MeshAsset> mesh;
+	Mesh mesh;
 
 	void draw(const glm::mat4& topMatrix, DrawContext& ctx) override;
 };
@@ -160,7 +132,7 @@ struct RenderObject {
 };
 
 struct ModelDrawRender {
-	MaterialInstance* material;
+	Material* material;
 
 	std::vector<RenderObject> renderObjects{};
 };
@@ -229,12 +201,7 @@ public:
 	VkSampler defaultSamplerLinear;
 	VkSampler defaultSamplerNearest;
 
-	// GLTF loading testing
-	MaterialInstance defaultData;
-	GLTFMetallic_Roughness metalRoughMaterial;
-
-	std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes;
-
+	std::unordered_map<std::string, Model> loadedModels;
 
 	// bindless textures
 	VkDescriptorPool bindlessPool;
@@ -258,6 +225,14 @@ public:
 
 	bool anisotropyEnabled;
 	float maxSamplerAnisotropy;
+
+	void writeBindlessTextureToGlobalDescriptor(VkDescriptorSet bindlessTextureSet, AllocatedImage& image, VkSampler sampler, uint32_t index);
+
+	// Default pipelines
+	void buildDefaultPipelines();
+	MaterialPipeline opaquePipeline;
+	MaterialPipeline transparentPipeline;
+	MaterialPipeline doubleSidedPipeline;
 
 private:
 	void initVulkan();

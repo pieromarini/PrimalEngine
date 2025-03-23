@@ -63,23 +63,6 @@ struct GPUDrawPushConstants {
 	VkDeviceAddress vertexBuffer;
 };
 
-enum class MaterialPass : uint8_t {
-	MainColor,
-	Transparent,
-	DoubleSided,
-	Other
-};
-struct MaterialPipeline {
-	VkPipeline pipeline;
-	VkPipelineLayout layout;
-};
-
-struct MaterialInstance {
-	uint32_t materialIndex;
-	MaterialPipeline* pipeline;
-	MaterialPass passType;
-};
-
 struct DrawContext;
 
 // base class for a renderable dynamic object

@@ -74,14 +74,14 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	const std::string modelPath = { "res/models/bistro/bistro_ktx2.glb" };
 
 	auto start = std::chrono::system_clock::now();
-	auto loadedGLTF = loadGltf(this, modelPath);
+	auto loadedGLTF = loadGLTF(this, modelPath);
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 	std::cout << std::format("Loaded in {:.4f} seconds\n", static_cast<float>(elapsed.count()) / 1000.0f);
 
 	assert(loadedGLTF.has_value());
 
-	loadedScenes["loadedGLTF"] = *loadedGLTF;
+	loadedModels["testModel"] = loadedGLTF.value();
 }
 
 void VulkanRenderer::initQueryPools() {
@@ -416,7 +416,11 @@ void VulkanRenderer::destroySwapchain() {
 void VulkanRenderer::cleanup() {
 	vkDeviceWaitIdle(m_device);
 
-	loadedScenes.clear();
+	for (auto& [name, model] : loadedModels) {
+		cleanupModel(this, model);
+	}
+
+	loadedModels.clear();
 
 	for (auto& frame : m_frames) {
 		frame.m_deletionQueue.flush();
@@ -950,7 +954,7 @@ void VulkanRenderer::initDescriptors() {
 
 void VulkanRenderer::initPipelines() {
 	initBackgroundPipelines();
-	metalRoughMaterial.buildPipelines(this);
+	buildDefaultPipelines();
 	initUIPipeline();
 	initFontPipeline();
 }
@@ -1343,14 +1347,14 @@ void VulkanRenderer::initBindlessTextureDescriptor() {
 	});
 }
 
-void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
+void VulkanRenderer::buildDefaultPipelines() {
 	VkShaderModule meshFragShader{};
-	if (!loadShaderModule("res/shaders/mesh.frag.spv", renderer->m_device, &meshFragShader)) {
+	if (!loadShaderModule("res/shaders/mesh.frag.spv", m_device, &meshFragShader)) {
 		std::cout << std::format("Error when building the mesh fragment shader module") << '\n';
 	}
 
 	VkShaderModule meshVertexShader{};
-	if (!loadShaderModule("res/shaders/mesh.vert.spv", renderer->m_device, &meshVertexShader)) {
+	if (!loadShaderModule("res/shaders/mesh.vert.spv", m_device, &meshVertexShader)) {
 		std::cout << std::format("Error when building the mesh vertex shader module") << '\n';
 	}
 
@@ -1360,9 +1364,9 @@ void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
 	matrixRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
 	std::array<VkDescriptorSetLayout, 3> layouts = {
-		renderer->m_gpuSceneDataDescriptorLayout,
-		renderer->bindlessTexturesSetLayout,
-		renderer->m_modelDrawDescriptorLayout
+		m_gpuSceneDataDescriptorLayout,
+		bindlessTexturesSetLayout,
+		m_modelDrawDescriptorLayout
 	};
 
 	VkPipelineLayoutCreateInfo meshLayoutInfo = pipelineLayoutCreateInfo();
@@ -1372,14 +1376,14 @@ void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
 	meshLayoutInfo.pSetLayouts = layouts.data();
 
 	VkPipelineLayout newLayout{};
-	VK_CHECK(vkCreatePipelineLayout(renderer->m_device, &meshLayoutInfo, nullptr, &newLayout));
+	VK_CHECK(vkCreatePipelineLayout(m_device, &meshLayoutInfo, nullptr, &newLayout));
 
 	opaquePipeline.layout = newLayout;
 	transparentPipeline.layout = newLayout;
 	doubleSidedPipeline.layout = newLayout;
 
-	renderer->m_mainDeletionQueue.push([=]() {
-		vkDestroyPipelineLayout(renderer->m_device, newLayout, nullptr);
+	m_mainDeletionQueue.push([&, newLayout]() {
+		vkDestroyPipelineLayout(m_device, newLayout, nullptr);
 	});
 
 	// build the stage-create-info for both vertex and fragment stages. This lets
@@ -1395,54 +1399,31 @@ void GLTFMetallic_Roughness::buildPipelines(VulkanRenderer* renderer) {
 	pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
 	// render format
-	pipelineBuilder.setColorAttachmentFormat(renderer->m_drawImage.imageFormat);
-	pipelineBuilder.setDepthFormat(renderer->m_depthImage.imageFormat);
+	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
+	pipelineBuilder.setDepthFormat(m_depthImage.imageFormat);
 
 	// build opaque pipeline
-	opaquePipeline.pipeline = pipelineBuilder.buildPipeline(renderer->m_device);
+	opaquePipeline.pipeline = pipelineBuilder.buildPipeline(m_device);
 
 	// create the double sided variant
 	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-	doubleSidedPipeline.pipeline = pipelineBuilder.buildPipeline(renderer->m_device);
+	doubleSidedPipeline.pipeline = pipelineBuilder.buildPipeline(m_device);
 
 	// create the alpha blending variant
 	pipelineBuilder.enableBlendingAlphablend();
-	transparentPipeline.pipeline = pipelineBuilder.buildPipeline(renderer->m_device);
+	transparentPipeline.pipeline = pipelineBuilder.buildPipeline(m_device);
 
-	renderer->m_mainDeletionQueue.push([&, renderer] {
-		vkDestroyPipeline(renderer->m_device, opaquePipeline.pipeline, nullptr);
-		vkDestroyPipeline(renderer->m_device, doubleSidedPipeline.pipeline, nullptr);
-		vkDestroyPipeline(renderer->m_device, transparentPipeline.pipeline, nullptr);
+	m_mainDeletionQueue.push([&] {
+		vkDestroyPipeline(m_device, opaquePipeline.pipeline, nullptr);
+		vkDestroyPipeline(m_device, doubleSidedPipeline.pipeline, nullptr);
+		vkDestroyPipeline(m_device, transparentPipeline.pipeline, nullptr);
 	});
 
-	vkDestroyShaderModule(renderer->m_device, meshFragShader, nullptr);
-	vkDestroyShaderModule(renderer->m_device, meshVertexShader, nullptr);
+	vkDestroyShaderModule(m_device, meshFragShader, nullptr);
+	vkDestroyShaderModule(m_device, meshVertexShader, nullptr);
 }
 
-MaterialInstance GLTFMetallic_Roughness::writeMaterials(VkDevice device, MaterialPass pass, DescriptorAllocator& descriptorAllocator) {
-	MaterialInstance matData{};
-	matData.passType = pass;
-	if (pass == MaterialPass::Transparent) {
-		matData.pipeline = &transparentPipeline;
-	} else if (pass == MaterialPass::DoubleSided) {
-		matData.pipeline = &doubleSidedPipeline;
-	} else {
-		matData.pipeline = &opaquePipeline;
-	}
-
-	/*
-	matData.materialSet = descriptorAllocator.allocate(device, materialLayout);
-
-	writer.clear();
-	writer.writeBuffer(0, resources.dataBuffer, sizeof(MaterialConstants), resources.dataBufferOffset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-
-	writer.updateSet(device, matData.materialSet);
-	*/
-
-	return matData;
-}
-
-void GLTFMetallic_Roughness::writeBindlessTextureToGlobalDescriptor(VkDevice device, VkDescriptorSet bindlessTextureSet, AllocatedImage& image, VkSampler sampler, uint32_t index) {
+void VulkanRenderer::writeBindlessTextureToGlobalDescriptor(VkDescriptorSet bindlessTextureSet, AllocatedImage& image, VkSampler sampler, uint32_t index) {
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageView = image.imageView;
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1456,21 +1437,21 @@ void GLTFMetallic_Roughness::writeBindlessTextureToGlobalDescriptor(VkDevice dev
 	write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	write.pImageInfo = &imageInfo;
 
-	vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+	vkUpdateDescriptorSets(m_device, 1, &write, 0, nullptr);
 }
 
 void MeshNode::draw(const glm::mat4& topMatrix, DrawContext& ctx) {
 	glm::mat4 nodeMatrix = topMatrix * worldTransform;
 
-	for (auto& s : mesh->surfaces) {
+	for (auto& s : mesh.primitives) {
 		RenderObject def{};
 		def.firstIndex = s.firstIndex;
 		def.vertexOffset = s.vertexOffset;
 		def.indexCount = s.indexCount;
 		def.transform = nodeMatrix;
-		def.materialIndex = s.material->data.materialIndex;
+		def.materialIndex = s.materialIndex;
 
-		if (s.material->data.passType == MaterialPass::Transparent) {
+		if (s.passType == MaterialPass::Transparent) {
 			def.drawId = ctx.transparentDraws.renderObjects.size();
 			ctx.transparentDraws.renderObjects.push_back(def);
 		} else {
@@ -1503,7 +1484,7 @@ void VulkanRenderer::updateScene(float deltaTime) {
 	m_sceneData.sunlightColor = glm::vec4(1.f);
 	m_sceneData.sunlightDirection = glm::vec4(0, 1, 0.5, 1.f);
 
-	loadedScenes["loadedGLTF"]->draw(glm::mat4{ 1.f }, mainDrawContext);
+	drawModel(loadedModels["testModel"], glm::mat4{ 1.f }, mainDrawContext);
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);

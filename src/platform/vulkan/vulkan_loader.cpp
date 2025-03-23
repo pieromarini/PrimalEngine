@@ -1,5 +1,6 @@
 #include "fastgltf/parser.hpp"
 #include "fastgltf/types.hpp"
+#include "material.h"
 #include <vulkan/vulkan_core.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -131,16 +132,14 @@ VkSamplerMipmapMode extractMipmapMode(fastgltf::Filter filter) {
 	}
 }
 
-std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, std::string_view filePath) {
+std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePath) {
 	std::cout << std::format("Loading GLTF: {}", filePath) << '\n';
 	if (!std::filesystem::exists(filePath)) {
 		std::cout << std::format("Cannot load {}. File does not exist.\n", filePath);
 		return {};
 	}
 
-	auto scene = std::make_shared<LoadedGLTF>();
-	scene->renderer = renderer;
-	LoadedGLTF& file = *scene.get();
+	Model model{};
 
 	fastgltf::Parser parser{ fastgltf::Extensions::KHR_texture_basisu };
 
@@ -176,13 +175,8 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 		return {};
 	}
 
-	std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
-		{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 3 },
-	};
-	file.descriptorPool.init(renderer->m_device, gltf.materials.size() + 1, sizes);
-
 	// Load default sampler
-	file.samplers.push_back(renderer->defaultSamplerLinear);
+	model.samplers.push_back(renderer->defaultSamplerLinear);
 
 	for (fastgltf::Sampler& sampler : gltf.samplers) {
 		VkSamplerCreateInfo samplerCreateInfo = {
@@ -202,33 +196,27 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 		VkSampler newSampler{};
 		vkCreateSampler(renderer->m_device, &samplerCreateInfo, nullptr, &newSampler);
 
-		file.samplers.push_back(newSampler);
+		model.samplers.push_back(newSampler);
 	}
 
 	// temporal arrays for all the objects to use while creating the GLTF data
-	std::vector<std::shared_ptr<MeshAsset>> meshes;
 	std::vector<std::shared_ptr<Node>> nodes;
-	std::vector<AllocatedImage> images;
-	std::vector<std::shared_ptr<GLTFMaterial>> materials;
-
 	// Set default texture
-	images.push_back(renderer->errorCheckerboardImage);
-	file.images["DefaultTexture"] = renderer->errorCheckerboardImage;
+	model.images.push_back(renderer->errorCheckerboardImage);
 
 	// load textures
 	int defaultTextureCount = 0;
 	for (fastgltf::Image& image : gltf.images) {
 		auto img = loadImage(renderer, gltf, image);
 		if (img.has_value()) {
-			images.push_back(*img);
-			file.images[image.name.c_str()] = *img;
+			model.images.push_back(*img);
 		} else {
-			images.push_back(renderer->errorCheckerboardImage);
+			model.images.push_back(renderer->errorCheckerboardImage);
 			defaultTextureCount++;
 			std::cout << "gltf failed to load texture " << image.name << '\n';
 		}
 	}
-	std::cout << std::format("Loaded {} textures. Errors: {}\n", images.size(), defaultTextureCount);
+	std::cout << std::format("Loaded {} textures. Errors: {}\n", model.images.size(), defaultTextureCount);
 
 
 	// TODO: We store the data in a vector but also write directly to the buffer.
@@ -237,45 +225,34 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 	renderer->globalMaterialDataBuffer = renderer->createBuffer("globalMaterialDataBuffer", sizeof(MaterialData) * (gltf.materials.size() + 1), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	auto sceneMaterialData = static_cast<MaterialData*>(renderer->globalMaterialDataBuffer.info.pMappedData);
 
-	// Create default material
-	MaterialData defaultMaterialData{
-		.albedoTexture = 0,
-		.normalTexture = 0,
-		.specularTexture = 0,
-		.emissiveTexture = 0,
-		.colorFactors = { 0.85f, 0.0f, 1.0f, 1.0f },
-		.metalRoughFactors = { 0.0f, 0.0f, 0.0f, 0.0f }
-	};
-	renderer->globalMaterialData.push_back(defaultMaterialData);
-	sceneMaterialData[0] = defaultMaterialData;
+	// Create default material and copy it to the global material data buffer
+	auto defaultMaterial = Material_getDefaultMaterial();
+	renderer->globalMaterialData.push_back(defaultMaterial.materialData);
+	sceneMaterialData[0] = defaultMaterial.materialData;
 
-	auto defaultMat = std::make_shared<GLTFMaterial>();
-	materials.push_back(defaultMat);
-	file.materials["DefaultMaterial"] = defaultMat;
-	defaultMat->name = "DefaultMaterial";
+	model.materials.push_back(defaultMaterial);
 
 	// Write default texture to descriptor set and set Material pass and pipeline
-	renderer->metalRoughMaterial.writeBindlessTextureToGlobalDescriptor(renderer->m_device, renderer->bindlessTexturesDescriptorSet, images[0], file.samplers[0], 0);
-	defaultMat->data = renderer->metalRoughMaterial.writeMaterials(renderer->m_device, MaterialPass::MainColor, file.descriptorPool);
+	renderer->writeBindlessTextureToGlobalDescriptor(renderer->bindlessTexturesDescriptorSet, model.images[0], model.samplers[0], 0);
+	defaultMaterial.passType = MaterialPass::MainColor;
+	defaultMaterial.pipeline = &renderer->opaquePipeline;
 
-	auto start = std::chrono::system_clock::now();
 	// Load materials
+	auto start = std::chrono::system_clock::now();
+
 	int materialDataIndex = 1;
 	uint32_t bindlessTextureIndex = 1;
 	for (fastgltf::Material& mat : gltf.materials) {
-		auto newMat = std::make_shared<GLTFMaterial>();
-		materials.push_back(newMat);
-		file.materials[mat.name.c_str()] = newMat;
-		newMat->name = mat.name;
+		Material newMat{};
+		newMat.name = mat.name;
 
-		MaterialData materialData{};
-		materialData.colorFactors.x = mat.pbrData.baseColorFactor[0];
-		materialData.colorFactors.y = mat.pbrData.baseColorFactor[1];
-		materialData.colorFactors.z = mat.pbrData.baseColorFactor[2];
-		materialData.colorFactors.w = mat.pbrData.baseColorFactor[3];
+		newMat.materialData.colorFactors.x = mat.pbrData.baseColorFactor[0];
+		newMat.materialData.colorFactors.y = mat.pbrData.baseColorFactor[1];
+		newMat.materialData.colorFactors.z = mat.pbrData.baseColorFactor[2];
+		newMat.materialData.colorFactors.w = mat.pbrData.baseColorFactor[3];
 
-		materialData.metalRoughFactors.x = mat.pbrData.metallicFactor;
-		materialData.metalRoughFactors.y = mat.pbrData.roughnessFactor;
+		newMat.materialData.metalRoughFactors.x = mat.pbrData.metallicFactor;
+		newMat.materialData.metalRoughFactors.y = mat.pbrData.roughnessFactor;
 
 		MaterialPass passType = MaterialPass::MainColor;
 		if (mat.alphaMode == fastgltf::AlphaMode::Blend) {
@@ -285,10 +262,10 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 		}
 
 		// Set textures to "Default"
-		materialData.albedoTexture = 0;
-		materialData.normalTexture = 0;
-		materialData.specularTexture = 0;
-		materialData.emissiveTexture = 0;
+		newMat.materialData.albedoTexture = 0;
+		newMat.materialData.normalTexture = 0;
+		newMat.materialData.specularTexture = 0;
+		newMat.materialData.emissiveTexture = 0;
 
 		// grab textures from gltf file
 		// TODO: Set rest of the textures
@@ -304,45 +281,53 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 				img = gltf.textures[textureIndex].imageIndex.value() + 1;
 			}
 			size_t sampler = gltf.textures[textureIndex].samplerIndex.value() + 1;
-			materialData.albedoTexture = bindlessTextureIndex;
+			newMat.materialData.albedoTexture = bindlessTextureIndex;
 
-			auto imageSampler = images[img].sampler ? images[img].sampler : file.samplers[sampler];
+			auto imageSampler = model.images[img].sampler ? model.images[img].sampler : model.samplers[sampler];
 
 			// TODO: We are writing textures 1 by 1. We should batch these.
-			renderer->metalRoughMaterial.writeBindlessTextureToGlobalDescriptor(renderer->m_device, renderer->bindlessTexturesDescriptorSet, images[img], imageSampler, bindlessTextureIndex);
+			renderer->writeBindlessTextureToGlobalDescriptor(renderer->bindlessTexturesDescriptorSet, model.images[img], imageSampler, bindlessTextureIndex);
 			bindlessTextureIndex++;
 		}
 
 		// write material data to buffer
-		sceneMaterialData[materialDataIndex] = materialData;
-		renderer->globalMaterialData.push_back(materialData);
+		sceneMaterialData[materialDataIndex] = newMat.materialData;
+		renderer->globalMaterialData.push_back(newMat.materialData);
 
 		// build material
-		newMat->data = renderer->metalRoughMaterial.writeMaterials(renderer->m_device, passType, file.descriptorPool);
+		newMat.passType = passType;
+
+		if (passType == MaterialPass::Transparent) {
+			newMat.pipeline = &renderer->transparentPipeline;
+		} else if (passType == MaterialPass::DoubleSided) {
+			newMat.pipeline = &renderer->doubleSidedPipeline;
+		} else {
+			newMat.pipeline = &renderer->opaquePipeline;
+		}
+
+		model.materials.push_back(newMat);
 
 		materialDataIndex++;
 	}
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-	std::cout << std::format("Loaded {} materials in {} us\n", materials.size(), elapsed.count());
+	std::cout << std::format("Loaded {} materials in {} us\n", model.materials.size(), elapsed.count());
 
 	std::vector<uint32_t> indices;
 	std::vector<Vertex> vertices;
 
 	for (auto& mesh : gltf.meshes) {
-		std::shared_ptr<MeshAsset> newmesh = std::make_shared<MeshAsset>();
-		meshes.push_back(newmesh);
-		file.meshes[mesh.name.c_str()] = newmesh;
-		newmesh->name = mesh.name;
+		Mesh newmesh{};
+		newmesh.name = mesh.name;
 
 		for (auto&& p : mesh.primitives) {
-			GeoSurface newSurface;
+			MeshPrimitive newPrimitive{};
 			auto vertexOffset = static_cast<int32_t>(vertices.size());
 
-			newSurface.firstIndex = (uint32_t)indices.size();
-			newSurface.indexCount = (uint32_t)gltf.accessors[p.indicesAccessor.value()].count;
-			newSurface.vertexOffset = vertexOffset;
+			newPrimitive.firstIndex = (uint32_t)indices.size();
+			newPrimitive.indexCount = (uint32_t)gltf.accessors[p.indicesAccessor.value()].count;
+			newPrimitive.vertexOffset = vertexOffset;
 
 			// load indices
 			{
@@ -398,20 +383,23 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 				});
 			}
 
+
 			if (p.materialIndex.has_value()) {
-				newSurface.material = materials[p.materialIndex.value() + 1];
-				newSurface.material->data.materialIndex = p.materialIndex.value() + 1;// set material index to reference in shader
+				newPrimitive.materialIndex = p.materialIndex.value() + 1;
 			} else {
-				newSurface.material = materials[0];// set default material
-				newSurface.material->data.materialIndex = 0;
+				newPrimitive.materialIndex = 0; // set default material
 			}
 
-			newmesh->surfaces.push_back(newSurface);
+			newPrimitive.passType = model.materials[newPrimitive.materialIndex].passType;
+
+			newmesh.primitives.push_back(newPrimitive);
 		}
+
+		model.meshes.push_back(newmesh);
 	}
 
 	// Upload all the vertex/index data for the loaded model
-	file.modelBuffers = renderer->uploadMesh<Vertex>(indices, vertices, "modelBuffers");
+	model.modelBuffers = renderer->uploadMesh<Vertex>(indices, vertices, "modelBuffers");
 
 	// load all nodes and their meshes
 	for (fastgltf::Node& node : gltf.nodes) {
@@ -420,13 +408,13 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 		// find if the node has a mesh, and if it does hook it to the mesh pointer and allocate it with the meshnode class
 		if (node.meshIndex.has_value()) {
 			newNode = std::make_shared<MeshNode>();
-			dynamic_cast<MeshNode*>(newNode.get())->mesh = meshes[*node.meshIndex];
+			dynamic_cast<MeshNode*>(newNode.get())->mesh = model.meshes[*node.meshIndex];
 		} else {
 			newNode = std::make_shared<Node>();
 		}
 
 		nodes.push_back(newNode);
-		file.nodes[node.name.c_str()];
+		// model.nodes[node.name.c_str()];
 
 		std::visit(fastgltf::visitor{
 								 [&](fastgltf::Node::TransformMatrix matrix) {
@@ -460,52 +448,51 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanRenderer* renderer, st
 	// find the top nodes, with no parents
 	for (auto& node : nodes) {
 		if (node->parent.lock() == nullptr) {
-			file.topNodes.push_back(node);
+			model.topNodes.push_back(node);
 			node->refreshTransform(glm::mat4{ 1.f });
 		}
 	}
 
-	return scene;
+	return model;
 }
 
-void LoadedGLTF::draw(const glm::mat4& topMatrix, DrawContext& ctx) {
+void drawModel(Model& model, const glm::mat4& topMatrix, DrawContext& ctx) {
 	// Initialize draw context
 	// TODO: This is just a hack for now. We should group materials by Pipeline.
 	// 			 Right now we only have 2 pipelines: one for Opaques and one for alpha-blended (we should have one more for transparent objects)
-	ctx.modelBuffers = &modelBuffers;
-	for (const auto& [materialName, material] : materials) {
-		ModelDrawRender modelDrawRender{ .material = &material->data };
-		if (material->data.passType == MaterialPass::Transparent) {
+	ctx.modelBuffers = &model.modelBuffers;
+	for (auto& material : model.materials) {
+		ModelDrawRender modelDrawRender{ .material = &material };
+		if (material.passType == MaterialPass::Transparent) {
 			ctx.transparentDraws = modelDrawRender;
 		} else {
 			ctx.opaqueDraws = modelDrawRender;
 		}
 	}
 
-	for (auto& n : topNodes) {
+	for (auto& n : model.topNodes) {
 		n->draw(topMatrix, ctx);
 	}
 }
 
-void LoadedGLTF::clearAll() {
+void cleanupModel(VulkanRenderer* renderer, Model& model) {
 	VkDevice dv = renderer->m_device;
 
-	renderer->destroyBuffer(modelBuffers.indexBuffer);
-	renderer->destroyBuffer(modelBuffers.vertexBuffer);
+	renderer->destroyBuffer(model.modelBuffers.indexBuffer);
+	renderer->destroyBuffer(model.modelBuffers.vertexBuffer);
 
-	for (auto& [k, v] : images) {
-		if (v.image == renderer->errorCheckerboardImage.image) {
+	for (auto& image : model.images) {
+		if (image.image == renderer->errorCheckerboardImage.image) {
 			// dont destroy the default images
 			continue;
 		}
-		renderer->destroyImage(v);
+		renderer->destroyImage(image);
 	}
 
-	for (auto& sampler : samplers) {
+	for (auto& sampler : model.samplers) {
 		vkDestroySampler(dv, sampler, nullptr);
 	}
 
-	descriptorPool.destroyPools(dv);
 	// TODO: should be handled by the renderer
 	renderer->destroyBuffer(renderer->globalMaterialDataBuffer);
 }
