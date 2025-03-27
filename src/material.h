@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 #include <string>
+#include <unordered_map>
 #include <vulkan/vulkan.h>
 
 namespace pm {
@@ -22,6 +23,7 @@ struct MaterialPipeline {
 	VkPipelineLayout layout;
 };
 
+// NOTE: this struct is sent to the shader as global material data
 struct alignas(16) MaterialData {
 	uint32_t albedoTexture{};
 	uint32_t normalTexture{};
@@ -39,6 +41,15 @@ struct Material {
 	MaterialPass passType;
 };
 
+using MaterialCache = std::unordered_map<MaterialIndex, Material>;
+
 Material Material_getDefaultMaterial();
+
+MaterialCache MaterialCache_init();
+bool MaterialCache_add(MaterialCache& cache, MaterialIndex index, Material material);
+bool MaterialCache_remove(MaterialCache& cache, MaterialIndex index);
+uint32_t MaterialCache_size(MaterialCache& cache);
+
+Material& MaterialCache_get(MaterialCache& cache, MaterialIndex index);
 
 }// namespace pm

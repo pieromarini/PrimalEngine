@@ -1,7 +1,9 @@
+#include <ratio>
+#define VMA_IMPLEMENTATION
+#include "entity.h"
 #include <algorithm>
 #include <iterator>
 #include <vulkan/vulkan_core.h>
-#define VMA_IMPLEMENTATION
 
 #define VMA_LEAK_LOG_FORMAT(format, ...) \
 	do {                                   \
@@ -23,7 +25,6 @@
 #include <array>
 #include <cmath>
 #include <glm/gtx/transform.hpp>
-#include <ranges>
 #include <vector>
 
 namespace pm {
@@ -69,6 +70,9 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	initBindlessTextureDescriptor();
 	initPipelines();
 	initQueryPools();
+
+	m_materialCache = MaterialCache_init();
+
 	initDefaultData();
 
 	const std::string modelPath = { "res/models/bistro/bistro_ktx2.glb" };
@@ -149,9 +153,26 @@ void VulkanRenderer::initDefaultData() {
 	sampl.minFilter = VK_FILTER_LINEAR;
 	vkCreateSampler(m_device, &sampl, nullptr, &defaultSamplerLinear);
 
+	// Create global material data buffer
+	// TODO: Using fixed size for now.
+	globalMaterialDataBuffer = createBuffer("globalMaterialDataBuffer", sizeof(MaterialData) * 1001, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	auto sceneMaterialData = static_cast<MaterialData*>(globalMaterialDataBuffer.info.pMappedData);
+
+	// Init default material
+	auto defaultMaterial = Material_getDefaultMaterial();
+	sceneMaterialData[0] = defaultMaterial.materialData;
+
+	// Write default texture to descriptor set and set Material pass and pipeline
+	writeBindlessTextureToGlobalDescriptor(bindlessTexturesDescriptorSet, errorCheckerboardImage, defaultSamplerLinear, 0);
+	defaultMaterial.passType = MaterialPass::MainColor;
+	defaultMaterial.pipeline = &opaquePipeline;
+
+	// Write default material to cache
+	MaterialCache_add(m_materialCache, 0, defaultMaterial);
+
 	m_mainDeletionQueue.push([&]() {
 		vkDestroySampler(m_device, defaultSamplerNearest, nullptr);
-		// vkDestroySampler(m_device, defaultSamplerLinear, nullptr); Deleted by the GLTF scene
+		vkDestroySampler(m_device, defaultSamplerLinear, nullptr);
 
 		destroyImage(whiteImage);
 		destroyImage(greyImage);
@@ -436,6 +457,178 @@ void VulkanRenderer::cleanup() {
 	vkDestroyInstance(m_instance, nullptr);
 }
 
+void VulkanRenderer::buildDrawBatches(std::vector<Model*>& models) {
+	getCurrentFrame().drawBatches.clear();
+
+	auto start = std::chrono::high_resolution_clock::now();
+
+	// TODO: Rework this. Extremely inneficient.
+	std::vector<std::shared_ptr<Entity>> entities{};
+	for (auto model : models) {
+		Entity_flattenHierarchy(model->root, glm::mat4{ 1.0f }, entities);
+	}
+
+	auto flattenTime = std::chrono::duration<float, std::micro>(std::chrono::high_resolution_clock::now() - start).count();
+
+	auto startGen = std::chrono::high_resolution_clock::now();
+	std::vector<DrawBatch> drawBatches{};
+
+	// TODO: huge assumption right now. All models use the same vertex/index buffer.
+	DrawBatch opaque{};
+	opaque.meshBuffers = &models[0]->modelBuffers;
+	opaque.pipeline = opaquePipeline.pipeline;
+	opaque.pipelineLayout = opaquePipeline.layout;
+
+	DrawBatch transparent{};
+	transparent.meshBuffers = &models[0]->modelBuffers;
+	transparent.pipeline = transparentPipeline.pipeline;
+	transparent.pipelineLayout = transparentPipeline.layout;
+
+	DrawBatch doubleSided{};
+	doubleSided.meshBuffers = &models[0]->modelBuffers;
+	doubleSided.pipeline = doubleSidedPipeline.pipeline;
+	doubleSided.pipelineLayout = doubleSidedPipeline.layout;
+
+	auto opaqueCommands = std::vector<MeshIndirectCommand>();
+	auto doubleSidedCommands = std::vector<MeshIndirectCommand>();
+	auto transparentCommands = std::vector<MeshIndirectCommand>();
+
+	std::vector<MeshDraw> opaqueDraws{};
+	std::vector<MeshDraw> doubleSidedDraws{};
+	std::vector<MeshDraw> transparentDraws{};
+
+	for (auto& entity : entities) {
+		if (entity->mesh == nullptr) {
+			continue;
+		}
+		for (auto& primitive : entity->mesh->primitives) {
+			if (primitive.passType == MaterialPass::Transparent) {
+				auto drawId = static_cast<uint32_t>(transparentCommands.size());
+				transparentCommands.push_back({ .drawId = drawId,
+					.command = {
+						.indexCount = primitive.indexCount,
+						.instanceCount = 1,
+						.firstIndex = primitive.firstIndex,
+						.vertexOffset = primitive.vertexOffset,
+						.firstInstance = drawId } });
+				transparentDraws.push_back({ .transform = entity->worldTransform, .materialIndex = primitive.materialIndex });
+			} else if (primitive.passType == MaterialPass::DoubleSided) {
+				auto drawId = static_cast<uint32_t>(doubleSidedCommands.size());
+				doubleSidedCommands.push_back({ .drawId = drawId,
+					.command = {
+						.indexCount = primitive.indexCount,
+						.instanceCount = 1,
+						.firstIndex = primitive.firstIndex,
+						.vertexOffset = primitive.vertexOffset,
+						.firstInstance = drawId } });
+				doubleSidedDraws.push_back({ .transform = entity->worldTransform, .materialIndex = primitive.materialIndex });
+			} else {
+				auto drawId = static_cast<uint32_t>(opaqueCommands.size());
+				opaqueCommands.push_back({ .drawId = drawId,
+					.command = {
+						.indexCount = primitive.indexCount,
+						.instanceCount = 1,
+						.firstIndex = primitive.firstIndex,
+						.vertexOffset = primitive.vertexOffset,
+						.firstInstance = drawId } });
+				opaqueDraws.push_back({ .transform = entity->worldTransform, .materialIndex = primitive.materialIndex });
+			}
+		}
+	}
+
+	auto meshIndirectDoubleSidedCommandsBuffer = createBuffer("meshDrawCommandsBuffer DoubleSided", sizeof(MeshIndirectCommand) * doubleSidedCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	void* uiData1 = meshIndirectDoubleSidedCommandsBuffer.allocation->GetMappedData();
+	memcpy(uiData1, doubleSidedCommands.data(), sizeof(MeshIndirectCommand) * doubleSidedCommands.size());
+
+	auto meshIndirectTransparentCommandsBuffer = createBuffer("meshDrawCommandsBuffer Transparent", sizeof(MeshIndirectCommand) * transparentCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	void* uiData2 = meshIndirectTransparentCommandsBuffer.allocation->GetMappedData();
+	memcpy(uiData2, transparentCommands.data(), sizeof(MeshIndirectCommand) * transparentCommands.size());
+
+	auto doubleSidedDrawsDataBuffer = createBuffer("meshTransformBuffer Opaque", sizeof(MeshDraw) * doubleSidedDraws.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	void* mtd1 = doubleSidedDrawsDataBuffer.allocation->GetMappedData();
+	memcpy(mtd1, doubleSidedDraws.data(), sizeof(MeshDraw) * doubleSidedDraws.size());
+
+	auto transparentDrawsDataBuffer = createBuffer("meshTransformBuffer Transparent", sizeof(MeshDraw) * transparentDraws.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	void* mtd2 = transparentDrawsDataBuffer.allocation->GetMappedData();
+	memcpy(mtd2, transparentDraws.data(), sizeof(MeshDraw) * transparentDraws.size());
+
+	std::vector<DrawBatchDescriptor> doubleSidedDescriptors;
+	doubleSidedDescriptors.emplace_back(0, globalMaterialDataBuffer, sizeof(MaterialData) * MaterialCache_size(m_materialCache), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+	doubleSidedDescriptors.emplace_back(1, meshIndirectDoubleSidedCommandsBuffer, sizeof(MeshIndirectCommand) * doubleSidedCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+	doubleSidedDescriptors.emplace_back(2, doubleSidedDrawsDataBuffer, sizeof(MeshDraw) * doubleSidedDraws.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+
+	std::vector<DrawBatchDescriptor> transparentDescriptors;
+	transparentDescriptors.emplace_back(0, globalMaterialDataBuffer, sizeof(MaterialData) * MaterialCache_size(m_materialCache), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+	transparentDescriptors.emplace_back(1, meshIndirectTransparentCommandsBuffer, sizeof(MeshIndirectCommand) * transparentCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+	transparentDescriptors.emplace_back(2, transparentDrawsDataBuffer, sizeof(MeshDraw) * transparentDraws.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+
+	transparent.commands = {
+		.buffer = meshIndirectTransparentCommandsBuffer,
+		.offset = offsetof(MeshIndirectCommand, command),
+		.size = static_cast<uint32_t>(transparentCommands.size()),
+		.stride = sizeof(MeshIndirectCommand)
+	};
+	transparent.descriptors = transparentDescriptors;
+	transparent.descriptorSetLayout = m_modelDrawDescriptorLayout;
+
+	doubleSided.commands = {
+		.buffer = meshIndirectDoubleSidedCommandsBuffer,
+		.offset = offsetof(MeshIndirectCommand, command),
+		.size = static_cast<uint32_t>(doubleSidedCommands.size()),
+		.stride = sizeof(MeshIndirectCommand)
+	};
+	doubleSided.descriptors = doubleSidedDescriptors;
+	doubleSided.descriptorSetLayout = m_modelDrawDescriptorLayout;
+
+	if (opaqueCommands.size() > 0) {
+		auto meshIndirectOpaqueCommandsBuffer = createBuffer("meshDrawCommandsBuffer Opaque", sizeof(MeshIndirectCommand) * opaqueCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		void* uiData = meshIndirectOpaqueCommandsBuffer.allocation->GetMappedData();
+		memcpy(uiData, opaqueCommands.data(), sizeof(MeshIndirectCommand) * opaqueCommands.size());
+
+		auto opaqueDrawsDataBuffer = createBuffer("meshTransformBuffer Opaque", sizeof(MeshDraw) * opaqueDraws.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		void* mtd = opaqueDrawsDataBuffer.allocation->GetMappedData();
+		memcpy(mtd, opaqueDraws.data(), sizeof(MeshDraw) * opaqueDraws.size());
+
+		std::vector<DrawBatchDescriptor> opaqueDescriptors;
+		opaqueDescriptors.emplace_back(0, globalMaterialDataBuffer, sizeof(MaterialData) * MaterialCache_size(m_materialCache), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		opaqueDescriptors.emplace_back(1, meshIndirectOpaqueCommandsBuffer, sizeof(MeshIndirectCommand) * opaqueCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		opaqueDescriptors.emplace_back(2, opaqueDrawsDataBuffer, sizeof(MeshDraw) * opaqueDraws.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+
+		opaque.commands = {
+			.buffer = meshIndirectOpaqueCommandsBuffer,
+			.offset = offsetof(MeshIndirectCommand, command),
+			.size = static_cast<uint32_t>(opaqueCommands.size()),
+			.stride = sizeof(MeshIndirectCommand)
+		};
+		opaque.descriptors = opaqueDescriptors;
+		opaque.descriptorSetLayout = m_modelDrawDescriptorLayout;
+
+		drawBatches.push_back(opaque);
+
+		getCurrentFrame().m_deletionQueue.push([this, opaqueDrawsDataBuffer, meshIndirectOpaqueCommandsBuffer]() {
+			destroyBuffer(opaqueDrawsDataBuffer);
+			destroyBuffer(meshIndirectOpaqueCommandsBuffer);
+		});
+	}
+
+
+	drawBatches.push_back(doubleSided);
+	drawBatches.push_back(transparent);
+
+	getCurrentFrame().drawBatches = std::move(drawBatches);
+
+	auto genTime = std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - start).count();
+	m_rendererState->rendererStats.drawBatchGenerationTimeAvg = m_rendererState->rendererStats.drawBatchGenerationTimeAvg * 0.95 + genTime * 0.05;
+
+	getCurrentFrame().m_deletionQueue.push([this, doubleSidedDrawsDataBuffer, transparentDrawsDataBuffer, meshIndirectDoubleSidedCommandsBuffer, meshIndirectTransparentCommandsBuffer]() {
+		destroyBuffer(doubleSidedDrawsDataBuffer);
+		destroyBuffer(transparentDrawsDataBuffer);
+		destroyBuffer(meshIndirectDoubleSidedCommandsBuffer);
+		destroyBuffer(meshIndirectTransparentCommandsBuffer);
+	});
+}
+
+
 void VulkanRenderer::draw(float deltaTime) {
 	updateScene(deltaTime);
 	updateUIData();
@@ -459,6 +652,10 @@ void VulkanRenderer::draw(float deltaTime) {
 	auto commandBuffer = getCurrentFrame().m_commandBuffer;
 
 	VK_CHECK(vkResetCommandBuffer(commandBuffer, 0));
+
+	std::vector<Model*> modelsToRender{};
+	modelsToRender.push_back(&loadedModels["testModel"]);
+	buildDrawBatches(modelsToRender);
 
 	auto commandBeginInfo = commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
@@ -613,125 +810,35 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 		writer.updateSet(m_device, globalDescriptor);
 	}
 
-	{
-		ModelDrawRender modelDraw = mainDrawContext.opaqueDraws;
+	// Process this frames draw batches
+	for (auto& drawBatch : getCurrentFrame().drawBatches) {
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipeline);
 
-		auto meshIndirectCommands = std::vector<MeshIndirectCommand>();
-		meshIndirectCommands.reserve(modelDraw.renderObjects.size());
-
-		std::vector<MeshDraw> meshDraws;
-		meshDraws.reserve(modelDraw.renderObjects.size());
-
-		for (auto& renderObject : modelDraw.renderObjects) {
-			meshIndirectCommands.push_back({ .drawId = renderObject.drawId,
-				.command = {
-					.indexCount = renderObject.indexCount,
-					.instanceCount = 1,
-					.firstIndex = renderObject.firstIndex,
-					.vertexOffset = renderObject.vertexOffset,
-					.firstInstance = renderObject.drawId } });
-			meshDraws.push_back({ .transform = renderObject.transform, .materialIndex = renderObject.materialIndex });
+		VkDescriptorSet drawBatchDescriptor = getCurrentFrame().m_frameDescriptors.allocate(m_device, drawBatch.descriptorSetLayout);
+		DescriptorWriter drawBatchDescriptorWriter;
+		for (auto& descriptor : drawBatch.descriptors) {
+			drawBatchDescriptorWriter.writeBuffer(descriptor.binding, descriptor.buffer.buffer, descriptor.size, descriptor.offset, descriptor.type);
 		}
-		// Create indirect commands buffer
-		auto meshIndirectCommandsBuffer = createBuffer("meshDrawCommandsBuffer", sizeof(MeshIndirectCommand) * meshIndirectCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		void* uiData = meshIndirectCommandsBuffer.allocation->GetMappedData();
-		memcpy(uiData, meshIndirectCommands.data(), sizeof(MeshIndirectCommand) * meshIndirectCommands.size());
+		drawBatchDescriptorWriter.updateSet(m_device, drawBatchDescriptor);
 
-		// Create buffer for the transform data
-		auto meshDrawsDataBuffer = createBuffer("meshTransformBuffer", sizeof(MeshDraw) * meshDraws.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		void* mtd = meshDrawsDataBuffer.allocation->GetMappedData();
-		memcpy(mtd, meshDraws.data(), sizeof(MeshDraw) * meshDraws.size());
+		// Global descriptor sets. Bindings 0 and 1 are reserved.
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 0, 1, &globalDescriptor, 0, nullptr);
+		// TODO: This might not need to be global.
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 1, 1, &bindlessTexturesDescriptorSet, 0, nullptr);
 
-		// Create draw context descriptor
-		VkDescriptorSet drawContextDescriptor = getCurrentFrame().m_frameDescriptors.allocate(m_device, m_modelDrawDescriptorLayout);
-		{
-			DescriptorWriter meshDrawDescriptorWriter;
-			meshDrawDescriptorWriter.writeBuffer(0, globalMaterialDataBuffer.buffer, sizeof(MaterialData) * globalMaterialData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-			meshDrawDescriptorWriter.writeBuffer(1, meshIndirectCommandsBuffer.buffer, sizeof(MeshIndirectCommand) * meshIndirectCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-			meshDrawDescriptorWriter.writeBuffer(2, meshDrawsDataBuffer.buffer, sizeof(MeshDraw) * meshDraws.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-			meshDrawDescriptorWriter.updateSet(m_device, drawContextDescriptor);
-		}
+		// Draw batch specific descriptor set
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 2, 1, &drawBatchDescriptor, 0, nullptr);
 
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelDraw.material->pipeline->pipeline);
-
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelDraw.material->pipeline->layout, 0, 1, &globalDescriptor, 0, nullptr);
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelDraw.material->pipeline->layout, 1, 1, &bindlessTexturesDescriptorSet, 0, nullptr);
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelDraw.material->pipeline->layout, 2, 1, &drawContextDescriptor, 0, nullptr);
-
+		// TODO: Should be included as part of a Batch
 		GPUDrawPushConstants pushConstants{};
-		pushConstants.vertexBuffer = mainDrawContext.modelBuffers->vertexBufferAddress;
+		pushConstants.vertexBuffer = drawBatch.meshBuffers->vertexBufferAddress;
 
-		vkCmdBindIndexBuffer(commandBuffer, mainDrawContext.modelBuffers->indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdPushConstants(commandBuffer, modelDraw.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
-
-		vkCmdDrawIndexedIndirect(commandBuffer, meshIndirectCommandsBuffer.buffer, offsetof(MeshIndirectCommand, command), meshIndirectCommands.size(), sizeof(MeshIndirectCommand));
-
-		getCurrentFrame().m_deletionQueue.push([meshIndirectCommandsBuffer, meshDrawsDataBuffer, this]() {
-			destroyBuffer(meshIndirectCommandsBuffer);
-			destroyBuffer(meshDrawsDataBuffer);
-		});
+		vkCmdBindIndexBuffer(commandBuffer, drawBatch.meshBuffers->indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdPushConstants(commandBuffer, drawBatch.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+		vkCmdDrawIndexedIndirect(commandBuffer, drawBatch.commands.buffer.buffer, drawBatch.commands.offset, drawBatch.commands.size, drawBatch.commands.stride);
 	}
 
-	{
-		ModelDrawRender modelDraw = mainDrawContext.transparentDraws;
-
-		auto meshIndirectCommands = std::vector<MeshIndirectCommand>();
-		meshIndirectCommands.reserve(modelDraw.renderObjects.size());
-
-		std::vector<MeshDraw> meshDraws;
-		meshDraws.reserve(modelDraw.renderObjects.size());
-
-		for (auto& renderObject : modelDraw.renderObjects) {
-			meshIndirectCommands.push_back({ .drawId = renderObject.drawId,
-				.command = {
-					.indexCount = renderObject.indexCount,
-					.instanceCount = 1,
-					.firstIndex = renderObject.firstIndex,
-					.vertexOffset = renderObject.vertexOffset,
-					.firstInstance = renderObject.drawId } });
-			meshDraws.push_back({ .transform = renderObject.transform, .materialIndex = renderObject.materialIndex });
-		}
-		// Create indirect commands buffer
-		auto meshIndirectCommandsBuffer = createBuffer("meshDrawCommandsBuffer", sizeof(MeshIndirectCommand) * meshIndirectCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		void* uiData = meshIndirectCommandsBuffer.allocation->GetMappedData();
-		memcpy(uiData, meshIndirectCommands.data(), sizeof(MeshIndirectCommand) * meshIndirectCommands.size());
-
-		// Create buffer for the transform data
-		auto meshDrawsDataBuffer = createBuffer("meshTransformBuffer", sizeof(MeshDraw) * meshDraws.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		void* mtd = meshDrawsDataBuffer.allocation->GetMappedData();
-		memcpy(mtd, meshDraws.data(), sizeof(MeshDraw) * meshDraws.size());
-
-		// Create draw context descriptor
-		VkDescriptorSet drawContextDescriptor = getCurrentFrame().m_frameDescriptors.allocate(m_device, m_modelDrawDescriptorLayout);
-		{
-			DescriptorWriter meshDrawDescriptorWriter;
-			meshDrawDescriptorWriter.writeBuffer(0, globalMaterialDataBuffer.buffer, sizeof(MaterialData) * globalMaterialData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-			meshDrawDescriptorWriter.writeBuffer(1, meshIndirectCommandsBuffer.buffer, sizeof(MeshIndirectCommand) * meshIndirectCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-			meshDrawDescriptorWriter.writeBuffer(2, meshDrawsDataBuffer.buffer, sizeof(MeshDraw) * meshDraws.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-			meshDrawDescriptorWriter.updateSet(m_device, drawContextDescriptor);
-		}
-
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelDraw.material->pipeline->pipeline);
-
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelDraw.material->pipeline->layout, 0, 1, &globalDescriptor, 0, nullptr);
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelDraw.material->pipeline->layout, 1, 1, &bindlessTexturesDescriptorSet, 0, nullptr);
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelDraw.material->pipeline->layout, 2, 1, &drawContextDescriptor, 0, nullptr);
-
-		GPUDrawPushConstants pushConstants{};
-		pushConstants.vertexBuffer = mainDrawContext.modelBuffers->vertexBufferAddress;
-
-		vkCmdBindIndexBuffer(commandBuffer, mainDrawContext.modelBuffers->indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdPushConstants(commandBuffer, modelDraw.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
-
-		vkCmdDrawIndexedIndirect(commandBuffer, meshIndirectCommandsBuffer.buffer, offsetof(MeshIndirectCommand, command), meshIndirectCommands.size(), sizeof(MeshIndirectCommand));
-
-		getCurrentFrame().m_deletionQueue.push([meshIndirectCommandsBuffer, meshDrawsDataBuffer, this]() {
-			destroyBuffer(meshIndirectCommandsBuffer);
-			destroyBuffer(meshDrawsDataBuffer);
-		});
-	}
-
-	m_rendererState->rendererStats.drawCallCount = static_cast<int32_t>(mainDrawContext.opaqueDraws.renderObjects.size() + mainDrawContext.transparentDraws.renderObjects.size());
+	m_rendererState->rendererStats.drawCallCount = static_cast<int32_t>(getCurrentFrame().drawBatches[0].commands.size + getCurrentFrame().drawBatches[1].commands.size);
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -1440,30 +1547,6 @@ void VulkanRenderer::writeBindlessTextureToGlobalDescriptor(VkDescriptorSet bind
 	vkUpdateDescriptorSets(m_device, 1, &write, 0, nullptr);
 }
 
-void MeshNode::draw(const glm::mat4& topMatrix, DrawContext& ctx) {
-	glm::mat4 nodeMatrix = topMatrix * worldTransform;
-
-	for (auto& s : mesh.primitives) {
-		RenderObject def{};
-		def.firstIndex = s.firstIndex;
-		def.vertexOffset = s.vertexOffset;
-		def.indexCount = s.indexCount;
-		def.transform = nodeMatrix;
-		def.materialIndex = s.materialIndex;
-
-		if (s.passType == MaterialPass::Transparent) {
-			def.drawId = ctx.transparentDraws.renderObjects.size();
-			ctx.transparentDraws.renderObjects.push_back(def);
-		} else {
-			def.drawId = ctx.opaqueDraws.renderObjects.size();
-			ctx.opaqueDraws.renderObjects.push_back(def);
-		}
-	}
-
-	// recurse down
-	Node::draw(topMatrix, ctx);
-}
-
 void VulkanRenderer::updateScene(float deltaTime) {
 	auto start = std::chrono::system_clock::now();
 
@@ -1484,7 +1567,7 @@ void VulkanRenderer::updateScene(float deltaTime) {
 	m_sceneData.sunlightColor = glm::vec4(1.f);
 	m_sceneData.sunlightDirection = glm::vec4(0, 1, 0.5, 1.f);
 
-	drawModel(loadedModels["testModel"], glm::mat4{ 1.f }, mainDrawContext);
+	// drawModel(loadedModels["testModel"], glm::mat4{ 1.f }, mainDrawContext);
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -1500,16 +1583,17 @@ void VulkanRenderer::updateFontData() {
 	auto h = static_cast<float>(m_rendererState->windowExtent.height);
 	fontUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
 
-	auto stats = std::format("Frametime: {:.2f}ms | GPU: {:.2f}ms | UI: {:.4f}ms | Update: {:.4f}us | MeshDraw: {:.4f}us | Triangles: {:.2f}M | DrawCall: {}",
+	auto stats = std::format("Frametime: {:.2f}ms | GPU: {:.2f}ms | UI: {:.4f}ms | Triangles: {:.2f}M | DrawCall: {}",
 		m_rendererState->rendererStats.frametime,
 		m_rendererState->rendererStats.frameGpuTimeAvg,
 		m_rendererState->rendererStats.uiFrametimeAvg,
-		m_rendererState->rendererStats.sceneUpdateTimeAvg,
-		m_rendererState->rendererStats.meshDrawTimeAvg,
 		m_rendererState->rendererStats.triangleCount * 1e-6,
 		m_rendererState->rendererStats.drawCallCount);
 
-	auto fps = std::format("FPS: {}", static_cast<int>(1000.0f / m_rendererState->rendererStats.frametime));
+	auto fps = std::format("DrawBatchGen: {:.4f}us | SceneUpdate: {:.4f}us | MeshDraw: {:.4f}us",
+		m_rendererState->rendererStats.drawBatchGenerationTimeAvg,
+		m_rendererState->rendererStats.sceneUpdateTimeAvg,
+		m_rendererState->rendererStats.meshDrawTimeAvg);
 
 	generateText(stats, fps);
 
@@ -1580,7 +1664,7 @@ void VulkanRenderer::initUI() {
 	uiUniformBuffer = createBuffer("uiUniformBuffer", sizeof(UIUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
 	auto box1 = UI::box(300.f, 200.f, { 1610.0f, 300.0f }, { 1.0f, 1.0f }, 0.0f);
-	auto box2 = UI::box(100.f, 50.f, { 400.0f, 100.0f }, { 1.0f, 1.0f }, 0.0f);
+	auto box2 = UI::box(100.f, 50.f, { 400.0f, 150.0f }, { 1.0f, 1.0f }, 0.0f);
 	auto box3 = UI::box(100.f, 100.f, { 800.0f, 600.0f }, { 1.0f, 1.0f }, 0.0f);
 	auto triangle = UI::triangle(300.f, 100.f, { 400.0f, 400.0f }, { 1.0f, 1.0f }, 0.0f);
 

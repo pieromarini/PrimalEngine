@@ -1,3 +1,4 @@
+#include "entity.h"
 #include "fastgltf/parser.hpp"
 #include "fastgltf/types.hpp"
 #include "material.h"
@@ -10,6 +11,8 @@
 #include "vulkan_renderer.h"
 #include <filesystem>
 #include <glm/gtx/quaternion.hpp>
+
+#include "geometry.h"
 
 
 namespace pm {
@@ -175,9 +178,6 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 		return {};
 	}
 
-	// Load default sampler
-	model.samplers.push_back(renderer->defaultSamplerLinear);
-
 	for (fastgltf::Sampler& sampler : gltf.samplers) {
 		VkSamplerCreateInfo samplerCreateInfo = {
 			.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -201,8 +201,6 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 
 	// temporal arrays for all the objects to use while creating the GLTF data
 	std::vector<std::shared_ptr<Node>> nodes;
-	// Set default texture
-	model.images.push_back(renderer->errorCheckerboardImage);
 
 	// load textures
 	int defaultTextureCount = 0;
@@ -218,29 +216,17 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 	}
 	std::cout << std::format("Loaded {} textures. Errors: {}\n", model.images.size(), defaultTextureCount);
 
+	// Get the offset into the material cache for this new model
+	const auto materialOffset = MaterialCache_size(renderer->m_materialCache);
 
-	// TODO: We store the data in a vector but also write directly to the buffer.
-	// 			 We don't need both and it's wasteful. We should refactor this.
-	renderer->globalMaterialData.reserve(gltf.materials.size() + 1);
-	renderer->globalMaterialDataBuffer = renderer->createBuffer("globalMaterialDataBuffer", sizeof(MaterialData) * (gltf.materials.size() + 1), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	auto sceneMaterialData = static_cast<MaterialData*>(renderer->globalMaterialDataBuffer.info.pMappedData);
-
-	// Create default material and copy it to the global material data buffer
-	auto defaultMaterial = Material_getDefaultMaterial();
-	renderer->globalMaterialData.push_back(defaultMaterial.materialData);
-	sceneMaterialData[0] = defaultMaterial.materialData;
-
-	model.materials.push_back(defaultMaterial);
-
-	// Write default texture to descriptor set and set Material pass and pipeline
-	renderer->writeBindlessTextureToGlobalDescriptor(renderer->bindlessTexturesDescriptorSet, model.images[0], model.samplers[0], 0);
-	defaultMaterial.passType = MaterialPass::MainColor;
-	defaultMaterial.pipeline = &renderer->opaquePipeline;
 
 	// Load materials
 	auto start = std::chrono::system_clock::now();
 
-	int materialDataIndex = 1;
+	// NOTE: Add new materials starting from material offset
+	uint32_t materialDataIndex = materialOffset;
+	// NOTE: Add new textures starting from 1. 0 is default texture
 	uint32_t bindlessTextureIndex = 1;
 	for (fastgltf::Material& mat : gltf.materials) {
 		Material newMat{};
@@ -274,13 +260,12 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 			auto texture = gltf.textures[textureIndex];
 			size_t img{};
 
-			// TODO: Don't like this. Should we store metadata about type of textures?
 			if (texture.basisuImageIndex.has_value()) {
-				img = gltf.textures[textureIndex].basisuImageIndex.value() + 1;
+				img = gltf.textures[textureIndex].basisuImageIndex.value();
 			} else {
-				img = gltf.textures[textureIndex].imageIndex.value() + 1;
+				img = gltf.textures[textureIndex].imageIndex.value();
 			}
-			size_t sampler = gltf.textures[textureIndex].samplerIndex.value() + 1;
+			size_t sampler = gltf.textures[textureIndex].samplerIndex.value();
 			newMat.materialData.albedoTexture = bindlessTextureIndex;
 
 			auto imageSampler = model.images[img].sampler ? model.images[img].sampler : model.samplers[sampler];
@@ -292,7 +277,6 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 
 		// write material data to buffer
 		sceneMaterialData[materialDataIndex] = newMat.materialData;
-		renderer->globalMaterialData.push_back(newMat.materialData);
 
 		// build material
 		newMat.passType = passType;
@@ -307,8 +291,15 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 
 		model.materials.push_back(newMat);
 
-		materialDataIndex++;
+		// Add new material to our global material cache. If we add it, increase index.
+		// TODO: handle indices for duplicate materials.
+		if (MaterialCache_add(renderer->m_materialCache, materialDataIndex, newMat)) {
+			materialDataIndex++;
+		}
 	}
+
+	std::vector<Mesh> meshes{};
+	meshes.reserve(gltf.meshes.size());
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -387,38 +378,39 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 			if (p.materialIndex.has_value()) {
 				newPrimitive.materialIndex = p.materialIndex.value() + 1;
 			} else {
-				newPrimitive.materialIndex = 0; // set default material
+				newPrimitive.materialIndex = 0;// set default material
 			}
 
-			newPrimitive.passType = model.materials[newPrimitive.materialIndex].passType;
+			auto mat = MaterialCache_get(renderer->m_materialCache, newPrimitive.materialIndex);
+			newPrimitive.passType = mat.passType;
 
 			newmesh.primitives.push_back(newPrimitive);
 		}
 
-		model.meshes.push_back(newmesh);
+		meshes.push_back(newmesh);
 	}
 
 	// Upload all the vertex/index data for the loaded model
 	model.modelBuffers = renderer->uploadMesh<Vertex>(indices, vertices, "modelBuffers");
 
+	std::vector<std::shared_ptr<Entity>> entities;
+
 	// load all nodes and their meshes
 	for (fastgltf::Node& node : gltf.nodes) {
-		std::shared_ptr<Node> newNode;
+		auto entity = std::make_shared<Entity>();
 
 		// find if the node has a mesh, and if it does hook it to the mesh pointer and allocate it with the meshnode class
 		if (node.meshIndex.has_value()) {
-			newNode = std::make_shared<MeshNode>();
-			dynamic_cast<MeshNode*>(newNode.get())->mesh = model.meshes[*node.meshIndex];
+			entity->mesh = std::make_shared<Mesh>(meshes[*node.meshIndex]);
 		} else {
-			newNode = std::make_shared<Node>();
+			entity->mesh = nullptr;
 		}
 
-		nodes.push_back(newNode);
-		// model.nodes[node.name.c_str()];
+		entities.push_back(entity);
 
 		std::visit(fastgltf::visitor{
 								 [&](fastgltf::Node::TransformMatrix matrix) {
-									 memcpy(&newNode->localTransform, matrix.data(), sizeof(matrix));
+									 memcpy(&entity->localTransform, matrix.data(), sizeof(matrix));
 								 },
 								 [&](fastgltf::Node::TRS transform) {
 									 glm::vec3 tl(transform.translation[0], transform.translation[1], transform.translation[2]);
@@ -429,7 +421,7 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 									 glm::mat4 rm = glm::toMat4(rot);
 									 glm::mat4 sm = glm::scale(glm::mat4(1.f), sc);
 
-									 newNode->localTransform = tm * rm * sm;
+									 entity->localTransform = tm * rm * sm;
 								 } },
 			node.transform);
 	}
@@ -437,21 +429,40 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 	// Setup transform hierarchy
 	for (int i = 0; i < gltf.nodes.size(); i++) {
 		fastgltf::Node& node = gltf.nodes[i];
-		std::shared_ptr<Node>& sceneNode = nodes[i];
+		auto& entity = entities[i];
 
 		for (auto& c : node.children) {
-			sceneNode->children.push_back(nodes[c]);
-			nodes[c]->parent = sceneNode;
+			entity->children.push_back(entities[c]);
+			entities[c]->parent = entity;
 		}
 	}
 
 	// find the top nodes, with no parents
-	for (auto& node : nodes) {
-		if (node->parent.lock() == nullptr) {
-			model.topNodes.push_back(node);
-			node->refreshTransform(glm::mat4{ 1.f });
+	std::vector<std::shared_ptr<Entity>> topEntities{};
+	for (auto& entity : entities) {
+		if (entity->parent.lock() == nullptr) {
+			topEntities.push_back(entity);
 		}
 	}
+
+	// If we only have one root, we are done
+	if (topEntities.size() == 1) {
+		model.root = std::move(topEntities[0]);
+	} else if(topEntities.size() > 1) {
+		// Create a new root entity to include all the "top nodes" from GLTF scene
+		auto rootEntity = std::make_shared<Entity>();
+		rootEntity->localTransform = glm::mat4{ 1.0f };
+		rootEntity->children.insert(rootEntity->children.begin(), topEntities.begin(), topEntities.end());
+		rootEntity->mesh = nullptr;
+		rootEntity->materialIndex = 0;
+		model.root = std::move(rootEntity);
+	} else {
+		// Error? We have no top nodes?
+		std::cout << "No top nodes?\n";
+	}
+
+	// Compute world transforms for hierarchy
+	Entity_refreshTransform(model.root, glm::mat4{ 1.0f });
 
 	return model;
 }
@@ -470,9 +481,6 @@ void drawModel(Model& model, const glm::mat4& topMatrix, DrawContext& ctx) {
 		}
 	}
 
-	for (auto& n : model.topNodes) {
-		n->draw(topMatrix, ctx);
-	}
 }
 
 void cleanupModel(VulkanRenderer* renderer, Model& model) {

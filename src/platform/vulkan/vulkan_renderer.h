@@ -1,5 +1,6 @@
 #pragma once
 
+#include "material.h"
 #include "vulkan_loader.h"
 #include <SDL3/SDL.h>
 #include <VkBootstrap.h>
@@ -37,9 +38,39 @@ struct UIIndirectCommand {
 	VkDrawIndexedIndirectCommand command;
 };
 
+struct alignas(16) MeshDraw {
+	glm::mat4 transform{};
+	uint32_t materialIndex{};
+	float padding[3]{ 0.0f, 0.0f, 0.0f };
+};
+
 struct MeshIndirectCommand {
 	uint32_t drawId;
 	VkDrawIndexedIndirectCommand command;
+};
+
+struct DrawBatchDescriptor {
+	int32_t binding;
+	AllocatedBuffer buffer;
+	uint32_t size;
+	uint32_t offset;
+	VkDescriptorType type;
+};
+
+struct DrawBatchCommands {
+	AllocatedBuffer buffer;
+	uint32_t offset;
+	uint32_t size;
+	uint32_t stride;
+};
+
+struct DrawBatch {
+	DrawBatchCommands commands{};
+	std::vector<DrawBatchDescriptor> descriptors{};
+	GPUMeshBuffers* meshBuffers{};
+	VkPipeline pipeline{};
+	VkPipelineLayout pipelineLayout{};
+	VkDescriptorSetLayout descriptorSetLayout{};
 };
 
 struct UIUniformData {
@@ -66,12 +97,15 @@ private:
 	std::deque<std::function<void()>> deletors{};
 };
 
+constexpr uint32_t FRAME_OVERLAP = 2;
+
 struct RendererStats {
 	double frametime{};
 	double frameGpuTimeAvg{};
 	double uiFrametimeAvg{};
 	double sceneUpdateTimeAvg{};
 	double meshDrawTimeAvg{};
+	double drawBatchGenerationTimeAvg{};
 
 	uint32_t triangleCount{};
 	uint32_t drawCallCount{};
@@ -98,6 +132,8 @@ struct FrameData {
 	DeletionQueue m_deletionQueue;
 
 	DescriptorAllocator m_frameDescriptors;
+
+	std::vector<DrawBatch> drawBatches{};
 };
 
 struct GPUSceneData {
@@ -114,12 +150,6 @@ struct ComputePushConstants {
 	glm::vec4 data2;
 	glm::vec4 data3;
 	glm::vec4 data4;
-};
-
-struct MeshNode : public Node {
-	Mesh mesh;
-
-	void draw(const glm::mat4& topMatrix, DrawContext& ctx) override;
 };
 
 struct RenderObject {
@@ -145,14 +175,14 @@ struct DrawContext {
 	uint32_t nodeCount = 0;
 };
 
-constexpr uint32_t FRAME_OVERLAP = 2;
-
 class VulkanRenderer {
 public:
 	void init(VulkanRendererConfig* state);
 
 	// NOTE: load some default data for our engine to draw
 	void initDefaultData();
+
+	void buildDrawBatches(std::vector<Model*>& models);
 
 	// drawing
 	void draw(float deltaTime);
@@ -210,7 +240,6 @@ public:
 
 	VkDescriptorSet materialsDescriptor;
 	AllocatedBuffer globalMaterialDataBuffer;
-	std::vector<MaterialData> globalMaterialData;
 
 	VkPhysicalDevice m_chosenGPU;
 	FrameData& getCurrentFrame() { return m_frames[m_frameNumber % FRAME_OVERLAP]; };
@@ -233,6 +262,8 @@ public:
 	MaterialPipeline opaquePipeline;
 	MaterialPipeline transparentPipeline;
 	MaterialPipeline doubleSidedPipeline;
+
+	MaterialCache m_materialCache;
 
 private:
 	void initVulkan();
