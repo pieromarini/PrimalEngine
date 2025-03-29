@@ -1,19 +1,45 @@
 #include "entity.h"
+#include <queue>
 
 namespace pm {
 
-void Entity_refreshTransform(std::shared_ptr<Entity>& entity, const glm::mat4& parentMatrix) {
+void Entity_refreshTransform(Entity* entity, const glm::mat4& parentMatrix) {
 	entity->worldTransform = parentMatrix * entity->localTransform;
 	for (auto c : entity->children) {
 		Entity_refreshTransform(c, entity->worldTransform);
 	}
 }
 
-void Entity_flattenHierarchy(std::shared_ptr<Entity>& entity, const glm::mat4& parentMatrix, std::vector<std::shared_ptr<Entity>>& flatEntities) {
-	entity->worldTransform = parentMatrix * entity->localTransform;
-	flatEntities.push_back(entity);
-	for (auto c : entity->children) {
-		Entity_flattenHierarchy(c, entity->worldTransform, flatEntities);
+void Entity_flattenHierarchyNoTransform(Entity* entity, std::vector<Entity*>& flatEntities) {
+	std::queue<Entity*> q;
+	q.push(entity);
+
+	while (!q.empty()) {
+		auto& e = q.front();
+		q.pop();
+		flatEntities.push_back(e);
+		for (auto c : e->children) {
+			q.push(c);
+		}
+	}
+}
+
+void Entity_flattenHierarchy(Entity* entity, const glm::mat4& parentMatrix, std::vector<Entity*>& flatEntities) {
+	std::queue<Entity*> q;
+	q.push(entity);
+
+	while (!q.empty()) {
+		auto& e = q.front();
+		q.pop();
+		if (e->parent) {
+			e->worldTransform = e->parent->worldTransform * e->localTransform;
+		} else {
+			e->worldTransform = parentMatrix * e->localTransform;
+		}
+		flatEntities.push_back(e);
+		for (auto c : e->children) {
+			q.push(c);
+		}
 	}
 }
 

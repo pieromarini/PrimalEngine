@@ -14,7 +14,7 @@ class VulkanRenderer;
 
 struct Model {
 	GPUMeshBuffers modelBuffers;// TODO: this should be moved out.
-	std::shared_ptr<Entity> root;
+	Entity* root;
 	std::vector<AllocatedImage> images;
 	std::vector<VkSampler> samplers;
 	std::vector<Material> materials;
@@ -22,8 +22,8 @@ struct Model {
 
 
 std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePath);
-void drawModel(Model& model, const glm::mat4& topMatrix, DrawContext& ctx);
 void cleanupModel(VulkanRenderer* renderer, Model& model);
+void cleanupModelEntities(Entity* root);
 
 std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asset& asset, fastgltf::Image& image);
 

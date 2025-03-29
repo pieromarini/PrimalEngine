@@ -105,6 +105,7 @@ struct RendererStats {
 	double uiFrametimeAvg{};
 	double sceneUpdateTimeAvg{};
 	double meshDrawTimeAvg{};
+	double entityFlattenTimeAvg{};
 	double drawBatchGenerationTimeAvg{};
 
 	uint32_t triangleCount{};
@@ -167,14 +168,6 @@ struct ModelDrawRender {
 	std::vector<RenderObject> renderObjects{};
 };
 
-struct DrawContext {
-	ModelDrawRender opaqueDraws{};
-	ModelDrawRender transparentDraws{};
-
-	GPUMeshBuffers* modelBuffers;
-	uint32_t nodeCount = 0;
-};
-
 class VulkanRenderer {
 public:
 	void init(VulkanRendererConfig* state);
@@ -213,8 +206,6 @@ public:
 	AllocatedImage m_depthImage;
 
 	DeletionQueue m_mainDeletionQueue;
-
-	DrawContext mainDrawContext;
 
 	// Font Rendering
 	void generateText(std::string stats, std::string fps);

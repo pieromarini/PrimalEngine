@@ -20,12 +20,13 @@ struct Entity {
 	// Scene Hierarchy
 	glm::mat4 localTransform{};
 	glm::mat4 worldTransform{};
-	std::weak_ptr<Entity> parent{};
-	std::vector<std::shared_ptr<Entity>> children{};
+	Entity* parent{};
+	std::vector<Entity*> children{};
 };
 
-void Entity_refreshTransform(std::shared_ptr<Entity>& entity, const glm::mat4& parentMatrix);
-void Entity_flattenHierarchy(std::shared_ptr<Entity>& entity, const glm::mat4& parentMatrix, std::vector<std::shared_ptr<Entity>>& flatEntities);
+void Entity_refreshTransform(Entity* entity, const glm::mat4& parentMatrix);
+void Entity_flattenHierarchyNoTransform(Entity* entity, std::vector<Entity*>& flatEntities);
+void Entity_flattenHierarchy(Entity* entity, const glm::mat4& parentMatrix, std::vector<Entity*>& flatEntities);
 
 using EntityStorage = std::unordered_map<EntityId, Entity>;
 

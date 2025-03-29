@@ -2,6 +2,7 @@
 #include "fastgltf/parser.hpp"
 #include "fastgltf/types.hpp"
 #include "material.h"
+#include <ratio>
 #include <vulkan/vulkan_core.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -178,6 +179,7 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 		return {};
 	}
 
+	// Sampler loading
 	for (fastgltf::Sampler& sampler : gltf.samplers) {
 		VkSamplerCreateInfo samplerCreateInfo = {
 			.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -199,11 +201,9 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 		model.samplers.push_back(newSampler);
 	}
 
-	// temporal arrays for all the objects to use while creating the GLTF data
-	std::vector<std::shared_ptr<Node>> nodes;
-
-	// load textures
+	// Texture loading
 	int defaultTextureCount = 0;
+	auto textureStartTime = std::chrono::system_clock::now();
 	for (fastgltf::Image& image : gltf.images) {
 		auto img = loadImage(renderer, gltf, image);
 		if (img.has_value()) {
@@ -214,15 +214,16 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 			std::cout << "gltf failed to load texture " << image.name << '\n';
 		}
 	}
-	std::cout << std::format("Loaded {} textures. Errors: {}\n", model.images.size(), defaultTextureCount);
+	auto textureLoadTime = std::chrono::duration<double, std::milli>(std::chrono::system_clock::now() - textureStartTime).count();
+	std::cout << std::format("Loaded {} textures in {:.4f}ms. Errors: {}\n", model.images.size(), textureLoadTime, defaultTextureCount);
 
-	// Get the offset into the material cache for this new model
+
+	// Material processing
+
 	const auto materialOffset = MaterialCache_size(renderer->m_materialCache);
-
 	auto sceneMaterialData = static_cast<MaterialData*>(renderer->globalMaterialDataBuffer.info.pMappedData);
 
-	// Load materials
-	auto start = std::chrono::system_clock::now();
+	auto materialStartTime = std::chrono::system_clock::now();
 
 	// NOTE: Add new materials starting from material offset
 	uint32_t materialDataIndex = materialOffset;
@@ -298,12 +299,14 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 		}
 	}
 
+	auto materialLoadTime = std::chrono::duration<double, std::micro>(std::chrono::system_clock::now() - materialStartTime).count();
+	std::cout << std::format("Loaded {} materials in {:.4f}us\n", model.materials.size(), materialLoadTime);
+
+	// Geometry processing
 	std::vector<Mesh> meshes{};
 	meshes.reserve(gltf.meshes.size());
 
-	auto end = std::chrono::system_clock::now();
-	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-	std::cout << std::format("Loaded {} materials in {} us\n", model.materials.size(), elapsed.count());
+	auto geometryProcessingStart = std::chrono::system_clock::now();
 
 	std::vector<uint32_t> indices;
 	std::vector<Vertex> vertices;
@@ -389,15 +392,20 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 
 		meshes.push_back(newmesh);
 	}
+	auto geometryProcessingTime = std::chrono::duration<double>(std::chrono::system_clock::now() - geometryProcessingStart).count();
 
-	// Upload all the vertex/index data for the loaded model
+	auto geometryUploadStart = std::chrono::system_clock::now();
 	model.modelBuffers = renderer->uploadMesh<Vertex>(indices, vertices, "modelBuffers");
+	auto geometryUploadTime = std::chrono::duration<double, std::milli>(std::chrono::system_clock::now() - geometryUploadStart).count();
+	std::cout << std::format("Loaded {} meshes in {:.4f}s. Uploaded buffers in {:.4f}ms\n", meshes.size(), geometryProcessingTime, geometryUploadTime);
 
-	std::vector<std::shared_ptr<Entity>> entities;
+	std::vector<Entity*> entities;
 
+	// Entity processing
+	auto entityStartTime = std::chrono::system_clock::now();
 	// load all nodes and their meshes
 	for (fastgltf::Node& node : gltf.nodes) {
-		auto entity = std::make_shared<Entity>();
+		auto entity = new Entity();
 
 		// find if the node has a mesh, and if it does hook it to the mesh pointer and allocate it with the meshnode class
 		if (node.meshIndex.has_value()) {
@@ -438,9 +446,9 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 	}
 
 	// find the top nodes, with no parents
-	std::vector<std::shared_ptr<Entity>> topEntities{};
+	std::vector<Entity*> topEntities{};
 	for (auto& entity : entities) {
-		if (entity->parent.lock() == nullptr) {
+		if (entity->parent == nullptr) {
 			topEntities.push_back(entity);
 		}
 	}
@@ -450,7 +458,7 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 		model.root = std::move(topEntities[0]);
 	} else if(topEntities.size() > 1) {
 		// Create a new root entity to include all the "top nodes" from GLTF scene
-		auto rootEntity = std::make_shared<Entity>();
+		auto rootEntity = new Entity();
 		rootEntity->localTransform = glm::mat4{ 1.0f };
 		rootEntity->children.insert(rootEntity->children.begin(), topEntities.begin(), topEntities.end());
 		rootEntity->mesh = nullptr;
@@ -461,26 +469,11 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 		std::cout << "No top nodes?\n";
 	}
 
-	// Compute world transforms for hierarchy
-	Entity_refreshTransform(model.root, glm::mat4{ 1.0f });
+	auto entitiesLoadTime = std::chrono::duration<double, std::milli>(std::chrono::system_clock::now() - entityStartTime).count();
+	std::cout << std::format("Loaded {} Entities in {:.4f}ms\n", entities.size(), entitiesLoadTime);
+
 
 	return model;
-}
-
-void drawModel(Model& model, const glm::mat4& topMatrix, DrawContext& ctx) {
-	// Initialize draw context
-	// TODO: This is just a hack for now. We should group materials by Pipeline.
-	// 			 Right now we only have 2 pipelines: one for Opaques and one for alpha-blended (we should have one more for transparent objects)
-	ctx.modelBuffers = &model.modelBuffers;
-	for (auto& material : model.materials) {
-		ModelDrawRender modelDrawRender{ .material = &material };
-		if (material.passType == MaterialPass::Transparent) {
-			ctx.transparentDraws = modelDrawRender;
-		} else {
-			ctx.opaqueDraws = modelDrawRender;
-		}
-	}
-
 }
 
 void cleanupModel(VulkanRenderer* renderer, Model& model) {
@@ -488,6 +481,8 @@ void cleanupModel(VulkanRenderer* renderer, Model& model) {
 
 	renderer->destroyBuffer(model.modelBuffers.indexBuffer);
 	renderer->destroyBuffer(model.modelBuffers.vertexBuffer);
+
+	cleanupModelEntities(model.root);
 
 	for (auto& image : model.images) {
 		if (image.image == renderer->errorCheckerboardImage.image) {
@@ -503,6 +498,16 @@ void cleanupModel(VulkanRenderer* renderer, Model& model) {
 
 	// TODO: should be handled by the renderer
 	renderer->destroyBuffer(renderer->globalMaterialDataBuffer);
+}
+
+// Flatten the hierarchy and delete all entities
+void cleanupModelEntities(Entity* root) {
+	std::vector<Entity*> flatEntities{};
+	Entity_flattenHierarchyNoTransform(root, flatEntities);
+
+	for (auto& entity : flatEntities) {
+		delete entity;
+	}
 }
 
 }// namespace pm
