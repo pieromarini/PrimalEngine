@@ -38,6 +38,7 @@ PrimalApp::PrimalApp() {
 	m_mainCamera->position = glm::vec3(-15.f, 3.5f, -1.1f);
 	m_mainCamera->yaw = -4.61;
 	m_mainCamera->pitch = -0.024;
+	m_mainCamera->setMouseControlEnabled(windowRelativeMouseMode);
 
 	m_rendererState = {
 		.useValidationLayers = true,
@@ -86,6 +87,9 @@ void PrimalApp::run() {
 				if (e.key.key == SDLK_ESCAPE) {
 					windowRelativeMouseMode = !windowRelativeMouseMode;
 					SDL_SetWindowRelativeMouseMode(m_window, windowRelativeMouseMode);
+
+					// Disable camera panning when relative mouse mode is disabled
+					m_mainCamera->setMouseControlEnabled(windowRelativeMouseMode);
 				}
 			}
 

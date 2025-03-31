@@ -40,6 +40,10 @@ void Camera::update(float deltaTime) {
 	position += glm::vec3(cameraRotation * glm::vec4(velocity * 0.01f * deltaTime, 0.f));
 }
 
+void Camera::setMouseControlEnabled(bool flag) {
+	cameraMouseControlEnabled = flag;
+}
+
 void Camera::processSDLEvent(SDL_Event& e) {
 	if (e.type == SDL_EVENT_KEY_DOWN) {
 		if (e.key.key == SDLK_W) {
@@ -71,7 +75,7 @@ void Camera::processSDLEvent(SDL_Event& e) {
 		}
 	}
 
-	if (e.type == SDL_EVENT_MOUSE_MOTION) {
+	if (cameraMouseControlEnabled && e.type == SDL_EVENT_MOUSE_MOTION) {
 		yaw += (float)e.motion.xrel / 200.f;
 		pitch -= (float)e.motion.yrel / 200.f;
 	}

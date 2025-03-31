@@ -23,11 +23,15 @@ public:
 
 	void onWindowResize(uint32_t width, uint32_t height);
 
+	void setMouseControlEnabled(bool flag);
+
 	uint32_t windowWidth, windowHeight;
 	glm::vec3 velocity{};
 	glm::vec3 position{};
 	float pitch{ 0.f };
 	float yaw{ 0.f };
+
+	bool cameraMouseControlEnabled{ true };
 };
 
 }// namespace pm
