@@ -14,6 +14,8 @@
 #include "vulkan_descriptor.h"
 #include "vulkan_texture.h"
 
+#include "ui/ui_manager.h"
+
 namespace pm {
 
 struct FontUniformData {
@@ -28,7 +30,7 @@ struct FontUniformData {
 };
 
 struct UIPushConstants {
-	VkDeviceAddress vertexBufferAddress;
+	VkDeviceAddress vertexBuffer;
 };
 
 
@@ -56,6 +58,14 @@ struct DrawBatchDescriptor {
 	uint32_t offset;
 	VkDescriptorType type;
 };
+struct DrawBatchImageDescriptor {
+	int32_t binding;
+	// TODO: replace with AllocatedImage when refactoring the SDF loading code.
+	VkImageView imageView;
+	VkSampler sampler;
+	VkImageLayout imageLayout;
+	VkDescriptorType type;
+};
 
 struct DrawBatchCommands {
 	AllocatedBuffer buffer;
@@ -67,7 +77,8 @@ struct DrawBatchCommands {
 struct DrawBatch {
 	DrawBatchCommands commands{};
 	std::vector<DrawBatchDescriptor> descriptors{};
-	GPUMeshBuffers* meshBuffers{};
+	std::vector<DrawBatchImageDescriptor> imageDescriptors{};
+	GPUMeshBuffers meshBuffers{};
 	VkPipeline pipeline{};
 	VkPipelineLayout pipelineLayout{};
 	VkDescriptorSetLayout descriptorSetLayout{};
@@ -105,8 +116,13 @@ struct RendererStats {
 	double uiFrametimeAvg{};
 	double sceneUpdateTimeAvg{};
 	double meshDrawTimeAvg{};
+
+	// 3D draw batch generation
 	double entityFlattenTimeAvg{};
 	double drawBatchGenerationTimeAvg{};
+
+	// UI draw batch generation
+	double uiDrawBatchGenerationTimeAvg{};
 
 	uint32_t triangleCount{};
 	uint32_t drawCallCount{};
@@ -135,6 +151,7 @@ struct FrameData {
 	DescriptorAllocator m_frameDescriptors;
 
 	std::vector<DrawBatch> drawBatches{};
+	std::vector<DrawBatch> uiDrawBatches{};
 };
 
 struct GPUSceneData {
@@ -176,6 +193,7 @@ public:
 	void initDefaultData();
 
 	void buildDrawBatches(std::vector<Model*>& models);
+	void buildUIDrawBatches(UI::UIRenderContext& renderInfo);
 
 	// drawing
 	void draw(float deltaTime);
@@ -208,7 +226,6 @@ public:
 	DeletionQueue m_mainDeletionQueue;
 
 	// Font Rendering
-	void generateText(std::string stats, std::string fps);
 	void updateScene(float deltaTime);
 	void updateFontData();
 	void updateUIData();
@@ -347,6 +364,9 @@ private:
 	float physicalDeviceTimestampPeriod{};
 	VkQueryPool timestampPool;
 	VkQueryPool pipelineStatisticsPool;
+
+	// UI
+	UI::UIRenderContext debugUIRenderContext;
 };
 
 }// namespace pm

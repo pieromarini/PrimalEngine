@@ -1,8 +1,8 @@
-#include <ratio>
+#include "config.h"
 #include <algorithm>
 #include <iterator>
+#include <ratio>
 #include <vulkan/vulkan_core.h>
-#include "config.h"
 
 #define VMA_LEAK_LOG_FORMAT(format, ...) \
 	do {                                   \
@@ -30,34 +30,6 @@
 namespace pm {
 
 // Temporary. Commands should be generated in the GPU.
-void generateUIIndirectDrawCommands(std::vector<UIElement>& elements, std::vector<UIIndirectCommand>& drawCommands, std::vector<glm::mat4>& transformData) {
-	drawCommands.reserve(elements.size());
-	transformData.reserve(elements.size());
-
-	uint32_t firstIndex = 0;
-	int32_t vertexOffset = 0;
-	for (uint32_t i = 0; i < elements.size(); ++i) {
-		auto& textElement = elements.at(i);
-
-		auto transform = glm::mat4(1.0f);
-		transform = glm::translate(transform, glm::vec3(textElement.position.x, textElement.position.y, 0.0f));
-		// transform = glm::rotate(transform, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		transform = glm::scale(transform, glm::vec3(textElement.width, textElement.height, 1.0f));
-		transformData.push_back(transform);
-
-		drawCommands.push_back({ .drawId = i,
-			.command = {
-				.indexCount = static_cast<uint32_t>(textElement.indices.size()),
-				.instanceCount = 1,
-				.firstIndex = firstIndex,
-				.vertexOffset = vertexOffset,
-				.firstInstance = i } });
-
-		firstIndex += textElement.indices.size();
-		vertexOffset += static_cast<int32_t>(textElement.vertices.size());
-	}
-}
-
 void VulkanRenderer::init(VulkanRendererConfig* state) {
 	m_rendererState = state;
 	initVulkan();
@@ -457,6 +429,146 @@ void VulkanRenderer::cleanup() {
 	vkDestroyInstance(m_instance, nullptr);
 }
 
+void VulkanRenderer::buildUIDrawBatches(UI::UIRenderContext& renderInfo) {
+	auto start = std::chrono::system_clock::now();
+
+	getCurrentFrame().uiDrawBatches.clear();
+
+	// Process UI elements
+	std::vector<glm::mat4> transformData;
+	transformData.reserve(renderInfo.elements.size());
+
+	std::vector<UIIndirectCommand> drawCommands;
+	drawCommands.reserve(renderInfo.elements.size());
+
+	DrawBatch uiDrawBatch{};
+
+	auto uiMeshBuffers = uploadMesh<UIVertex>(renderInfo.indices, renderInfo.vertices, "uiMeshBuffers");
+
+	uiDrawBatch.meshBuffers = uiMeshBuffers;
+	uiDrawBatch.pipeline = uiPipeline;
+	uiDrawBatch.pipelineLayout = uiPipelineLayout;
+
+	for (uint32_t i = 0; i < renderInfo.elements.size(); ++i) {
+		auto& uiElement = renderInfo.elements.at(i);
+
+		auto transform = glm::mat4(1.0f);
+		transform = glm::translate(transform, glm::vec3(uiElement.position.x, uiElement.position.y, 0.0f));
+		transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+		transform = glm::scale(transform, glm::vec3(uiElement.width, uiElement.height, 1.0f));
+		transformData.push_back(transform);
+
+		drawCommands.push_back({ .drawId = i,
+			.command = {
+				.indexCount = uiElement.indexCount,
+				.instanceCount = 1,
+				.firstIndex = uiElement.firstIndex,
+				.vertexOffset = uiElement.vertexOffset,
+				.firstInstance = i } });
+	}
+
+	auto uiDrawCommandsBuffer = createBuffer("uiIndirectCommandBuffer", sizeof(UIIndirectCommand) * drawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	void* drawData = uiDrawCommandsBuffer.allocation->GetMappedData();
+	memcpy(drawData, drawCommands.data(), sizeof(UIIndirectCommand) * drawCommands.size());
+
+	auto uiTransformDataBuffer = createBuffer("uiTransformBuffer", sizeof(glm::mat4) * transformData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	void* td = uiTransformDataBuffer.allocation->GetMappedData();
+	memcpy(td, transformData.data(), sizeof(glm::mat4) * transformData.size());
+
+	uiDrawBatch.commands = {
+		.buffer = uiDrawCommandsBuffer,
+		.offset = offsetof(UIIndirectCommand, command),
+		.size = static_cast<uint32_t>(drawCommands.size()),
+		.stride = sizeof(UIIndirectCommand)
+	};
+
+	std::vector<DrawBatchDescriptor> descriptors;
+	descriptors.emplace_back(0, uiUniformBuffer, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	descriptors.emplace_back(1, uiDrawCommandsBuffer, sizeof(UIIndirectCommand) * drawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+	descriptors.emplace_back(2, uiTransformDataBuffer, sizeof(glm::mat4) * transformData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+
+	uiDrawBatch.descriptors = descriptors;
+	uiDrawBatch.descriptorSetLayout = uiDescriptorLayout;
+
+	getCurrentFrame().uiDrawBatches.push_back(uiDrawBatch);
+
+	// Process text elements
+	transformData.clear();
+	transformData.reserve(renderInfo.textElements.size());
+
+	drawCommands.clear();
+	drawCommands.reserve(renderInfo.textElements.size());
+	DrawBatch textDrawBatch{};
+
+	auto textMeshBuffers = uploadMesh<UIVertex>(renderInfo.indices, renderInfo.vertices, "textMeshBuffers");
+
+	textDrawBatch.meshBuffers = textMeshBuffers;
+	textDrawBatch.pipeline = fontPipeline;
+	textDrawBatch.pipelineLayout = fontPipelineLayout;
+
+	for (uint32_t i = 0; i < renderInfo.textElements.size(); ++i) {
+		auto& textElement = renderInfo.textElements.at(i);
+
+		auto transform = glm::mat4(1.0f);
+		transform = glm::translate(transform, glm::vec3(textElement.position.x, textElement.position.y, 0.0f));
+		transform = glm::rotate(transform, glm::radians(textElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+		transform = glm::scale(transform, glm::vec3(textElement.width, textElement.height, 1.0f));
+		transformData.push_back(transform);
+
+		drawCommands.push_back({ .drawId = i,
+			.command = {
+				.indexCount = textElement.indexCount,
+				.instanceCount = 1,
+				.firstIndex = textElement.firstIndex,
+				.vertexOffset = textElement.vertexOffset,
+				.firstInstance = i } });
+	}
+
+	auto textDrawCommandsBuffer = createBuffer("textIndirectCommandBuffer", sizeof(UIIndirectCommand) * drawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	void* tdd = textDrawCommandsBuffer.allocation->GetMappedData();
+	memcpy(tdd, drawCommands.data(), sizeof(UIIndirectCommand) * drawCommands.size());
+
+	auto textTransformDataBuffer = createBuffer("textTransformBuffer", sizeof(glm::mat4) * transformData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	void* ttd = textTransformDataBuffer.allocation->GetMappedData();
+	memcpy(ttd, transformData.data(), sizeof(glm::mat4) * transformData.size());
+
+	textDrawBatch.commands = {
+		.buffer = textDrawCommandsBuffer,
+		.offset = offsetof(UIIndirectCommand, command),
+		.size = static_cast<uint32_t>(drawCommands.size()),
+		.stride = sizeof(UIIndirectCommand)
+	};
+
+	std::vector<DrawBatchDescriptor> textDescriptors;
+	textDescriptors.emplace_back(0, fontUniformBuffer, sizeof(FontUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	textDescriptors.emplace_back(2, textDrawCommandsBuffer, sizeof(UIIndirectCommand) * drawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+	textDescriptors.emplace_back(3, textTransformDataBuffer, sizeof(glm::mat4) * transformData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+
+	std::vector<DrawBatchImageDescriptor> textImageDescriptors;
+	textImageDescriptors.emplace_back(1, fontSDF.view, fontSDF.sampler, fontSDF.imageLayout, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+
+	textDrawBatch.descriptors = textDescriptors;
+	textDrawBatch.imageDescriptors = textImageDescriptors;
+	textDrawBatch.descriptorSetLayout = fontDescriptorLayout;
+
+	getCurrentFrame().uiDrawBatches.push_back(textDrawBatch);
+
+	getCurrentFrame().m_deletionQueue.push([this, uiDrawCommandsBuffer, uiTransformDataBuffer, uiMeshBuffers, textDrawCommandsBuffer, textTransformDataBuffer, textMeshBuffers]() {
+		destroyBuffer(uiDrawCommandsBuffer);
+		destroyBuffer(uiTransformDataBuffer);
+		destroyBuffer(textDrawCommandsBuffer);
+		destroyBuffer(textTransformDataBuffer);
+		destroyBuffer(uiMeshBuffers.vertexBuffer);
+		destroyBuffer(uiMeshBuffers.indexBuffer);
+		destroyBuffer(textMeshBuffers.vertexBuffer);
+		destroyBuffer(textMeshBuffers.indexBuffer);
+	});
+
+	auto genTime = std::chrono::duration<double, std::micro>(std::chrono::system_clock::now() - start).count();
+
+	m_rendererState->rendererStats.uiDrawBatchGenerationTimeAvg = m_rendererState->rendererStats.uiDrawBatchGenerationTimeAvg * 0.95 + genTime * 0.05;
+}
+
 void VulkanRenderer::buildDrawBatches(std::vector<Model*>& models) {
 	getCurrentFrame().drawBatches.clear();
 
@@ -477,17 +589,17 @@ void VulkanRenderer::buildDrawBatches(std::vector<Model*>& models) {
 
 		auto startGen = std::chrono::high_resolution_clock::now();
 		DrawBatch opaque{};
-		opaque.meshBuffers = &model->modelBuffers;
+		opaque.meshBuffers = model->modelBuffers;
 		opaque.pipeline = opaquePipeline.pipeline;
 		opaque.pipelineLayout = opaquePipeline.layout;
 
 		DrawBatch transparent{};
-		transparent.meshBuffers = &model->modelBuffers;
+		transparent.meshBuffers = model->modelBuffers;
 		transparent.pipeline = transparentPipeline.pipeline;
 		transparent.pipelineLayout = transparentPipeline.layout;
 
 		DrawBatch doubleSided{};
-		doubleSided.meshBuffers = &model->modelBuffers;
+		doubleSided.meshBuffers = model->modelBuffers;
 		doubleSided.pipeline = doubleSidedPipeline.pipeline;
 		doubleSided.pipelineLayout = doubleSidedPipeline.layout;
 
@@ -836,9 +948,9 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 
 		// TODO: Should be included as part of a Batch
 		GPUDrawPushConstants pushConstants{};
-		pushConstants.vertexBuffer = drawBatch.meshBuffers->vertexBufferAddress;
+		pushConstants.vertexBuffer = drawBatch.meshBuffers.vertexBufferAddress;
 
-		vkCmdBindIndexBuffer(commandBuffer, drawBatch.meshBuffers->indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdBindIndexBuffer(commandBuffer, drawBatch.meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdPushConstants(commandBuffer, drawBatch.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 		vkCmdDrawIndexedIndirect(commandBuffer, drawBatch.commands.buffer.buffer, drawBatch.commands.offset, drawBatch.commands.size, drawBatch.commands.stride);
 	}
@@ -848,100 +960,37 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
-	// Text rendering
-	auto uiStart = std::chrono::system_clock::now();
-
-	auto textDrawCommands = std::vector<UIIndirectCommand>();
-	auto textTransformData = std::vector<glm::mat4>();
-
-	generateUIIndirectDrawCommands(textElements, textDrawCommands, textTransformData);
-
-	// Create buffers for font mesh data
-	auto fontMeshBuffers = uploadMesh<UIVertex>(fontIndices, fontVertices, "fontMeshBuffers");
-
-	// Set Vertex buffer address
-	UIPushConstants uiPushConstants{};
-	uiPushConstants.vertexBufferAddress = fontMeshBuffers.vertexBufferAddress;
-
-	// Create buffer for the draw commands
-	auto textDrawCommandsBuffer = createBuffer("textDrawCommandsBuffer", sizeof(UIIndirectCommand) * textDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-	void* data = textDrawCommandsBuffer.allocation->GetMappedData();
-	memcpy(data, textDrawCommands.data(), sizeof(UIIndirectCommand) * textDrawCommands.size());
-
-	// Create buffer for the transform data
-	auto textTransformDataBuffer = createBuffer("textTransformBuffer", sizeof(glm::mat4) * textTransformData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-	void* d = textTransformDataBuffer.allocation->GetMappedData();
-	memcpy(d, textTransformData.data(), sizeof(glm::mat4) * textTransformData.size());
-
-	{
-		DescriptorWriter textDescriptorWriter;
-		textDescriptorWriter.writeBuffer(0, fontUniformBuffer.buffer, sizeof(FontUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-		textDescriptorWriter.writeImage(1, fontSDF.view, fontSDF.sampler, fontSDF.imageLayout, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-		textDescriptorWriter.writeBuffer(2, textDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * textDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		textDescriptorWriter.writeBuffer(3, textTransformDataBuffer.buffer, sizeof(glm::mat4) * textTransformData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		textDescriptorWriter.updateSet(m_device, fontDescriptorSet);
-	}
-
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, fontPipelineLayout, 0, 1, &fontDescriptorSet, 0, nullptr);
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, fontPipeline);
-
-	vkCmdPushConstants(commandBuffer, fontPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
-	vkCmdBindIndexBuffer(commandBuffer, fontMeshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-	vkCmdDrawIndexedIndirect(commandBuffer, textDrawCommandsBuffer.buffer, offsetof(UIIndirectCommand, command), textDrawCommands.size(), sizeof(UIIndirectCommand));
-
 	// UI rendering
-	auto uiDrawCommands = std::vector<UIIndirectCommand>();
-	auto uiTransformData = std::vector<glm::mat4>();
 
-	generateUIIndirectDrawCommands(uiElements, uiDrawCommands, uiTransformData);
+	buildUIDrawBatches(debugUIRenderContext);
 
-	// Create buffers for ui mesh data
-	auto uiMeshBuffers = uploadMesh<UIVertex>(uiIndices, uiVertices, "uiMeshBuffers");
+	auto uiStart = std::chrono::system_clock::now();
+	for (auto& drawBatch : getCurrentFrame().uiDrawBatches) {
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipeline);
 
-	// Set Vertex buffer address
-	uiPushConstants.vertexBufferAddress = uiMeshBuffers.vertexBufferAddress;
+		VkDescriptorSet drawBatchDescriptor = getCurrentFrame().m_frameDescriptors.allocate(m_device, drawBatch.descriptorSetLayout);
+		DescriptorWriter drawBatchDescriptorWriter;
+		for (auto& descriptor : drawBatch.descriptors) {
+			drawBatchDescriptorWriter.writeBuffer(descriptor.binding, descriptor.buffer.buffer, descriptor.size, descriptor.offset, descriptor.type);
+		}
+		for (auto& descriptor : drawBatch.imageDescriptors) {
+			drawBatchDescriptorWriter.writeImage(descriptor.binding, descriptor.imageView, descriptor.sampler, descriptor.imageLayout, descriptor.type);
+		}
+		drawBatchDescriptorWriter.updateSet(m_device, drawBatchDescriptor);
 
-	// Create buffer for the draw commands
-	auto uiDrawCommandsBuffer = createBuffer("uiDrawCommandsBuffer", sizeof(UIIndirectCommand) * uiDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-	void* uiData = uiDrawCommandsBuffer.allocation->GetMappedData();
-	memcpy(uiData, uiDrawCommands.data(), sizeof(UIIndirectCommand) * uiDrawCommands.size());
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 0, 1, &drawBatchDescriptor, 0, nullptr);
 
-	// Create buffer for the transform data
-	auto uiTransformDataBuffer = createBuffer("uiTransformBuffer", sizeof(glm::mat4) * uiTransformData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-	void* uiD = uiTransformDataBuffer.allocation->GetMappedData();
-	memcpy(uiD, uiTransformData.data(), sizeof(glm::mat4) * uiTransformData.size());
+		// TODO: Should be included as part of a Batch
+		UIPushConstants uiPushConstants{};
+		uiPushConstants.vertexBuffer = drawBatch.meshBuffers.vertexBufferAddress;
 
-	// Write command buffer to UI descriptor layout
-	{
-		DescriptorWriter uiDescriptorWriter;
-		uiDescriptorWriter.writeBuffer(0, uiUniformBuffer.buffer, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-		uiDescriptorWriter.writeBuffer(1, uiDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * uiDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		uiDescriptorWriter.writeBuffer(2, uiTransformDataBuffer.buffer, sizeof(glm::mat4) * uiTransformData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		uiDescriptorWriter.updateSet(m_device, uiDescriptorSet);
+		vkCmdBindIndexBuffer(commandBuffer, drawBatch.meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdPushConstants(commandBuffer, drawBatch.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
+		vkCmdDrawIndexedIndirect(commandBuffer, drawBatch.commands.buffer.buffer, drawBatch.commands.offset, drawBatch.commands.size, drawBatch.commands.stride);
 	}
-
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, uiPipelineLayout, 0, 1, &uiDescriptorSet, 0, nullptr);
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, uiPipeline);
-
-	vkCmdPushConstants(commandBuffer, uiPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
-	vkCmdBindIndexBuffer(commandBuffer, uiMeshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-	vkCmdDrawIndexedIndirect(commandBuffer, uiDrawCommandsBuffer.buffer, offsetof(UIIndirectCommand, command), uiDrawCommands.size(), sizeof(UIIndirectCommand));
 
 	auto uiEnd = std::chrono::system_clock::now();
 	auto uiElapsed = std::chrono::duration_cast<std::chrono::microseconds>(uiEnd - uiStart);
-
-	getCurrentFrame().m_deletionQueue.push([textDrawCommandsBuffer, textTransformDataBuffer, uiDrawCommandsBuffer, uiTransformDataBuffer, fontMeshBuffers, uiMeshBuffers, this] {
-		destroyBuffer(textDrawCommandsBuffer);
-		destroyBuffer(textTransformDataBuffer);
-		destroyBuffer(uiDrawCommandsBuffer);
-		destroyBuffer(uiTransformDataBuffer);
-
-		// This is very hacky but it correctly deletes the buffers
-		destroyBuffer(fontMeshBuffers.indexBuffer);
-		destroyBuffer(fontMeshBuffers.vertexBuffer);
-		destroyBuffer(uiMeshBuffers.indexBuffer);
-		destroyBuffer(uiMeshBuffers.vertexBuffer);
-	});
 
 	vkCmdEndRendering(commandBuffer);
 
@@ -1584,21 +1633,6 @@ void VulkanRenderer::updateFontData() {
 	auto h = static_cast<float>(m_rendererState->windowExtent.height);
 	fontUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
 
-	auto stats = std::format("Frametime: {:.2f}ms | GPU: {:.2f}ms | UI: {:.4f}ms | Triangles: {:.2f}M | DrawCall: {}",
-		m_rendererState->rendererStats.frametime,
-		m_rendererState->rendererStats.frameGpuTimeAvg,
-		m_rendererState->rendererStats.uiFrametimeAvg,
-		m_rendererState->rendererStats.triangleCount * 1e-6,
-		m_rendererState->rendererStats.drawCallCount);
-
-	auto fps = std::format("DrawBatchGen: {:.4f}us | EntityFlatten: {:.4f}us | SceneUpdate: {:.4f}us | MeshDraw: {:.4f}us",
-		m_rendererState->rendererStats.drawBatchGenerationTimeAvg,
-		m_rendererState->rendererStats.entityFlattenTimeAvg,
-		m_rendererState->rendererStats.sceneUpdateTimeAvg,
-		m_rendererState->rendererStats.meshDrawTimeAvg);
-
-	generateText(stats, fps);
-
 	// copy data into buffer
 	void* data = fontUniformBuffer.allocation->GetMappedData();
 	memcpy(data, &fontUniformData, sizeof(FontUniformData));
@@ -1622,31 +1656,8 @@ void VulkanRenderer::initFontData() {
 	});
 }
 
-// Creates a vertex and index buffer with triangle data containing the chars of the given text
-void VulkanRenderer::generateText(std::string stats, std::string fps) {
-	textElements.clear();
-	fontVertices.clear();
-	fontIndices.clear();
-
-	float width = 1.0f;
-	float height = 1.0f;
-
-	auto textElement1 = UI::text(stats, width, height, { 10.0f, 10.0f }, { 1.0f, 1.0f }, 0.0f, static_cast<float>(fontSDF.width), fontChars);
-	auto textElement2 = UI::text(fps, width, height, { 10.0f, 40.0f }, { 1.0f, 1.0f }, 0.0f, static_cast<float>(fontSDF.width), fontChars);
-
-	textElements.push_back(textElement1);
-	textElements.push_back(textElement2);
-
-	for (auto& element : textElements) {
-		std::ranges::copy(element.vertices.begin(), element.vertices.end(), std::back_inserter(fontVertices));
-		std::ranges::copy(element.indices.begin(), element.indices.end(), std::back_inserter(fontIndices));
-	}
-}
-
 void VulkanRenderer::updateUIData() {
 	uiUniformData.view = glm::mat4(1.0f);
-	uiVertices.clear();
-	uiIndices.clear();
 
 	auto w = static_cast<float>(m_rendererState->windowExtent.width);
 	auto h = static_cast<float>(m_rendererState->windowExtent.height);
@@ -1655,25 +1666,46 @@ void VulkanRenderer::updateUIData() {
 	void* data = uiUniformBuffer.allocation->GetMappedData();
 	memcpy(data, &uiUniformData, sizeof(UIUniformData));
 
-	// Copy the vertex data from each UI element into a single buffer
-	for (auto& element : uiElements) {
-		std::ranges::copy(element.vertices.begin(), element.vertices.end(), std::back_inserter(uiVertices));
-		std::ranges::copy(element.indices.begin(), element.indices.end(), std::back_inserter(uiIndices));
-	}
+	auto stats = std::format("Frametime: {:.2f}ms | GPU: {:.2f}ms | UI: {:.4f}ms | Triangles: {:.2f}M | DrawCall: {}",
+		m_rendererState->rendererStats.frametime,
+		m_rendererState->rendererStats.frameGpuTimeAvg,
+		m_rendererState->rendererStats.uiFrametimeAvg,
+		m_rendererState->rendererStats.triangleCount * 1e-6,
+		m_rendererState->rendererStats.drawCallCount);
+
+	auto otherStats = std::format("DrawBatchGen: {:.4f}us | UIDrawBatchGen: {:.4f}us | EntityFlatten: {:.4f}us | SceneUpdate: {:.4f}us | MeshDraw: {:.4f}us",
+		m_rendererState->rendererStats.drawBatchGenerationTimeAvg,
+		m_rendererState->rendererStats.uiDrawBatchGenerationTimeAvg,
+		m_rendererState->rendererStats.entityFlattenTimeAvg,
+		m_rendererState->rendererStats.sceneUpdateTimeAvg,
+		m_rendererState->rendererStats.meshDrawTimeAvg);
+
+	auto posData = std::format("Camera Pos: {:.2f} {:.2f} {:.2f}",
+		m_rendererState->mainCamera->position.x,
+		m_rendererState->mainCamera->position.y,
+		m_rendererState->mainCamera->position.z);
+
+	UI::begin(&debugUIRenderContext);
+
+	UI::setFont(&debugUIRenderContext, { .fontChars = fontChars, .textureWidth = static_cast<float>(fontSDF.width) });
+
+	UI::pushBox(&debugUIRenderContext, { .width = 300.f, .height = 200.f, .rotation = 0.0f, .position = { 1610.0f, 300.0f }, .scale = { 1.0f, 1.0f } });
+	UI::pushBox(&debugUIRenderContext, { .width = 100.f, .height = 50.f, .rotation = 0.0f, .position = { 400.0f, 150.0f }, .scale = { 1.0f, 1.0f } });
+	UI::pushBox(&debugUIRenderContext, { .width = 100.f, .height = 100.f, .rotation = 0.0f, .position = { 800.0f, 600.0f }, .scale = { 1.0f, 1.0f } });
+
+	UI::pushTriangle(&debugUIRenderContext, { .width = 300.f, .height = 100.f, .rotation = 0.0f, .position = { 400.0f, 400.0f }, .scale = { 1.0f, 1.0f } });
+
+	UI::pushText(&debugUIRenderContext, stats, { .width = 1.0f, .height = 1.0f, .rotation = 0.0f, .position = { 10.0f, 10.0f }, .scale = { 1.0f, 1.0f } });
+	UI::pushText(&debugUIRenderContext, otherStats, { .width = 1.0f, .height = 1.0f, .rotation = 0.0f, .position = { 10.0f, 40.0f }, .scale = { 1.0f, 1.0f } });
+	UI::pushText(&debugUIRenderContext, posData, { .width = 1.0f, .height = 1.0f, .rotation = 0.0f, .position = { 10.0f, 1050.0f }, .scale = { 1.0f, 1.0f } });
+
+	UI::end(&debugUIRenderContext);
 }
 
 void VulkanRenderer::initUI() {
+	debugUIRenderContext = UI::initRenderContext();
+
 	uiUniformBuffer = createBuffer("uiUniformBuffer", sizeof(UIUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-
-	auto box1 = UI::box(300.f, 200.f, { 1610.0f, 300.0f }, { 1.0f, 1.0f }, 0.0f);
-	auto box2 = UI::box(100.f, 50.f, { 400.0f, 150.0f }, { 1.0f, 1.0f }, 0.0f);
-	auto box3 = UI::box(100.f, 100.f, { 800.0f, 600.0f }, { 1.0f, 1.0f }, 0.0f);
-	auto triangle = UI::triangle(300.f, 100.f, { 400.0f, 400.0f }, { 1.0f, 1.0f }, 0.0f);
-
-	uiElements.push_back(box1);
-	uiElements.push_back(box2);
-	uiElements.push_back(box3);
-	uiElements.push_back(triangle);
 
 	m_mainDeletionQueue.push([&]() {
 		destroyBuffer(uiUniformBuffer);

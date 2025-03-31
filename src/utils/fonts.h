@@ -23,6 +23,11 @@ struct bmchar {
 	uint32_t page;
 };
 
+struct FontInfo {
+	std::array<bmchar, 255> fontChars;
+	float textureWidth;
+};
+
 inline int32_t nextValuePair(std::stringstream* stream) {
 	std::string pair;
 	*stream >> pair;

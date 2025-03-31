@@ -9,9 +9,9 @@
 
 namespace pm::UI {
 
-UIElement box(float width, float height, glm::vec2 position, glm::vec2 scale, float rotationInRadians);
-UIElement triangle(float width, float height, glm::vec2 position, glm::vec2 scale, float rotationInRadians);
-UIElement text(std::string_view text, float width, float height, glm::vec2 position, glm::vec2 scale, float rotationInRadians, float textureWidth, std::array<bmchar, 255>& fontChars);
+UIElement box(UIElementOptions& options, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices);
+UIElement triangle(UIElementOptions& options, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices);
 
+UITextElement text(std::string_view text, float textureWidth, std::array<bmchar, 255>& fontChars, UIElementOptions& options, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices);
 
 }// namespace pm::UI
