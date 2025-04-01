@@ -29,7 +29,6 @@
 
 namespace pm {
 
-// Temporary. Commands should be generated in the GPU.
 void VulkanRenderer::init(VulkanRendererConfig* state) {
 	m_rendererState = state;
 	initVulkan();
@@ -443,9 +442,10 @@ void VulkanRenderer::buildUIDrawBatches(UI::UIRenderContext& renderInfo) {
 
 	DrawBatch uiDrawBatch{};
 
-	auto uiMeshBuffers = uploadMesh<UIVertex>(renderInfo.indices, renderInfo.vertices, "uiMeshBuffers");
+	// We use one Vertex/index buffer for all UI geometry
+	auto uiGeometryBuffers = uploadMesh<UIVertex>(renderInfo.indices, renderInfo.vertices, "uiMeshBuffers");
 
-	uiDrawBatch.meshBuffers = uiMeshBuffers;
+	uiDrawBatch.meshBuffers = uiGeometryBuffers;
 	uiDrawBatch.pipeline = uiPipeline;
 	uiDrawBatch.pipelineLayout = uiPipelineLayout;
 
@@ -500,9 +500,7 @@ void VulkanRenderer::buildUIDrawBatches(UI::UIRenderContext& renderInfo) {
 	drawCommands.reserve(renderInfo.textElements.size());
 	DrawBatch textDrawBatch{};
 
-	auto textMeshBuffers = uploadMesh<UIVertex>(renderInfo.indices, renderInfo.vertices, "textMeshBuffers");
-
-	textDrawBatch.meshBuffers = textMeshBuffers;
+	textDrawBatch.meshBuffers = uiGeometryBuffers;
 	textDrawBatch.pipeline = fontPipeline;
 	textDrawBatch.pipelineLayout = fontPipelineLayout;
 
@@ -553,15 +551,13 @@ void VulkanRenderer::buildUIDrawBatches(UI::UIRenderContext& renderInfo) {
 
 	getCurrentFrame().uiDrawBatches.push_back(textDrawBatch);
 
-	getCurrentFrame().m_deletionQueue.push([this, uiDrawCommandsBuffer, uiTransformDataBuffer, uiMeshBuffers, textDrawCommandsBuffer, textTransformDataBuffer, textMeshBuffers]() {
+	getCurrentFrame().m_deletionQueue.push([this, uiDrawCommandsBuffer, uiTransformDataBuffer, uiGeometryBuffers, textDrawCommandsBuffer, textTransformDataBuffer]() {
 		destroyBuffer(uiDrawCommandsBuffer);
 		destroyBuffer(uiTransformDataBuffer);
 		destroyBuffer(textDrawCommandsBuffer);
 		destroyBuffer(textTransformDataBuffer);
-		destroyBuffer(uiMeshBuffers.vertexBuffer);
-		destroyBuffer(uiMeshBuffers.indexBuffer);
-		destroyBuffer(textMeshBuffers.vertexBuffer);
-		destroyBuffer(textMeshBuffers.indexBuffer);
+		destroyBuffer(uiGeometryBuffers.vertexBuffer);
+		destroyBuffer(uiGeometryBuffers.indexBuffer);
 	});
 
 	auto genTime = std::chrono::duration<double, std::micro>(std::chrono::system_clock::now() - start).count();
