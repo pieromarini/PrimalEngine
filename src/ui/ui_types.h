@@ -6,23 +6,33 @@
 #include <glm/gtx/quaternion.hpp>
 #include <vector>
 
-namespace pm {
+namespace pm::UI {
 
 enum UILayoutDirection {
 	VERTICAL,
 	HORIZONTAL
 };
+
 enum UISizingMode {
 	STATIC = 0,
 	GROW,
 	FIT
 };
 
+enum UIRenderCommandType {
+	RECTANGLE,
+	TEXT
+};
+
+struct UIAxisSize {
+	float size;
+	UISizingMode sizingMode;
+};
+
 struct BoundingBox {
 	float x, y;
 	float width, height;
 };
-
 
 struct UIVertex {
 	glm::vec3 position;
@@ -40,16 +50,24 @@ struct UIPadding {
 	float left, right;
 };
 
+struct UIRenderCommand {
+	uint32_t id;
+	uint32_t zindex;
+	BoundingBox boundingBox;
+	glm::vec4 backgroundColor;
+	std::string text;
+	UIRenderCommandType commandType;
+};
+
 struct UILayoutElement {
 	std::string id;
 
 	float x;
 	float y;
-	float width;
-	float height;
+	UIAxisSize width;
+	UIAxisSize height;
 
 	UILayoutDirection layoutDirection;
-	UISizingMode sizingMode;
 	glm::vec4 backgroundColor;
 
 	UIPadding padding;
@@ -64,11 +82,10 @@ struct UILayoutElement {
 struct UIElementOptions {
 	uint32_t id;
 
-	float width;
-	float height;
+	UIAxisSize width;
+	UIAxisSize height;
 
 	UILayoutDirection layoutDirection{};
-	UISizingMode sizingMode;
 	glm::vec4 backgroundColor { 0.0f, 0.0f, 0.0f, 0.0f };
 
 	UIPadding padding;

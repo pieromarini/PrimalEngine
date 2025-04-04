@@ -14,6 +14,7 @@
 #include "vulkan_descriptor.h"
 #include "vulkan_texture.h"
 
+#include "ui/ui_types.h"
 #include "ui/ui_manager.h"
 
 namespace pm {
@@ -205,7 +206,7 @@ public:
 
 	void buildDrawBatches(std::vector<Model*>& models);
 	void buildUIDrawBatches(std::vector<UI::UIRenderCommand>& renderCommands);
-	std::vector<UIElement> buildUIGeometry(std::vector<UI::UIRenderCommand>& renderCommands, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices);
+	std::vector<UI::UIElement> buildUIGeometry(std::vector<UI::UIRenderCommand>& renderCommands, std::vector<UI::UIVertex>& vertices, std::vector<uint32_t>& indices);
 
 	// drawing
 	void draw(float deltaTime);
@@ -356,9 +357,9 @@ private:
 	uint32_t fontIndexCount{ 0 };
 	VkPipelineLayout fontPipelineLayout;
 	VkPipeline fontPipeline;
-	std::vector<UIVertex> fontVertices;
+	std::vector<UI::UIVertex> fontVertices;
 	std::vector<uint32_t> fontIndices;
-	std::vector<UIElement> textElements{};
+	std::vector<UI::UIElement> textElements{};
 
 	// UI Rendering
 	UIUniformData uiUniformData{};
@@ -368,16 +369,14 @@ private:
 	VkDescriptorSet uiDescriptorSet;
 	VkPipelineLayout uiPipelineLayout;
 	VkPipeline uiPipeline;
-	std::vector<UIVertex> uiVertices;
+	std::vector<UI::UIVertex> uiVertices;
 	std::vector<uint32_t> uiIndices;
-	std::vector<UIElement> uiElements{};
+	std::vector<UI::UIElement> uiElements{};
 
 	// Timestamp
 	float physicalDeviceTimestampPeriod{};
 	VkQueryPool timestampPool;
 	VkQueryPool pipelineStatisticsPool;
-
-	// UI
 };
 
 }// namespace pm

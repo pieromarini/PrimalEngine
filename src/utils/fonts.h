@@ -75,7 +75,7 @@ inline std::array<bmchar, 255> parsebmFont(std::string_view fileName) {
 	return fontChars;
 }
 
-inline std::pair<float, float> generateTextFromFont(std::string_view text, float textureWidth, std::array<bmchar, 255>& fontChars, std::vector<UIVertex>* vertices = nullptr, std::vector<uint32_t>* indices = nullptr) {
+inline std::pair<float, float> generateTextFromFont(std::string_view text, float textureWidth, std::array<bmchar, 255>& fontChars, std::vector<UI::UIVertex>* vertices = nullptr, std::vector<uint32_t>* indices = nullptr) {
 	uint32_t indexOffset = 0;
 
 	float posx = 0.0f;

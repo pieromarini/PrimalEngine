@@ -434,8 +434,8 @@ void VulkanRenderer::cleanup() {
 	vkDestroyInstance(m_instance, nullptr);
 }
 
-std::vector<UIElement> VulkanRenderer::buildUIGeometry(std::vector<UI::UIRenderCommand>& renderCommands, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices) {
-	std::vector<UIElement> elements;
+std::vector<UI::UIElement> VulkanRenderer::buildUIGeometry(std::vector<UI::UIRenderCommand>& renderCommands, std::vector<UI::UIVertex>& vertices, std::vector<uint32_t>& indices) {
+	std::vector<UI::UIElement> elements;
 
 	for (auto& renderCommand : renderCommands) {
 		switch (renderCommand.commandType) {
@@ -468,12 +468,12 @@ void VulkanRenderer::buildUIDrawBatches(std::vector<UI::UIRenderCommand>& render
 	DrawBatch textDrawBatch{};
 
 	// TODO: generate vertex/index data
-	std::vector<UIVertex> vertices;
+	std::vector<UI::UIVertex> vertices;
 	std::vector<uint32_t> indices;
 	auto elements = buildUIGeometry(renderCommands, vertices, indices);
 
 	// We use one Vertex/index buffer for all UI geometry
-	auto uiGeometryBuffers = uploadMesh<UIVertex>(indices, vertices, "uiMeshBuffers");
+	auto uiGeometryBuffers = uploadMesh<UI::UIVertex>(indices, vertices, "uiMeshBuffers");
 
 	std::vector<UIMaterialData> uiMaterialData;
 
@@ -1742,15 +1742,17 @@ void VulkanRenderer::updateUIData() {
 	UI::beginLayout();
 
 	UI::openElement();
-		UI::pushBox({ .layoutDirection = UILayoutDirection::HORIZONTAL,
-				.sizingMode = UISizingMode::FIT,
+		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::GROW },
+				.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
+				.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
 				.backgroundColor = { 1.0f, 0.0f, 0.0f, 1.0f },
 				.padding = 10.0f,
 				.childGap = 10.0f });
 
 		UI::openElement();
-			UI::pushBox({ .layoutDirection = UILayoutDirection::VERTICAL,
-					.sizingMode = UISizingMode::FIT,
+			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+					.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::FIT },
+ 					.layoutDirection = UI::UILayoutDirection::VERTICAL,
 					.backgroundColor = { 0.0f, 1.0f, 0.0f, 1.0f },
 					.padding = 10.0f,
 					.childGap = 10.0f });
@@ -1765,7 +1767,11 @@ void VulkanRenderer::updateUIData() {
 		UI::closeElement();
 
 		UI::openElement();
-			UI::pushBox({ .layoutDirection = UILayoutDirection::VERTICAL, .sizingMode = UISizingMode::FIT, .backgroundColor = { 1.0f, 1.0f, 0.0f, 1.0f }, .padding = 10.0f });
+			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+					.height = { .sizingMode = UI::UISizingMode::FIT },
+					.layoutDirection = UI::UILayoutDirection::VERTICAL,
+					.backgroundColor = { 1.0f, 1.0f, 0.0f, 1.0f },
+					.padding = 10.0f });
 
 			UI::openTextElement();
 				UI::pushText({ .text = "Hello there" });
@@ -1774,8 +1780,9 @@ void VulkanRenderer::updateUIData() {
 	UI::closeElement();
 
 	UI::openElement();
-		UI::pushBox({ .layoutDirection = UILayoutDirection::VERTICAL,
-				.sizingMode = UISizingMode::FIT,
+		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+				.height = { .sizingMode = UI::UISizingMode::FIT },
+				.layoutDirection = UI::UILayoutDirection::VERTICAL,
 				.backgroundColor = { 0.0f, 0.0f, 1.0f, 1.0f },
 				.padding = 40.0f,
 				.childGap = 40.0f });
@@ -1784,7 +1791,7 @@ void VulkanRenderer::updateUIData() {
 		UI::closeTextElement();
 
 		UI::openElement();
-			UI::pushBox({ .width = 300.0f, .height = 100.0f, .sizingMode = UISizingMode::STATIC, .backgroundColor = { 0.5f, 0.5f, 0.5f, 1.0f } });
+			UI::pushBox({ .width = 300.0f, .height = 100.0f, .backgroundColor = { 0.5f, 0.5f, 0.5f, 1.0f } });
 		UI::closeElement();
 	UI::closeElement();
 
@@ -1807,7 +1814,7 @@ void VulkanRenderer::initUI() {
 }
 
 // NOTE: I don't like this. Maybe just create 2 specialized functions.
-template GPUMeshBuffers VulkanRenderer::uploadMesh<UIVertex>(std::span<uint32_t> indices, std::span<UIVertex> vertices, std::string name);
+template GPUMeshBuffers VulkanRenderer::uploadMesh<UI::UIVertex>(std::span<uint32_t> indices, std::span<UI::UIVertex> vertices, std::string name);
 template GPUMeshBuffers VulkanRenderer::uploadMesh<Vertex>(std::span<uint32_t> indices, std::span<Vertex> vertices, std::string name);
 
 

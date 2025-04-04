@@ -60,8 +60,8 @@ void beginLayout() {
 	// Configure root element
 	auto& rootElement = context->layoutElements.back();
 	rootElement.id = "UI_ROOT";
-	rootElement.width = context->windowWidth;
-	rootElement.height = context->windowHeight;
+	rootElement.width.size = context->windowWidth;
+	rootElement.height.size = context->windowHeight;
 	rootElement.layoutDirection = UILayoutDirection::VERTICAL;
 }
 
@@ -121,33 +121,33 @@ void closeElement() {
 	// TODO: Handle GROW sizing in (probably) a separate pass.
 	if (openLayoutElement.layoutDirection == UILayoutDirection::HORIZONTAL) {
 		float leftOffset{ 0.0f };
-		if (openLayoutElement.sizingMode != UISizingMode::STATIC) {
-			openLayoutElement.width = horizontalPadding;
-			openLayoutElement.width += static_cast<float>(openLayoutElement.children.size() - 1) * openLayoutElement.childGap;
+		if (openLayoutElement.width.sizingMode != UISizingMode::STATIC) {
+			openLayoutElement.width.size = horizontalPadding;
 		}
+		openLayoutElement.width.size += static_cast<float>(openLayoutElement.children.size() - 1) * openLayoutElement.childGap;
 		for (auto& childIndex : openLayoutElement.children) {
 			auto& child = context->layoutElements.at(childIndex);
 			child.x += leftOffset;
-			if (openLayoutElement.sizingMode != UISizingMode::STATIC) {
-				openLayoutElement.width += child.width;
-				openLayoutElement.height = std::max(child.height + verticalPadding, openLayoutElement.height);
+			if (openLayoutElement.width.sizingMode != UISizingMode::STATIC) {
+				openLayoutElement.width.size += child.width.size;
+				openLayoutElement.height.size = std::max(child.height.size + verticalPadding, openLayoutElement.height.size);
 			}
-			leftOffset += child.width + openLayoutElement.childGap;
+			leftOffset += child.width.size + openLayoutElement.childGap;
 		}
 	} else {
 		float topOffset{ 0.0f };
-		if (openLayoutElement.sizingMode != UISizingMode::STATIC) {
-			openLayoutElement.height = verticalPadding;
-			openLayoutElement.height += static_cast<float>(openLayoutElement.children.size() - 1) * openLayoutElement.childGap;
+		if (openLayoutElement.height.sizingMode != UISizingMode::STATIC) {
+			openLayoutElement.height.size = verticalPadding;
 		}
+		openLayoutElement.height.size += static_cast<float>(openLayoutElement.children.size() - 1) * openLayoutElement.childGap;
 		for (auto& childIndex : openLayoutElement.children) {
 			auto& child = context->layoutElements.at(childIndex);
 			child.y += topOffset;
-			if (openLayoutElement.sizingMode != UISizingMode::STATIC) {
-				openLayoutElement.width = std::max(child.width + horizontalPadding, openLayoutElement.width);
-				openLayoutElement.height += child.height;
+			if (openLayoutElement.height.sizingMode != UISizingMode::STATIC) {
+				openLayoutElement.width.size = std::max(child.width.size + horizontalPadding, openLayoutElement.width.size);
+				openLayoutElement.height.size += child.height.size;
 			}
-			topOffset += child.height + openLayoutElement.childGap;
+			topOffset += child.height.size + openLayoutElement.childGap;
 		}
 	}
 }
@@ -186,9 +186,9 @@ void closeTextElement() {
 
 	// Calculate closing element's Width and Height
 	if (openLayoutElement.layoutDirection == UILayoutDirection::HORIZONTAL) {
-		openLayoutElement.width += horizontalPadding;
+		openLayoutElement.width.size += horizontalPadding;
 	} else {
-		openLayoutElement.height += verticalPadding;
+		openLayoutElement.height.size += verticalPadding;
 	}
 
 	// TODO: handle text wrapping and truncation
@@ -227,6 +227,8 @@ void computeFinalSizes() {
 		stack2.pop();
 		auto& layoutElement = context->layoutElements.at(index);
 		auto& parentElement = context->layoutElements.at(layoutElement.parent);
+
+		// Grow elements
 	}
 }
 
@@ -251,8 +253,8 @@ void calculateFinalLayout() {
 			.boundingBox = {
 				.x = parentElement.x + layoutElement.x,
 				.y = parentElement.y + layoutElement.y,
-				.width = layoutElement.width,
-				.height = layoutElement.height },
+				.width = layoutElement.width.size,
+				.height = layoutElement.height.size },
 			.backgroundColor = layoutElement.backgroundColor,
 			.commandType = layoutElement.isText ? UIRenderCommandType::TEXT : UIRenderCommandType::RECTANGLE
 		};
@@ -285,8 +287,8 @@ void pushText(UIElementOptions options) {
 
 	auto& layoutElement = context->layoutElements.back();
 	layoutElement.isText = true;
-	layoutElement.width = width;
-	layoutElement.height = height;
+	layoutElement.width.size = width;
+	layoutElement.height.size = height;
 	layoutElement.text = options.text;
 }
 
@@ -296,7 +298,6 @@ void pushBox(UIElementOptions options) {
 	layoutElement.width = options.width;
 	layoutElement.height = options.height;
 	layoutElement.layoutDirection = options.layoutDirection;
-	layoutElement.sizingMode = options.sizingMode;
 	layoutElement.backgroundColor = options.backgroundColor;
 	layoutElement.padding = options.padding;
 	layoutElement.childGap = options.childGap;

@@ -5,20 +5,6 @@
 
 namespace pm::UI {
 
-enum UIRenderCommandType {
-	RECTANGLE,
-	TEXT
-};
-
-struct UIRenderCommand {
-	uint32_t id;
-	uint32_t zindex;
-	BoundingBox boundingBox;
-	glm::vec4 backgroundColor;
-	std::string text;
-	UIRenderCommandType commandType;
-};
-
 struct UIContext {
 	std::vector<UIRenderCommand> renderCommands;
 
