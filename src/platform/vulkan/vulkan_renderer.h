@@ -243,6 +243,8 @@ public:
 	void updateFontData();
 	void updateUIData();
 
+	void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown);
+
 	// Image testing
 	AllocatedImage whiteImage;
 	AllocatedImage blackImage;

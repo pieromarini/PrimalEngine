@@ -47,6 +47,7 @@ struct Vertex {
 	glm::vec3 normal;
 	float uv_y;
 	glm::vec4 color;
+	glm::vec4 tangent;
 };
 
 // holds the resources needed for a mesh
@@ -57,9 +58,11 @@ struct GPUMeshBuffers {
 };
 
 // push constants for our mesh object draws
-struct GPUDrawPushConstants {
-	// NOTE: sending pointer to vertex data as PushConstants for now.
-	// We might want to set SSBOs using DescriptorSets instead.
+struct alignas(16) GPUDrawPushConstants {
+	glm::vec4 viewPosition;
+	glm::vec4 padding;
+	glm::vec4 padding1;
+	glm::vec4 padding2;
 	VkDeviceAddress vertexBuffer;
 };
 

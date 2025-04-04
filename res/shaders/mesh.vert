@@ -10,20 +10,17 @@ layout (location = 0) out vec3 outNormal;
 layout (location = 1) out vec3 outColor;
 layout (location = 2) out vec2 outUV;
 layout (location = 3) out flat uint outDrawId;
-
-struct Vertex {
-	vec3 position;
-	float uv_x;
-	vec3 normal;
-	float uv_y;
-	vec4 color;
-};
+layout (location = 4) out vec3 outFragPos;
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer {
 	Vertex vertices[];
 };
 
 layout(push_constant) uniform constants {
+	vec4 viewPosition;
+	vec4 padding;
+	vec4 padding1;
+	vec4 padding2;
 	VertexBuffer vertexBuffer;
 } PushConstants;
 
@@ -57,4 +54,5 @@ void main() {
 	outUV.x = v.uv_x;
 	outUV.y = v.uv_y;
 	outDrawId = drawId;
+	outFragPos = v.position;
 }

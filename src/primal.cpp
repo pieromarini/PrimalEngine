@@ -94,6 +94,10 @@ void PrimalApp::run() {
 			}
 
 			m_mainCamera->processSDLEvent(e);
+
+			if (!windowRelativeMouseMode) {
+				m_renderer.setPointerState(e.motion.x, e.motion.y, e.motion.xrel, e.motion.yrel, e.motion.state & SDL_BUTTON_LMASK);
+			}
 		}
 
 		// do not draw if we are minimized

@@ -377,6 +377,15 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 				});
 			}
 
+			// load tangents
+			auto tangents = p.findAttribute("TANGENT");
+			if (tangents != p.attributes.end()) {
+
+				fastgltf::iterateAccessorWithIndex<glm::vec4>(gltf, gltf.accessors[(*tangents).second], [&](glm::vec4 t, size_t index) {
+					vertices[vertexOffset + index].tangent = t;
+				});
+			}
+
 
 			if (p.materialIndex.has_value()) {
 				newPrimitive.materialIndex = p.materialIndex.value() + 1;

@@ -1,6 +1,7 @@
 #version 450
 
 #extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_buffer_reference : require
 #extension GL_EXT_nonuniform_qualifier : require
 
 #include "input_structures.h"
@@ -11,8 +12,21 @@ layout (location = 0) in vec3 inNormal;
 layout (location = 1) in vec3 inColor;
 layout (location = 2) in vec2 inUV;
 layout (location = 3) in flat uint drawId;
+layout (location = 4) in vec3 inFragPos;
 
 layout (location = 0) out vec4 outFragColor;
+
+layout(buffer_reference, std430) readonly buffer VertexBuffer {
+	Vertex vertices[];
+};
+
+layout(push_constant) uniform constants {
+	vec4 viewPosition;
+	vec4 padding;
+	vec4 padding1;
+	vec4 padding2;
+	VertexBuffer vertexBuffer;
+} PushConstants;
 
 layout (set = 1, binding = 0) uniform sampler2D textures[];
 
@@ -42,6 +56,7 @@ void main() {
 	MeshDraw meshDraw = draws[drawId];
 	MaterialData material = materialData[meshDraw.materialIndex];
 
+/*
 	float lightValue = max(dot(inNormal, sceneData.sunlightDirection.xyz), 0.9f);
 
 	vec3 color = inColor * sceneData.sunlightColor.xyz * lightValue;
@@ -50,8 +65,26 @@ void main() {
 	}
 
 	vec3 ambient = color * sceneData.ambientColor.xyz;
+	*/
 
-	outFragColor = vec4(color * sceneData.sunlightColor.w + ambient, 1.0f);
+	vec3 color = vec3(1.0f);
+	if (material.albedoTexture > 0) {
+		color *= texture(textures[nonuniformEXT(material.albedoTexture)], inUV).xyz;
+	}
+
+	vec3 ambient = color * 0.15 * sceneData.ambientColor.xyz;
+
+	vec3 normal = normalize(inNormal);
+	float diff = max(dot(sceneData.sunlightDirection.xyz, normal), 0.0f);
+	vec3 diffuse = diff * sceneData.sunlightColor.xyz * color;
+
+	vec3 viewDir = normalize(PushConstants.viewPosition.xyz - inFragPos);
+
+	vec3 halfwayDir = normalize(sceneData.sunlightDirection.xyz + viewDir);  
+	float spec = pow(max(dot(normal, halfwayDir), 0.0), 32.0);
+	vec3 specular = vec3(0.3) * spec;
+
+	outFragColor = vec4(ambient + diffuse + specular, 1.0f);
 
 #if DEBUG
 	uint mhash = hash(drawId);

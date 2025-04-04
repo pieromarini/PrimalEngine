@@ -56,6 +56,11 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 	std::cout << std::format("Loaded in {:.4f} seconds\n", static_cast<float>(elapsed.count()) / 1000.0f);
 
+	// some default lighting parameters
+	m_sceneData.ambientColor = glm::vec4(.4f);
+	m_sceneData.sunlightColor = glm::vec4(1.f, 1.0, 1.0f, 1.0f);
+	m_sceneData.sunlightDirection = glm::vec4(0.2f, 1.0f, 0.5, 1.f);
+
 	assert(loadedGLTF.has_value());
 
 	loadedModels["testModel"] = loadedGLTF.value();
@@ -997,9 +1002,10 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 		// TODO: Should be included as part of a Batch
 		GPUDrawPushConstants pushConstants{};
 		pushConstants.vertexBuffer = drawBatch.meshBuffers.vertexBufferAddress;
+		pushConstants.viewPosition = glm::vec4(m_rendererState->mainCamera->position, 1.0f);
 
 		vkCmdBindIndexBuffer(commandBuffer, drawBatch.meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdPushConstants(commandBuffer, drawBatch.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+		vkCmdPushConstants(commandBuffer, drawBatch.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 		vkCmdDrawIndexedIndirect(commandBuffer, drawBatch.commands.buffer.buffer, drawBatch.commands.offset, drawBatch.commands.size, drawBatch.commands.stride);
 	}
 
@@ -1568,10 +1574,10 @@ void VulkanRenderer::buildDefaultPipelines() {
 		std::cout << std::format("Error when building the mesh vertex shader module") << '\n';
 	}
 
-	VkPushConstantRange matrixRange{};
-	matrixRange.offset = 0;
-	matrixRange.size = sizeof(GPUDrawPushConstants);
-	matrixRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	VkPushConstantRange meshPushConstants{};
+	meshPushConstants.offset = 0;
+	meshPushConstants.size = sizeof(GPUDrawPushConstants);
+	meshPushConstants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
 	std::array<VkDescriptorSetLayout, 3> layouts = {
 		m_gpuSceneDataDescriptorLayout,
@@ -1580,7 +1586,7 @@ void VulkanRenderer::buildDefaultPipelines() {
 	};
 
 	VkPipelineLayoutCreateInfo meshLayoutInfo = pipelineLayoutCreateInfo();
-	meshLayoutInfo.pPushConstantRanges = &matrixRange;
+	meshLayoutInfo.pPushConstantRanges = &meshPushConstants;
 	meshLayoutInfo.pushConstantRangeCount = 1;
 	meshLayoutInfo.setLayoutCount = layouts.size();
 	meshLayoutInfo.pSetLayouts = layouts.data();
@@ -1663,11 +1669,6 @@ void VulkanRenderer::updateScene(float deltaTime) {
 	m_sceneData.proj[1][1] *= -1;
 	m_sceneData.viewproj = m_sceneData.proj * m_sceneData.view;
 
-	// some default lighting parameters
-	m_sceneData.ambientColor = glm::vec4(.4f);
-	m_sceneData.sunlightColor = glm::vec4(1.f);
-	m_sceneData.sunlightDirection = glm::vec4(0, 1, 0.5, 1.f);
-
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 	m_rendererState->rendererStats.sceneUpdateTimeAvg = m_rendererState->rendererStats.sceneUpdateTimeAvg * 0.95 + (static_cast<float>(elapsed.count()) / 1000.0f) * 0.05;
@@ -1730,10 +1731,16 @@ void VulkanRenderer::updateUIData() {
 		m_rendererState->rendererStats.sceneUpdateTimeAvg,
 		m_rendererState->rendererStats.meshDrawTimeAvg);
 
-	auto posData = std::format("Camera Pos: {:.2f} {:.2f} {:.2f}",
+	auto cameraPosition = std::format("Camera Pos: {:.2f} {:.2f} {:.2f}",
 		m_rendererState->mainCamera->position.x,
 		m_rendererState->mainCamera->position.y,
 		m_rendererState->mainCamera->position.z);
+
+	auto sunDirection = std::format("Sun Direction: {:.2f} {:.2f} {:.2f} {:.2f}",
+			m_sceneData.sunlightDirection.x,
+			m_sceneData.sunlightDirection.y,
+			m_sceneData.sunlightDirection.z,
+			m_sceneData.sunlightDirection.w);
 
 	UI::setFont({ .fontChars = fontChars, .textureWidth = static_cast<float>(fontSDF.width) });
 
@@ -1745,9 +1752,10 @@ void VulkanRenderer::updateUIData() {
 		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::GROW },
 				.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
 				.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-				.backgroundColor = { 1.0f, 0.0f, 0.0f, 1.0f },
+				.backgroundColor = { UI::isHovered() ? 0.0f : 1.0f, UI::isHovered() ? 0.0f : 1.0f, 0.0f, 1.0f },
 				.padding = 10.0f,
-				.childGap = 10.0f });
+				.childGap = 10.0f,
+				.onHoverCallback = [](uint32_t elementId, UI::PointerState pointerState) {} });
 
 		UI::openElement();
 			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
@@ -1770,7 +1778,7 @@ void VulkanRenderer::updateUIData() {
 			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
 					.height = { .sizingMode = UI::UISizingMode::FIT },
 					.layoutDirection = UI::UILayoutDirection::VERTICAL,
-					.backgroundColor = { 1.0f, 1.0f, 0.0f, 1.0f },
+					.backgroundColor = { 0.2f, 0.3f, 1.0f, 1.0f },
 					.padding = 10.0f });
 
 			UI::openTextElement();
@@ -1787,11 +1795,17 @@ void VulkanRenderer::updateUIData() {
 				.padding = 40.0f,
 				.childGap = 40.0f });
 		UI::openTextElement();
-			UI::pushText({ .text = "Test string 90 {}_+-=;'\"\\:,.<>/?" });
+			UI::pushText({ .text = cameraPosition,
+					.dragValue = &m_rendererState->mainCamera->position });
+		UI::closeTextElement();
+
+		UI::openTextElement();
+			UI::pushText({ .text = sunDirection,
+					.dragValue2 = &m_sceneData.sunlightDirection });
 		UI::closeTextElement();
 
 		UI::openElement();
-			UI::pushBox({ .width = 300.0f, .height = 100.0f, .backgroundColor = { 0.5f, 0.5f, 0.5f, 1.0f } });
+			UI::pushBox({ .width = { .size = 300.0f }, .height = { .size = 100.0f }, .backgroundColor = { 0.5f, 0.5f, 0.5f, 1.0f } });
 		UI::closeElement();
 	UI::closeElement();
 
@@ -1799,6 +1813,10 @@ void VulkanRenderer::updateUIData() {
 
 	auto uiLayoutTime = std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - start).count();
 	m_rendererState->rendererStats.uiLayoutTimeAvg = m_rendererState->rendererStats.uiLayoutTimeAvg * 0.95 + uiLayoutTime * 0.05;
+}
+
+void VulkanRenderer::setPointerState(float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown) {
+	UI::setPointerState(mouseX, mouseY, relMouseX, relMouseY, isPointerDown);
 }
 
 void VulkanRenderer::initUI() {

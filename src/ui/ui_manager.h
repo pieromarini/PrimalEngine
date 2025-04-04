@@ -1,3 +1,4 @@
+#include "ui/widgets.h"
 #include "utils/fonts.h"
 #include "ui_types.h"
 #include <stack>
@@ -12,12 +13,16 @@ struct UIContext {
 	std::vector<uint32_t> layoutElementChildrenIndices;
 	std::stack<uint32_t> openLayoutElements; // elements with an open Layout
 
-	std::vector<UIElement> uiElements;
-	std::vector<UITextElement> textElements;
+
+	// Interactions
+	PointerState pointerState;
+	InteractionState interactionState;
+	std::vector<uint32_t> hoveredIds;
 
 	// Fonts
 	FontInfo fontInfo;
 
+	// Window context
 	float windowWidth, windowHeight;
 };
 
@@ -32,8 +37,11 @@ void cleanupRenderContext();
 
 UIContext* getUIContext();
 
-// function that should be registered to be called when a window resize occurs
 void onResizeCallback(float width, float height);
+void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown);
+
+void onDrag(float mouseX, float mouseY, float deltaTime);
+
 BoundingBox getTextSize();
 
 void clearContext();
@@ -60,5 +68,9 @@ void setFont(FontInfo fontInfo);
 void pushText(UIElementOptions options);
 void pushBox(UIElementOptions options);
 void pushTriangle(UIElementOptions options);
+
+// Interactions
+bool isHovered();
+bool isInsideBoundingBox(float x, float y, BoundingBox bb);
 
 }// namespace pm::UI

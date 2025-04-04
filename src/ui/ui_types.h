@@ -59,8 +59,33 @@ struct UIRenderCommand {
 	UIRenderCommandType commandType;
 };
 
+enum PointerClickState {
+	PRESSED,
+	RELEASED,
+	PRESSED_THIS_FRAME,
+	RELEASED_THIS_FRAME
+};
+
+struct PointerState {
+	float x{};
+	float y{};
+
+	float xRel{};
+	float yRel{};
+
+	PointerClickState pointerClickState{ PointerClickState::RELEASED };
+	bool isDragging{ false };
+};
+
+struct InteractionState {
+	uint32_t elementId{}; // element being interacted with
+	bool isDragging{ false };
+};
+
+using InteractionCallbackSignature = void(uint32_t elementId, PointerState pointerState);
+
 struct UILayoutElement {
-	std::string id;
+	uint32_t id;
 
 	float x;
 	float y;
@@ -73,10 +98,16 @@ struct UILayoutElement {
 	UIPadding padding;
 	float childGap;
 
+	std::function<InteractionCallbackSignature> onHoverCallback;
+	std::function<InteractionCallbackSignature> onClickCallback;
+
 	bool isText{ false }; // TODO: REMOVE THIS
 	std::string text;
 	uint32_t parent;
 	std::vector<uint32_t> children; // reference to context->layoutElementChildrenIndices
+
+	glm::vec3* dragValue{ nullptr };
+	glm::vec4* dragValue2{ nullptr };
 };
 
 struct UIElementOptions {
@@ -91,7 +122,13 @@ struct UIElementOptions {
 	UIPadding padding;
 	float childGap;
 
+	std::function<InteractionCallbackSignature> onHoverCallback;
+	std::function<InteractionCallbackSignature> onClickCallback;
+
 	std::string_view text;
+
+	glm::vec3* dragValue{ nullptr };
+	glm::vec4* dragValue2{ nullptr };
 };
 
 struct UIElement {
