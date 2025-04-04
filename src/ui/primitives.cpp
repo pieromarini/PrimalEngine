@@ -2,8 +2,8 @@
 
 namespace pm::UI {
 
-UIElement box(UIElementOptions& options, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices) {
-	auto element = UIElement{options};
+UIElement box(std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices) {
+	auto element = UIElement{};
 
 	element.firstIndex = indices.size();
 	element.indexCount = 6;
@@ -24,8 +24,8 @@ UIElement box(UIElementOptions& options, std::vector<UIVertex>& vertices, std::v
 	return element;
 }
 
-UIElement triangle(UIElementOptions& options, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices) {
-	auto element = UIElement{options};
+UIElement triangle(std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices) {
+	auto element = UIElement{};
 
 	element.firstIndex = indices.size();
 	element.indexCount = 3;
@@ -42,12 +42,12 @@ UIElement triangle(UIElementOptions& options, std::vector<UIVertex>& vertices, s
 	return element;
 }
 
-UITextElement text(std::string_view text, float textureWidth, std::array<bmchar, 255>& fontChars, UIElementOptions& options, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices) {
-	auto element = UITextElement{options};
+UIElement text(std::string_view text, float textureWidth, std::array<bmchar, 255>& fontChars, std::vector<UIVertex>* vertices, std::vector<uint32_t>* indices) {
+	auto element = UIElement{};
 
-	element.firstIndex = indices.size();
+	element.firstIndex = indices->size();
 	element.indexCount = text.size() * 6; // 6 indices per generated quad
-	element.vertexOffset = static_cast<int32_t>(vertices.size());
+	element.vertexOffset = static_cast<int32_t>(vertices->size());
 
 	generateTextFromFont(text, textureWidth, fontChars, vertices, indices);
 

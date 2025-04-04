@@ -33,7 +33,6 @@ struct UIPushConstants {
 	VkDeviceAddress vertexBuffer;
 };
 
-
 // NOTE: keeping these separate because we might want to include extra stuff here later on.
 struct UIIndirectCommand {
 	uint32_t drawId;
@@ -44,6 +43,16 @@ struct alignas(16) MeshDraw {
 	glm::mat4 transform{};
 	uint32_t materialIndex{};
 	float padding[3]{ 0.0f, 0.0f, 0.0f };
+};
+
+struct alignas(16) UIDrawData {
+	glm::mat4 transform{};
+	uint32_t materialIndex{};
+	float padding[3]{ 0.0f, 0.0f, 0.0f };
+};
+
+struct alignas(16) UIMaterialData {
+	glm::vec4 backgroundColor;
 };
 
 struct MeshIndirectCommand {
@@ -123,6 +132,7 @@ struct RendererStats {
 
 	// UI draw batch generation
 	double uiDrawBatchGenerationTimeAvg{};
+	double uiLayoutTimeAvg{};
 
 	uint32_t triangleCount{};
 	uint32_t drawCallCount{};
@@ -152,6 +162,7 @@ struct FrameData {
 
 	std::vector<DrawBatch> drawBatches{};
 	std::vector<DrawBatch> uiDrawBatches{};
+	std::vector<UI::UIRenderCommand> uiRenderCommands{};
 };
 
 struct GPUSceneData {
@@ -193,7 +204,8 @@ public:
 	void initDefaultData();
 
 	void buildDrawBatches(std::vector<Model*>& models);
-	void buildUIDrawBatches(UI::UIRenderContext& renderInfo);
+	void buildUIDrawBatches(std::vector<UI::UIRenderCommand>& renderCommands);
+	std::vector<UIElement> buildUIGeometry(std::vector<UI::UIRenderCommand>& renderCommands, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices);
 
 	// drawing
 	void draw(float deltaTime);
@@ -366,7 +378,6 @@ private:
 	VkQueryPool pipelineStatisticsPool;
 
 	// UI
-	UI::UIRenderContext debugUIRenderContext;
 };
 
 }// namespace pm

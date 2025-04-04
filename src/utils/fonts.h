@@ -75,11 +75,13 @@ inline std::array<bmchar, 255> parsebmFont(std::string_view fileName) {
 	return fontChars;
 }
 
-inline void generateTextFromFont(std::string_view text, float textureWidth, std::array<bmchar, 255>& fontChars, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices) {
+inline std::pair<float, float> generateTextFromFont(std::string_view text, float textureWidth, std::array<bmchar, 255>& fontChars, std::vector<UIVertex>* vertices = nullptr, std::vector<uint32_t>* indices = nullptr) {
 	uint32_t indexOffset = 0;
 
 	float posx = 0.0f;
 	float posy = 0.0f;
+
+	float maxPosY = 0.0f;
 
 	float SCALING_CONSTANT = 0.5f;
 
@@ -104,22 +106,31 @@ inline void generateTextFromFont(std::string_view text, float textureWidth, std:
 
 		posy = yo;
 
+		// TODO: check if this is correct. need to get the max height from this text string
+		maxPosY = std::max(maxPosY, posy + dimy);
+
 		auto color = glm::vec3(1.0f, 0.0f, 0.0f);
 
-		vertices.push_back({ { posx + dimx + xo, posy + dimy, 0.0f }, ue, color, te });
-		vertices.push_back({ { posx + xo, posy + dimy, 0.0f }, us, color, te });
-		vertices.push_back({ { posx + xo, posy, 0.0f }, us, color, ts });
-		vertices.push_back({ { posx + dimx + xo, posy, 0.0f }, ue, color, ts });
+		if (vertices) {
+			vertices->push_back({ { posx + dimx + xo, posy + dimy, 0.0f }, ue, color, te });
+			vertices->push_back({ { posx + xo, posy + dimy, 0.0f }, us, color, te });
+			vertices->push_back({ { posx + xo, posy, 0.0f }, us, color, ts });
+			vertices->push_back({ { posx + dimx + xo, posy, 0.0f }, ue, color, ts });
+		}
 
-		std::array<uint32_t, 6> letterIndices = { 0, 1, 2, 2, 3, 0 };
-		for (auto& index : letterIndices) {
-			indices.push_back(indexOffset + index);
+		if (indices) {
+			std::array<uint32_t, 6> letterIndices = { 0, 1, 2, 2, 3, 0 };
+			for (auto& index : letterIndices) {
+				indices->push_back(indexOffset + index);
+			}
 		}
 		indexOffset += 4;
 
 		float advance = ((float)(charInfo->xadvance) * SCALING_CONSTANT);
 		posx += advance;
 	}
+
+	return { posx, maxPosY };
 
 	/* NOTE: Not sure if we want this yet or not.
 	// Center

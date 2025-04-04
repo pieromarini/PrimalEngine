@@ -15,3 +15,13 @@ struct IndirectCommandData {
 	int vertexOffset;
 	uint firstInstance;
 };
+
+struct UIDraw {
+	mat4 transform;
+	uint materialIndex;
+	float padding[3];
+};
+
+struct UIMaterialData {
+	vec4 backgroundColor;
+};

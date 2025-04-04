@@ -8,6 +8,22 @@
 
 namespace pm {
 
+enum UILayoutDirection {
+	VERTICAL,
+	HORIZONTAL
+};
+enum UISizingMode {
+	STATIC = 0,
+	GROW,
+	FIT
+};
+
+struct BoundingBox {
+	float x, y;
+	float width, height;
+};
+
+
 struct UIVertex {
 	glm::vec3 position;
 	float uv_x;
@@ -15,69 +31,67 @@ struct UIVertex {
 	float uv_y;
 };
 
-struct UIElementOptions {
+struct UIPadding {
+	UIPadding(): top{0}, bottom{0}, left{0}, right{0} {}
+	UIPadding(float t, float b, float l, float r): top{t}, bottom{b}, left{l}, right{r} {}
+	UIPadding(float padding): top{padding}, bottom{padding}, left{padding}, right{padding} {}
+
+	float top, bottom;
+	float left, right;
+};
+
+struct UILayoutElement {
+	std::string id;
+
+	float x;
+	float y;
 	float width;
 	float height;
-	float rotation;
-	glm::vec2 position;
-	glm::vec2 scale;
+
+	UILayoutDirection layoutDirection;
+	UISizingMode sizingMode;
+	glm::vec4 backgroundColor;
+
+	UIPadding padding;
+	float childGap;
+
+	bool isText{ false }; // TODO: REMOVE THIS
+	std::string text;
+	uint32_t parent;
+	std::vector<uint32_t> children; // reference to context->layoutElementChildrenIndices
 };
 
-struct UIMaterialData {
-	glm::vec4 edgeColor;
-	glm::vec4 fillColor;
-};
+struct UIElementOptions {
+	uint32_t id;
 
-struct UITextMaterialData {
-	glm::vec4 color;
-};
+	float width;
+	float height;
 
-struct UIMaterial {
-	std::string name{};
-	UIMaterialData materialData{};
-};
+	UILayoutDirection layoutDirection{};
+	UISizingMode sizingMode;
+	glm::vec4 backgroundColor { 0.0f, 0.0f, 0.0f, 0.0f };
 
-struct UITextMaterial {
-	std::string name{};
-	UITextMaterialData materialData{};
+	UIPadding padding;
+	float childGap;
+
+	std::string_view text;
 };
 
 struct UIElement {
-	UIElement(UIElementOptions& options): 
-		position{options.position}, scale{options.scale}, rotation{options.rotation},
-		width{options.width}, height{options.height}
-		{}
-
-	glm::vec2 position;
-	glm::vec2 scale;
-	float rotation;
-	float width;
-	float height;
-
-	uint32_t firstIndex;
 	uint32_t indexCount;
+	uint32_t firstIndex;
 	int32_t vertexOffset;
-
-	UIMaterial materialIndex;
 };
 
 struct UITextElement {
-	UITextElement(UIElementOptions& options): 
-		position{options.position}, scale{options.scale}, rotation{options.rotation},
-		width{options.width}, height{options.height}
-		{}
+	BoundingBox boundingBox;
+	glm::vec4 backgroundColor;
 
-	glm::vec2 position;
-	glm::vec2 scale;
-	float rotation;
-	float width;
-	float height;
+	std::string text;
 
-	uint32_t firstIndex;
 	uint32_t indexCount;
+	uint32_t firstIndex;
 	int32_t vertexOffset;
-
-	UITextMaterial materialIndex;
 };
 
 
