@@ -42,11 +42,6 @@ void onResizeCallback(float width, float height) {
 	context->windowHeight = height;
 }
 
-void onDrag(float mouseX, float mouseY, float deltaTime) {
-	auto context = getUIContext();
-
-}
-
 void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown) {
 	auto context = getUIContext();
 
@@ -100,18 +95,30 @@ void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouse
 	}
 
 	// Value dragging
-	// TODO(piero): make this more generic. We want to support: int, float, vec2, vec3, vec4
 	if (context->pointerState.pointerClickState == PointerClickState::PRESSED && context->interactionState.isDragging) {
 		auto& element = context->layoutElements.at(context->interactionState.elementId);
-		if (element.dragValue) {
-			element.dragValue->x += context->pointerState.xRel;
-			element.dragValue->y += context->pointerState.xRel;
-			element.dragValue->z += context->pointerState.xRel;
-		} else if (element.dragValue2) {
-			element.dragValue2->x += context->pointerState.xRel * 0.05f;
-			element.dragValue2->y += context->pointerState.xRel * 0.05f;
-			element.dragValue2->z += context->pointerState.xRel * 0.05f;
-			element.dragValue2->w += context->pointerState.xRel * 0.05f;
+		switch (element.data.dataType) {
+		case INT: {
+			if (element.data.valueInt) {
+				*element.data.valueInt = std::clamp(static_cast<int>(*element.data.valueInt + context->pointerState.xRel * 0.01f), element.data.minInt, element.data.maxInt);
+			}
+			break;
+		}
+		case FLOAT: {
+			if (element.data.valueFloat) {
+				*element.data.valueFloat = std::clamp(*element.data.valueFloat + context->pointerState.xRel * 0.01f, element.data.minFloat, element.data.maxFloat);
+			}
+			break;
+		}
+		case DOUBLE: {
+			if (element.data.valueDouble) {
+				*element.data.valueDouble = std::clamp(*element.data.valueDouble + context->pointerState.xRel * 0.01, element.data.minDouble, element.data.maxDouble);
+			}
+			break;
+		}
+		default: {
+			break;
+		}
 		}
 	}
 }
@@ -133,6 +140,7 @@ void beginLayout() {
 	rootElement.width.size = context->windowWidth;
 	rootElement.height.size = context->windowHeight;
 	rootElement.layoutDirection = UILayoutDirection::VERTICAL;
+	rootElement.childGap = 20.0f;
 }
 
 std::vector<UIRenderCommand> endLayout() {
@@ -172,7 +180,7 @@ void closeElement() {
 	}
 
 	// add parent padding
-	if (openLayoutElement.parent) {
+	if (openLayoutElement.parent >= 0) {
 		auto& parent = context->layoutElements.at(openLayoutElement.parent);
 		openLayoutElement.x += parent.padding.left;
 		openLayoutElement.y += parent.padding.top;
@@ -253,7 +261,7 @@ void closeTextElement() {
 	}
 
 	// add parent padding
-	if (openLayoutElement.parent) {
+	if (openLayoutElement.parent >= 0) {
 		auto& parent = context->layoutElements.at(openLayoutElement.parent);
 		openLayoutElement.x += parent.padding.left;
 		openLayoutElement.y += parent.padding.top;
@@ -272,42 +280,17 @@ void closeTextElement() {
 	// TODO: handle text wrapping and truncation
 }
 
-/*
- * This does a post-order traversal of the UI hierarchy
- * to calculate the final sizes for each element, depending on their children.
- * Left-most child gets processed first
- */
+// DFS to add parent position to children
 void computeFinalSizes() {
 	auto context = getUIContext();
 
 	std::stack<uint32_t> stack1;
-	std::stack<uint32_t> stack2;
 
 	stack1.push(0);
 
-	while(!stack1.empty()) {
+	while (!stack1.empty()) {
 		uint32_t index = stack1.top();
 		stack1.pop();
-		auto& layoutElement = context->layoutElements.at(index);
-
-		stack2.push(index);
-
-		for (auto& childIndex : layoutElement.children) {
-			stack1.push(childIndex);
-		}
-	}
-
-	float leftOffset{ 0.0f };
-	float topOffset{ 0.0f };
-
-	while(!stack2.empty()) {
-		uint32_t index = stack2.top();
-		stack2.pop();
-
-		// No action needed for the root element.
-		if (index == 0) {
-			continue;
-		}
 
 		auto& layoutElement = context->layoutElements.at(index);
 		auto& parentElement = context->layoutElements.at(layoutElement.parent);
@@ -315,6 +298,10 @@ void computeFinalSizes() {
 		// Element positions are relative. Before rendering we need to add the parent's position.
 		layoutElement.x += parentElement.x;
 		layoutElement.y += parentElement.y;
+
+		for (auto& childIndex : layoutElement.children) {
+			stack1.push(childIndex);
+		}
 	}
 }
 
@@ -378,8 +365,8 @@ void pushText(UIElementOptions options) {
 
 	layoutElement.onHoverCallback = options.onHoverCallback;
 	layoutElement.onClickCallback = options.onClickCallback;
-	layoutElement.dragValue = options.dragValue;
-	layoutElement.dragValue2 = options.dragValue2;
+
+	layoutElement.data = options.data;
 }
 
 void pushBox(UIElementOptions options) {

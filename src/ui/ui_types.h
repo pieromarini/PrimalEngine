@@ -41,6 +41,13 @@ struct UIVertex {
 	float uv_y;
 };
 
+enum UIDataType {
+	INT,
+	FLOAT,
+	DOUBLE,
+	STRING
+};
+
 struct UIPadding {
 	UIPadding(): top{0}, bottom{0}, left{0}, right{0} {}
 	UIPadding(float t, float b, float l, float r): top{t}, bottom{b}, left{l}, right{r} {}
@@ -82,6 +89,25 @@ struct InteractionState {
 	bool isDragging{ false };
 };
 
+struct UILayoutElementData {
+	UIDataType dataType;
+	union {
+		double* valueDouble;
+		float* valueFloat;
+		int* valueInt;
+	};
+	union {
+		double minDouble;
+		float minFloat;
+		int minInt;
+	};
+	union {
+		double maxDouble;
+		float maxFloat;
+		int maxInt;
+	};
+};
+
 using InteractionCallbackSignature = void(uint32_t elementId, PointerState pointerState);
 
 struct UILayoutElement {
@@ -106,8 +132,7 @@ struct UILayoutElement {
 	uint32_t parent;
 	std::vector<uint32_t> children; // reference to context->layoutElementChildrenIndices
 
-	glm::vec3* dragValue{ nullptr };
-	glm::vec4* dragValue2{ nullptr };
+	UILayoutElementData data;
 };
 
 struct UIElementOptions {
@@ -127,8 +152,7 @@ struct UIElementOptions {
 
 	std::string_view text;
 
-	glm::vec3* dragValue{ nullptr };
-	glm::vec4* dragValue2{ nullptr };
+	UILayoutElementData data;
 };
 
 struct UIElement {

@@ -66,6 +66,7 @@ void main() {
 
 	vec3 ambient = color * sceneData.ambientColor.xyz;
 	*/
+	vec3 sunlightDirection = normalize(sceneData.sunlightDirection.xyz);
 
 	vec3 color = vec3(1.0f);
 	if (material.albedoTexture > 0) {
@@ -75,12 +76,12 @@ void main() {
 	vec3 ambient = color * 0.15 * sceneData.ambientColor.xyz;
 
 	vec3 normal = normalize(inNormal);
-	float diff = max(dot(sceneData.sunlightDirection.xyz, normal), 0.0f);
+	float diff = max(dot(sunlightDirection, normal), 0.0f);
 	vec3 diffuse = diff * sceneData.sunlightColor.xyz * color;
 
 	vec3 viewDir = normalize(PushConstants.viewPosition.xyz - inFragPos);
 
-	vec3 halfwayDir = normalize(sceneData.sunlightDirection.xyz + viewDir);  
+	vec3 halfwayDir = normalize(sunlightDirection + viewDir);  
 	float spec = pow(max(dot(normal, halfwayDir), 0.0), 32.0);
 	vec3 specular = vec3(0.3) * spec;
 

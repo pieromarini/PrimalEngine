@@ -1,4 +1,3 @@
-#include "ui/widgets.h"
 #include "utils/fonts.h"
 #include "ui_types.h"
 #include <stack>
@@ -10,6 +9,7 @@ struct UIContext {
 	std::vector<UIRenderCommand> renderCommands;
 
 	std::vector<UILayoutElement> layoutElements;
+	std::vector<UILayoutElementData> layoutElementsData;
 	std::vector<uint32_t> layoutElementChildrenIndices;
 	std::stack<uint32_t> openLayoutElements; // elements with an open Layout
 
@@ -40,8 +40,6 @@ UIContext* getUIContext();
 void onResizeCallback(float width, float height);
 void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown);
 
-void onDrag(float mouseX, float mouseY, float deltaTime);
-
 BoundingBox getTextSize();
 
 void clearContext();
@@ -62,7 +60,7 @@ void getTextDimensions(std::string_view text, FontInfo& fontInfo, float& width, 
 void computeFinalSizes();
 void calculateFinalLayout();
 
-// API
+// Base layout API
 void setFont(FontInfo fontInfo);
 
 void pushText(UIElementOptions options);

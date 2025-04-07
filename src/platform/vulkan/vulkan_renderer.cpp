@@ -1,5 +1,6 @@
 #include "config.h"
 #include "ui/ui_types.h"
+#include "ui/widgets.h"
 #include <algorithm>
 #include <chrono>
 #include <iterator>
@@ -1742,6 +1743,12 @@ void VulkanRenderer::updateUIData() {
 			m_sceneData.sunlightDirection.z,
 			m_sceneData.sunlightDirection.w);
 
+	auto sunColor = std::format("Sun Color: {:.2f} {:.2f} {:.2f} {:.2f}",
+			m_sceneData.sunlightColor.x,
+			m_sceneData.sunlightColor.y,
+			m_sceneData.sunlightColor.z,
+			m_sceneData.sunlightColor.w);
+
 	UI::setFont({ .fontChars = fontChars, .textureWidth = static_cast<float>(fontSDF.width) });
 
 	auto start = std::chrono::high_resolution_clock::now();
@@ -1792,21 +1799,13 @@ void VulkanRenderer::updateUIData() {
 				.height = { .sizingMode = UI::UISizingMode::FIT },
 				.layoutDirection = UI::UILayoutDirection::VERTICAL,
 				.backgroundColor = { 0.0f, 0.0f, 1.0f, 1.0f },
-				.padding = 40.0f,
-				.childGap = 40.0f });
-		UI::openTextElement();
-			UI::pushText({ .text = cameraPosition,
-					.dragValue = &m_rendererState->mainCamera->position });
-		UI::closeTextElement();
+				.padding = 10.0f,
+				.childGap = 20.0f });
 
-		UI::openTextElement();
-			UI::pushText({ .text = sunDirection,
-					.dragValue2 = &m_sceneData.sunlightDirection });
-		UI::closeTextElement();
+		UI::sliderFloat3(&m_rendererState->mainCamera->position);
+		UI::sliderFloat4(&m_sceneData.sunlightDirection, 0.0f, 1.0f);
+		UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);
 
-		UI::openElement();
-			UI::pushBox({ .width = { .size = 300.0f }, .height = { .size = 100.0f }, .backgroundColor = { 0.5f, 0.5f, 0.5f, 1.0f } });
-		UI::closeElement();
 	UI::closeElement();
 
 	getCurrentFrame().uiRenderCommands = UI::endLayout();
