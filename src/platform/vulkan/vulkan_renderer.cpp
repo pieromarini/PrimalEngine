@@ -428,6 +428,8 @@ void VulkanRenderer::cleanup() {
 		frame.m_deletionQueue.flush();
 	}
 
+	vkDestroyPipelineCache(m_device, m_pipelineCache, nullptr);
+
 	m_mainDeletionQueue.flush();
 
 	UI::cleanupRenderContext();
@@ -1195,6 +1197,9 @@ void VulkanRenderer::initDescriptors() {
 }
 
 void VulkanRenderer::initPipelines() {
+	VkPipelineCacheCreateInfo cacheCreateInfo{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO };
+	vkCreatePipelineCache(m_device, &cacheCreateInfo, nullptr, &m_pipelineCache);
+
 	initBackgroundPipelines();
 	buildDefaultPipelines();
 	initUIPipeline();
@@ -1231,7 +1236,7 @@ void VulkanRenderer::initBackgroundPipelines() {
 	computePipelineCreateInfo.layout = m_skyPipelineLayout;
 	computePipelineCreateInfo.stage = stageinfo;
 
-	VK_CHECK(vkCreateComputePipelines(m_device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &m_skyPipeline));
+	VK_CHECK(vkCreateComputePipelines(m_device, m_pipelineCache, 1, &computePipelineCreateInfo, nullptr, &m_skyPipeline));
 
 	vkDestroyShaderModule(m_device, computeDrawShader, nullptr);
 
@@ -1286,7 +1291,7 @@ void VulkanRenderer::initUIPipeline() {
 	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
 	pipelineBuilder.setDepthFormat(m_depthImage.imageFormat);
 
-	uiPipeline = pipelineBuilder.buildPipeline(m_device);
+	uiPipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
 
 	m_mainDeletionQueue.push([&]() {
 		vkDestroyPipeline(m_device, uiPipeline, nullptr);
@@ -1341,7 +1346,7 @@ void VulkanRenderer::initFontPipeline() {
 	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
 	pipelineBuilder.setDepthFormat(m_depthImage.imageFormat);
 
-	fontPipeline = pipelineBuilder.buildPipeline(m_device);
+	fontPipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
 
 	m_mainDeletionQueue.push([&]() {
 		vkDestroyPipeline(m_device, fontPipeline, nullptr);
@@ -1645,15 +1650,15 @@ void VulkanRenderer::buildDefaultPipelines() {
 	pipelineBuilder.setDepthFormat(m_depthImage.imageFormat);
 
 	// build opaque pipeline
-	opaquePipeline.pipeline = pipelineBuilder.buildPipeline(m_device);
+	opaquePipeline.pipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
 
 	// create the double sided variant
 	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-	doubleSidedPipeline.pipeline = pipelineBuilder.buildPipeline(m_device);
+	doubleSidedPipeline.pipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
 
 	// create the alpha blending variant
 	pipelineBuilder.enableBlendingAlphablend();
-	transparentPipeline.pipeline = pipelineBuilder.buildPipeline(m_device);
+	transparentPipeline.pipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
 
 	m_mainDeletionQueue.push([&] {
 		vkDestroyPipeline(m_device, opaquePipeline.pipeline, nullptr);

@@ -10,7 +10,7 @@ class PipelineBuilder {
 		void clear();
 		void setPipelineLayout(VkPipelineLayout pipelineLayout);
 
-		VkPipeline buildPipeline(VkDevice device);
+		VkPipeline buildPipeline(VkDevice device, VkPipelineCache pipelineCache);
 		void setShaders(VkShaderModule vertexShader, VkShaderModule fragmentShader);
 		void setInputTopology(VkPrimitiveTopology topology);
 		void setPolygonMode(VkPolygonMode polygonMode);

@@ -21,7 +21,7 @@ void PipelineBuilder::setPipelineLayout(VkPipelineLayout pipelineLayout) {
 	m_pipelineLayout = pipelineLayout;
 }
 
-VkPipeline PipelineBuilder::buildPipeline(VkDevice device) {
+VkPipeline PipelineBuilder::buildPipeline(VkDevice device, VkPipelineCache pipelineCache) {
 	// make viewport state from our stored viewport and scissor.
 	// at the moment we wont support multiple viewports or scissors
 	VkPipelineViewportStateCreateInfo viewportState = {};
@@ -67,7 +67,7 @@ VkPipeline PipelineBuilder::buildPipeline(VkDevice device) {
 	pipelineInfo.pDynamicState = &dynamicInfo;
 
 	VkPipeline newPipeline{};
-	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &newPipeline) != VK_SUCCESS) {
+	if (vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineInfo, nullptr, &newPipeline) != VK_SUCCESS) {
 		std::cout << std::format("failed to create pipeline\n");
 		return VK_NULL_HANDLE;
 	} else {

@@ -359,9 +359,6 @@ private:
 	uint32_t fontIndexCount{ 0 };
 	VkPipelineLayout fontPipelineLayout;
 	VkPipeline fontPipeline;
-	std::vector<UI::UIVertex> fontVertices;
-	std::vector<uint32_t> fontIndices;
-	std::vector<UI::UIElement> textElements{};
 
 	// UI Rendering
 	UIUniformData uiUniformData{};
@@ -371,9 +368,8 @@ private:
 	VkDescriptorSet uiDescriptorSet;
 	VkPipelineLayout uiPipelineLayout;
 	VkPipeline uiPipeline;
-	std::vector<UI::UIVertex> uiVertices;
-	std::vector<uint32_t> uiIndices;
-	std::vector<UI::UIElement> uiElements{};
+
+	VkPipelineCache m_pipelineCache;
 
 	// Timestamp
 	float physicalDeviceTimestampPeriod{};
