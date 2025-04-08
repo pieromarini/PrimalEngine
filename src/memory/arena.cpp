@@ -28,7 +28,7 @@ MemoryArena MemoryArena_alloc(uint64_t bytesToReserve) {
 	arena.pos = 0;
 
 	// Don't allow application to continue if we can't allocate.
-	assert(arena.memory != MAP_FAILED);
+	// assert(arena.memory != MAP_FAILED);
 
 	std::cout << std::format("Allocated {} bytes\n", bytesToReserve);
 
@@ -36,10 +36,15 @@ MemoryArena MemoryArena_alloc(uint64_t bytesToReserve) {
 }
 
 void MemoryArena_free(MemoryArena* arena) {
+#ifdef PLATFORM_WINDOWS
+#endif
+
+#ifdef PLATFORM_POSIX
 	munmap(arena->memory, arena->size);
 	arena->memory = nullptr;
 	arena->size = 0;
 	arena->pos = 0;
+#endif
 }
 
 // TODO: implement alignment

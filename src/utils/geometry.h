@@ -33,7 +33,7 @@ inline CircleGeometryInfo generateCircleGeometry(float radius, uint32_t segments
 		vertices.push_back({ .position = { centerX, centerY, centerZ } });
 
 		for (int i = 0; i < segments; i++) {
-			float theta = (i / static_cast<float>(segments)) * M_PI * 2;
+			float theta = (i / static_cast<float>(segments)) * std::numbers::pi_v<float> * 2;
 			float x = centerX + radius * std::cos(theta);
 			float y = centerY + radius * std::sin(theta);
 
@@ -68,7 +68,7 @@ inline CircleGeometryInfo generateCircleGeometry(float radius, uint32_t segments
 
 		// Generate vertices for both inner and outer circles
 		for (int i = 0; i < segments; i++) {
-			float theta = (i / static_cast<float>(segments)) * M_PI * 2;
+			float theta = (i / static_cast<float>(segments)) * std::numbers::pi_v<float> * 2;
 			float cosTheta = std::cos(theta);
 			float sinTheta = std::sin(theta);
 
