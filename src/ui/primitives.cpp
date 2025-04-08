@@ -1,4 +1,5 @@
 #include "primitives.h"
+#include "utils/geometry.h"
 
 namespace pm::UI {
 
@@ -38,6 +39,32 @@ UIElement triangle(std::vector<UIVertex>& vertices, std::vector<uint32_t>& indic
 	indices.push_back(0);
 	indices.push_back(1);
 	indices.push_back(2);
+
+	return element;
+}
+
+UIElement circle(float radius, uint32_t segments, float thickness, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices) {
+	auto element = UIElement{};
+
+	element.firstIndex = indices.size();
+	element.vertexOffset = static_cast<int32_t>(vertices.size());
+
+	auto info = generateCircleGeometry(radius, segments, vertices, indices, CircleType::OUTLINE, thickness);
+
+	element.indexCount = info.indexCount;
+
+	return element;
+}
+
+UIElement circleFilled(float radius, uint32_t segments, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices) {
+	auto element = UIElement{};
+
+	element.firstIndex = indices.size();
+	element.vertexOffset = static_cast<int32_t>(vertices.size());
+
+	auto info = generateCircleGeometry(radius, segments, vertices, indices, CircleType::FILLED);
+
+	element.indexCount = info.indexCount;
 
 	return element;
 }

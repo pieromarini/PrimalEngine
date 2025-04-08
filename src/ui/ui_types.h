@@ -21,6 +21,7 @@ enum UISizingMode {
 
 enum UIRenderCommandType {
 	RECTANGLE,
+	CIRCLE,
 	TEXT
 };
 
@@ -48,6 +49,11 @@ enum UIDataType {
 	STRING
 };
 
+enum class CircleType {
+	FILLED,
+	OUTLINE
+};
+
 struct UIPadding {
 	UIPadding(): top{0}, bottom{0}, left{0}, right{0} {}
 	UIPadding(float t, float b, float l, float r): top{t}, bottom{b}, left{l}, right{r} {}
@@ -60,9 +66,20 @@ struct UIPadding {
 struct UIRenderCommand {
 	uint32_t id;
 	uint32_t zindex;
+
 	BoundingBox boundingBox;
+
 	glm::vec4 backgroundColor;
+
+	// text
 	std::string text;
+
+	// circle
+	float radius;
+	float thickness;
+	uint32_t segments;
+	CircleType circleType;
+
 	UIRenderCommandType commandType;
 };
 
@@ -128,9 +145,15 @@ struct UILayoutElement {
 	std::function<InteractionCallbackSignature> onClickCallback;
 
 	bool isText{ false }; // TODO: REMOVE THIS
+	bool isCircle{ false };
 	std::string text;
 	uint32_t parent;
 	std::vector<uint32_t> children; // reference to context->layoutElementChildrenIndices
+
+	float radius;
+	uint32_t segments;
+	float thickness;
+	CircleType circleType;
 
 	UILayoutElementData data;
 };

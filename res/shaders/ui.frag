@@ -34,4 +34,6 @@ void main() {
 	}
 
 	outFragColor = material.backgroundColor;
+
+	// outFragColor = vec4(inColor, 1.0f);
 }

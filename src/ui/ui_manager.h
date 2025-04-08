@@ -1,5 +1,6 @@
 #include "utils/fonts.h"
 #include "ui_types.h"
+#include "utils/geometry.h"
 #include <stack>
 #include <vector>
 
@@ -52,6 +53,7 @@ void closeElement();
 
 void openTextElement();
 void closeTextElement();
+void closeCircleElement();
 
 // Utils
 void getTextDimensions(std::string_view text, FontInfo& fontInfo, float& width, float& height);
@@ -66,6 +68,8 @@ void setFont(FontInfo fontInfo);
 void pushText(UIElementOptions options);
 void pushBox(UIElementOptions options);
 void pushTriangle(UIElementOptions options);
+void pushCircle(float radius, uint32_t segments, float thickness, glm::vec4 color);
+void pushCircleFilled(float radius, uint32_t segments, glm::vec4 color);
 
 // Interactions
 bool isHovered();

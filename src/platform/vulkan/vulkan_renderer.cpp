@@ -449,6 +449,14 @@ std::vector<UI::UIElement> VulkanRenderer::buildUIGeometry(std::vector<UI::UIRen
 			elements.push_back(UI::box(vertices, indices));
 			break;
 		}
+		case pm::UI::UIRenderCommandType::CIRCLE: {
+			if (renderCommand.circleType == UI::CircleType::FILLED) {
+				elements.push_back(UI::circleFilled(renderCommand.radius, renderCommand.segments, vertices, indices));
+			} else {
+				elements.push_back(UI::circle(renderCommand.radius, renderCommand.segments, renderCommand.thickness, vertices, indices));
+			}
+			break;
+		}
 		case pm::UI::UIRenderCommandType::TEXT: {
 			elements.push_back(UI::text(renderCommand.text, static_cast<float>(fontSDF.width), fontChars, &vertices, &indices));
 			break;
@@ -506,6 +514,23 @@ void VulkanRenderer::buildUIDrawBatches(std::vector<UI::UIRenderCommand>& render
 			transform = glm::translate(transform, glm::vec3(bb.x + bb.width / 2.0f, bb.y + bb.height / 2.0f, 0.0f));
 			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
 			transform = glm::scale(transform, glm::vec3(bb.width / 2.0f, bb.height / 2.0f, 1.0f));
+			// uiDrawCommands.push_back(getBoxDrawCommand(renderCommand));
+			uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
+				.command = {
+					.indexCount = uiElement.indexCount,
+					.instanceCount = 1,
+					.firstIndex = uiElement.firstIndex,
+					.vertexOffset = uiElement.vertexOffset,
+					.firstInstance = uiDrawIdCount } });
+			uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
+			uiMaterialData.push_back({ .backgroundColor = renderCommand.backgroundColor });
+			uiDrawIdCount++;
+			break;
+		}
+		case pm::UI::UIRenderCommandType::CIRCLE: {
+			transform = glm::translate(transform, glm::vec3(bb.x + bb.width / 2.0f, bb.y + bb.height / 2.0f, 0.0f));
+			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+			transform = glm::scale(transform, glm::vec3(1.0f, 1.0f, 1.0f));
 			// uiDrawCommands.push_back(getBoxDrawCommand(renderCommand));
 			uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
 				.command = {
@@ -1804,6 +1829,18 @@ void VulkanRenderer::updateUIData() {
 
 		UI::sliderFloat3(&m_rendererState->mainCamera->position);
 		UI::sliderFloat4(&m_sceneData.sunlightDirection, 0.0f, 1.0f);
+
+		UI::openElement();
+			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+					.height = { .sizingMode = UI::UISizingMode::FIT },
+					.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+					.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
+					.padding = 10.0f,
+					.childGap = 20.0f });
+			UI::pushCircleFilled(80.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
+			UI::pushCircle(80.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
+		UI::closeElement();
+
 		UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);
 
 	UI::closeElement();

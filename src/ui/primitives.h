@@ -11,6 +11,8 @@ namespace pm::UI {
 
 UIElement box(std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices);
 UIElement triangle(std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices);
+UIElement circle(float radius, uint32_t segments, float thickness, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices);
+UIElement circleFilled(float radius, uint32_t segments, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices);
 
 UIElement text(std::string_view text, float textureWidth, std::array<bmchar, 255>& fontChars, std::vector<UIVertex>* vertices, std::vector<uint32_t>* indices);
 

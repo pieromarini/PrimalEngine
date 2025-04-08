@@ -1,11 +1,10 @@
 #include "ui_manager.h"
+#include <iostream>
+#include <format>
 #include "ui/ui_types.h"
 #include "utils/fonts.h"
 #include <algorithm>
-#include <format>
-#include <iostream>
 #include <iterator>
-#include <queue>
 #include <ranges>
 
 namespace pm::UI {
@@ -86,6 +85,7 @@ void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouse
 
 			// When we click inside an element, record the interaction
 			if (context->pointerState.pointerClickState == PointerClickState::PRESSED_THIS_FRAME && firstEvent) {
+				std::cout << std::format("{} {} {} {}\n", bb.x, bb.y, bb.width, bb.height);
 				context->interactionState.elementId = element.id;
 				firstEvent = false;
 			}
@@ -280,6 +280,38 @@ void closeTextElement() {
 	// TODO: handle text wrapping and truncation
 }
 
+void closeCircleElement() {
+	auto context = getUIContext();
+
+	auto closedElementIndex = std::move(context->openLayoutElements.top());
+	context->openLayoutElements.pop();
+
+	auto& openLayoutElement = context->layoutElements.at(closedElementIndex);
+
+	// Set parent to the open layout element
+	if (!context->openLayoutElements.empty()) {
+		uint32_t parentIndex = context->openLayoutElements.top();
+		openLayoutElement.parent = parentIndex;
+	}
+
+	// add parent padding
+	if (openLayoutElement.parent >= 0) {
+		auto& parent = context->layoutElements.at(openLayoutElement.parent);
+		openLayoutElement.x += parent.padding.left;
+		openLayoutElement.y += parent.padding.top;
+	}
+
+	float horizontalPadding = openLayoutElement.padding.left + openLayoutElement.padding.right;
+	float verticalPadding = openLayoutElement.padding.top + openLayoutElement.padding.bottom;
+
+	// Calculate closing element's Width and Height
+	if (openLayoutElement.layoutDirection == UILayoutDirection::HORIZONTAL) {
+		openLayoutElement.width.size += horizontalPadding;
+	} else {
+		openLayoutElement.height.size += verticalPadding;
+	}
+}
+
 // DFS to add parent position to children
 void computeFinalSizes() {
 	auto context = getUIContext();
@@ -328,10 +360,17 @@ void calculateFinalLayout() {
 				.width = layoutElement.width.size,
 				.height = layoutElement.height.size },
 			.backgroundColor = layoutElement.backgroundColor,
-			.commandType = layoutElement.isText ? UIRenderCommandType::TEXT : UIRenderCommandType::RECTANGLE
+			.commandType = UIRenderCommandType::RECTANGLE
 		};
 
-		if (layoutElement.isText) {
+		if (layoutElement.isCircle) {
+			c.commandType = UIRenderCommandType::CIRCLE;
+			c.circleType = layoutElement.circleType;
+			c.thickness = layoutElement.thickness;
+			c.radius = layoutElement.radius;
+			c.segments = layoutElement.segments;
+		} else if (layoutElement.isText) {
+			c.commandType = UIRenderCommandType::TEXT;
 			c.text = layoutElement.text;
 		}
 
@@ -415,6 +454,39 @@ bool isHovered() {
 
 bool isInsideBoundingBox(float x, float y, BoundingBox bb) {
 	return x >= bb.x && x <= bb.x + bb.width && y >= bb.y && y <= bb.y + bb.height;
+}
+
+void pushCircle(float radius, uint32_t segments, float thickness, glm::vec4 color) {
+	openElement();
+	auto context = getUIContext();
+	auto& layoutElement = context->layoutElements.back();
+
+	layoutElement.width.size = radius * 2;
+	layoutElement.height.size = radius * 2;
+	layoutElement.isCircle = true;
+	layoutElement.radius = radius;
+	layoutElement.segments = segments;
+	layoutElement.thickness = thickness;
+	layoutElement.backgroundColor = color;
+	layoutElement.circleType = CircleType::OUTLINE;
+
+	closeCircleElement();
+}
+
+void pushCircleFilled(float radius, uint32_t segments, glm::vec4 color) {
+	openElement();
+	auto context = getUIContext();
+	auto& layoutElement = context->layoutElements.back();
+
+	layoutElement.width.size = radius * 2;
+	layoutElement.height.size = radius * 2;
+	layoutElement.isCircle = true;
+	layoutElement.radius = radius;
+	layoutElement.segments = segments;
+	layoutElement.backgroundColor = color;
+	layoutElement.circleType = CircleType::FILLED;
+
+	closeCircleElement();
 }
 
 }// namespace pm::UI
