@@ -106,7 +106,6 @@ inline std::pair<float, float> generateTextFromFont(std::string_view text, float
 
 		posy = yo;
 
-		// TODO: check if this is correct. need to get the max height from this text string
 		maxPosY = std::max(maxPosY, posy + dimy);
 
 		auto color = glm::vec3(1.0f, 0.0f, 0.0f);
