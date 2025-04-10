@@ -41,3 +41,4 @@ extern/sdl*
 # Compiled SPV shaders
 res/shaders/*.spv
 res/models/bistro
+res/fonts/msdf-atlas-gen.exe
