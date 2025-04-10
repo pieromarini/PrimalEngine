@@ -2,7 +2,8 @@
 
 # Extra
 imgui.ini
-*.json
+compile_commands.json
+settings.json
 *.plist
 
 # clangd completion with compile-commands
