@@ -50,6 +50,7 @@ void main() {
 	float opacity = clamp(sigDist + 0.5, 0.0, 1.0);
 
 	outFragColor = vec4(ubo.outlineColor.rgb, opacity);
+	// outFragColor = mix(vec4(0.0f), ubo.outlineColor, opacity);
 
 	/*
   float distance = texture(msdfTexture, inUV).a;

@@ -16,14 +16,29 @@ std::pair<float, float> generateTextFromFont(std::string_view text, float fontSi
 	float cursorX{ 0.0f };
 
 	// TODO: why do we need this magic number? I'm guessing we are not aligning to the baseline correctly.
-	float baseline{ metadata.metrics.ascender * scale * 0.75f };
+	float baseline{ metadata.metrics.ascender * scale * 0.80f };
 
 	float minY = std::numeric_limits<float>::max();
 	float maxY = std::numeric_limits<float>::lowest();
 
+	float texelWidth = 1.0f / (float)metadata.atlas.width;
+	float texelHeight = 1.0f / (float)metadata.atlas.height;
+
+	float textWidth = 0.0f;
+
 	for (size_t i = 0; i < text.length(); i++) {
 		int unicode = static_cast<unsigned char>(text[i]);
-		// auto& glyph = metadata.glyphs[unicode];
+
+		if (unicode == '\r') {
+			continue;
+		}
+		if (unicode == '\n') {
+			textWidth = std::max(textWidth, cursorX);
+			cursorX = 0;
+			baseline += scale * metadata.metrics.lineHeight;
+			continue;
+		}
+
 		auto glyphIt = std::ranges::find_if(metadata.glyphs, [&unicode](const Glyph& g) { return g.unicode == unicode; });
 
 		// If we can't find a glyph, we skip it
@@ -53,10 +68,10 @@ std::pair<float, float> generateTextFromFont(std::string_view text, float fontSi
 		float glyphHeight = (glyph.planeBounds.top - glyph.planeBounds.bottom) * scale;
 
 		// UVs
-		float u0 = glyph.atlasBounds.left / (float)metadata.atlas.width;
-		float v0 = 1.0f - (glyph.atlasBounds.top / (float)metadata.atlas.height);
-		float u1 = glyph.atlasBounds.right / (float)metadata.atlas.width;
-		float v1 = 1.0f - (glyph.atlasBounds.bottom / (float)metadata.atlas.height);
+		float u0 = glyph.atlasBounds.left * texelWidth;
+		float v0 = 1.0f - (glyph.atlasBounds.top * texelHeight);
+		float u1 = glyph.atlasBounds.right * texelWidth;
+		float v1 = 1.0f - (glyph.atlasBounds.bottom * texelHeight);
 
 		// Quad vertices
 		float x0 = cursorX + glyph.planeBounds.left * scale;
@@ -85,6 +100,7 @@ std::pair<float, float> generateTextFromFont(std::string_view text, float fontSi
 		cursorX += glyph.advance * scale;
 		vertexIndex += 4;
 	}
+	textWidth = std::max(textWidth, cursorX);
 
 	float textHeight = maxY - minY;
 
