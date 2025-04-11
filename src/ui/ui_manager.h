@@ -21,7 +21,7 @@ struct UIContext {
 	std::vector<uint32_t> hoveredIds;
 
 	// Fonts
-	FontInfo fontInfo;
+	FontAsset* fontAsset;
 
 	// Window context
 	float windowWidth, windowHeight;
@@ -56,18 +56,17 @@ void closeTextElement();
 void closeCircleElement();
 
 // Utils
-void getTextDimensions(std::string_view text, FontInfo& fontInfo, float& width, float& height);
+void getTextDimensions(std::string_view text, FontAsset* font, float& width, float& height);
 
 // Layout
 void computeFinalSizes();
 void calculateFinalLayout();
 
 // Base layout API
-void setFont(FontInfo fontInfo);
+void setFont(FontAsset* font);
 
 void pushText(UIElementOptions options);
 void pushBox(UIElementOptions options);
-void pushTriangle(UIElementOptions options);
 void pushCircle(float radius, uint32_t segments, float thickness, glm::vec4 color);
 void pushCircleFilled(float radius, uint32_t segments, glm::vec4 color);
 

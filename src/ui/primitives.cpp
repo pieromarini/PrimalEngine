@@ -1,4 +1,5 @@
 #include "primitives.h"
+#include "utils/fonts.h"
 #include "utils/geometry.h"
 
 namespace pm::UI {
@@ -69,14 +70,14 @@ UIElement circleFilled(float radius, uint32_t segments, std::vector<UIVertex>& v
 	return element;
 }
 
-UIElement text(std::string_view text, float textureWidth, std::array<bmchar, 255>& fontChars, std::vector<UIVertex>* vertices, std::vector<uint32_t>* indices) {
+UIElement text(std::string_view text, float fontSize, FontAsset* font, std::vector<UIVertex>* vertices, std::vector<uint32_t>* indices) {
 	auto element = UIElement{};
 
 	element.firstIndex = indices->size();
 	element.indexCount = text.size() * 6; // 6 indices per generated quad
 	element.vertexOffset = static_cast<int32_t>(vertices->size());
 
-	generateTextFromFont(text, textureWidth, fontChars, vertices, indices);
+	generateTextFromFont(text, fontSize, font, vertices, indices);
 
 	return element;
 }

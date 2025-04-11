@@ -1,3 +1,4 @@
+#include "assets/font_loader.h"
 #include "config.h"
 #include "ui/ui_types.h"
 #include "ui/widgets.h"
@@ -38,8 +39,6 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	initSwapchain();
 	initCommands();
 	initSyncStructures();
-	initFontData();
-	initUI();
 	initDescriptors();
 	initBindlessTextureDescriptor();
 	initPipelines();
@@ -48,8 +47,11 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	m_materialCache = MaterialCache_init();
 
 	initDefaultData();
+	initFontData();
+	initUI();
 
-	const std::string modelPath = { "res/models/bistro/bistro_ktx2.glb" };
+	// const std::string modelPath = { "res/models/bistro/bistro_ktx2.glb" };
+	const std::string modelPath = { "res/models/structure.glb" };
 
 	auto start = std::chrono::system_clock::now();
 	auto loadedGLTF = loadGLTF(this, modelPath);
@@ -428,6 +430,11 @@ void VulkanRenderer::cleanup() {
 		frame.m_deletionQueue.flush();
 	}
 
+	destroyImage(sourceCodeFontTexture);
+
+	destroyFontSDF(sourceCodeFont);
+	destroyFontSDF(arialFont);
+
 	vkDestroyPipelineCache(m_device, m_pipelineCache, nullptr);
 
 	m_mainDeletionQueue.flush();
@@ -460,7 +467,7 @@ std::vector<UI::UIElement> VulkanRenderer::buildUIGeometry(std::vector<UI::UIRen
 			break;
 		}
 		case pm::UI::UIRenderCommandType::TEXT: {
-			elements.push_back(UI::text(renderCommand.text, static_cast<float>(fontSDF.width), fontChars, &vertices, &indices));
+			elements.push_back(UI::text(renderCommand.text, 16.0f, &sourceCodeFont, &vertices, &indices));
 			break;
 		}
 		}
@@ -623,7 +630,8 @@ void VulkanRenderer::buildUIDrawBatches(std::vector<UI::UIRenderCommand>& render
 		textDescriptors.emplace_back(3, textTransformDataBuffer, sizeof(glm::mat4) * textTransformData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
 		std::vector<DrawBatchImageDescriptor> textImageDescriptors;
-		textImageDescriptors.emplace_back(1, fontSDF.view, fontSDF.sampler, fontSDF.imageLayout, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		// textImageDescriptors.emplace_back(1, fontSDF.view, fontSDF.sampler, fontSDF.imageLayout, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		textImageDescriptors.emplace_back(1, sourceCodeFontTexture.imageView, sourceCodeFontTexture.sampler, sourceCodeFontTexture.imageLayout, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
 		textDrawBatch.descriptors = textDescriptors;
 		textDrawBatch.imageDescriptors = textImageDescriptors;
@@ -1340,7 +1348,7 @@ void VulkanRenderer::initFontPipeline() {
 	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
 	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
 	pipelineBuilder.setMultisamplingNone();
-	pipelineBuilder.enableBackgroundBlending();
+	pipelineBuilder.enableBlendingAlphablend();
 	pipelineBuilder.disableDepthTest();
 
 	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
@@ -1527,6 +1535,9 @@ AllocatedImage VulkanRenderer::createImage(std::string name, void* data, VkExten
 			transitionImage(cmd, newImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		}
 	});
+
+	// TOOD: we always default to this layout
+	newImage.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 	destroyBuffer(uploadbuffer);
 
@@ -1720,11 +1731,16 @@ void VulkanRenderer::updateFontData() {
 }
 
 void VulkanRenderer::initFontData() {
-	// parse font file
-	fontChars = parsebmFont("res/fonts/font.fnt");
+	sourceCodeFont = loadFontSDF("SauceCodePro-Light", "res/fonts/SauceCodePro-Light.png", "res/fonts/SauceCodePro-Light.json");
+	// arialFont = loadFontSDF("Arial", "res/fonts/arial.png", "res/fonts/arial.json");
 
-	// load ktx texture
-	fontSDF.loadFromFile("res/fonts/font_sdf_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, m_device, m_chosenGPU, getCurrentFrame().m_commandPool, m_graphicsQueue, maxSamplerAnisotropy);
+	auto extents = VkExtent3D{
+		sourceCodeFont.image.width,
+		sourceCodeFont.image.height,
+		1
+	};
+	sourceCodeFontTexture = createImage("SourceCodeFont-Image", sourceCodeFont.image.data, extents, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	sourceCodeFontTexture.sampler = defaultSamplerLinear;
 
 	// Create uniform buffer
 	fontUniformBuffer = createBuffer("fontUniformBuffer", sizeof(FontUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
@@ -1768,85 +1784,85 @@ void VulkanRenderer::updateUIData() {
 		m_rendererState->mainCamera->position.z);
 
 	auto sunDirection = std::format("Sun Direction: {:.2f} {:.2f} {:.2f} {:.2f}",
-			m_sceneData.sunlightDirection.x,
-			m_sceneData.sunlightDirection.y,
-			m_sceneData.sunlightDirection.z,
-			m_sceneData.sunlightDirection.w);
+		m_sceneData.sunlightDirection.x,
+		m_sceneData.sunlightDirection.y,
+		m_sceneData.sunlightDirection.z,
+		m_sceneData.sunlightDirection.w);
 
 	auto sunColor = std::format("Sun Color: {:.2f} {:.2f} {:.2f} {:.2f}",
-			m_sceneData.sunlightColor.x,
-			m_sceneData.sunlightColor.y,
-			m_sceneData.sunlightColor.z,
-			m_sceneData.sunlightColor.w);
+		m_sceneData.sunlightColor.x,
+		m_sceneData.sunlightColor.y,
+		m_sceneData.sunlightColor.z,
+		m_sceneData.sunlightColor.w);
 
-	UI::setFont({ .fontChars = fontChars, .textureWidth = static_cast<float>(fontSDF.width) });
+	UI::setFont(&sourceCodeFont);
 
 	auto start = std::chrono::high_resolution_clock::now();
 
 	UI::beginLayout();
 
 	UI::openElement();
-		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::GROW },
-				.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
-				.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-				.backgroundColor = { UI::isHovered() ? 0.0f : 1.0f, UI::isHovered() ? 0.0f : 1.0f, 0.0f, 1.0f },
-				.padding = 10.0f,
-				.childGap = 10.0f,
-				.onHoverCallback = [](uint32_t elementId, UI::PointerState pointerState) {} });
+	UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::GROW },
+		.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
+		.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+		.backgroundColor = { UI::isHovered() ? 0.0f : 1.0f, UI::isHovered() ? 0.0f : 1.0f, 0.0f, 1.0f },
+		.padding = 10.0f,
+		.childGap = 10.0f,
+		.onHoverCallback = [](uint32_t elementId, UI::PointerState pointerState) {} });
 
-		UI::openElement();
-			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-					.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::FIT },
- 					.layoutDirection = UI::UILayoutDirection::VERTICAL,
-					.backgroundColor = { 0.0f, 1.0f, 0.0f, 1.0f },
-					.padding = 10.0f,
-					.childGap = 10.0f });
+	UI::openElement();
+	UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+		.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::FIT },
+		.layoutDirection = UI::UILayoutDirection::VERTICAL,
+		.backgroundColor = { 0.0f, 1.0f, 0.0f, 1.0f },
+		.padding = 10.0f,
+		.childGap = 10.0f });
 
-			UI::openTextElement();
-				UI::pushText({ .text = stats });
-			UI::closeTextElement();
+	UI::openTextElement();
+	UI::pushText({ .text = stats });
+	UI::closeTextElement();
 
-			UI::openTextElement();
-				UI::pushText({ .text = otherStats });
-			UI::closeTextElement();
-		UI::closeElement();
-
-		UI::openElement();
-			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-					.height = { .sizingMode = UI::UISizingMode::FIT },
-					.layoutDirection = UI::UILayoutDirection::VERTICAL,
-					.backgroundColor = { 0.2f, 0.3f, 1.0f, 1.0f },
-					.padding = 10.0f });
-
-			UI::openTextElement();
-				UI::pushText({ .text = "Hello there" });
-			UI::closeTextElement();
-		UI::closeElement();
+	UI::openTextElement();
+	UI::pushText({ .text = otherStats });
+	UI::closeTextElement();
 	UI::closeElement();
 
 	UI::openElement();
-		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-				.height = { .sizingMode = UI::UISizingMode::FIT },
-				.layoutDirection = UI::UILayoutDirection::VERTICAL,
-				.backgroundColor = { 0.0f, 0.0f, 1.0f, 1.0f },
-				.padding = 10.0f,
-				.childGap = 20.0f });
+	UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+		.height = { .sizingMode = UI::UISizingMode::FIT },
+		.layoutDirection = UI::UILayoutDirection::VERTICAL,
+		.backgroundColor = { 0.2f, 0.3f, 1.0f, 1.0f },
+		.padding = 10.0f });
 
-		UI::sliderFloat3(&m_rendererState->mainCamera->position);
-		UI::sliderFloat4(&m_sceneData.sunlightDirection, 0.0f, 1.0f);
+	UI::openTextElement();
+	UI::pushText({ .text = "Hello there" });
+	UI::closeTextElement();
+	UI::closeElement();
+	UI::closeElement();
 
-		UI::openElement();
-			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-					.height = { .sizingMode = UI::UISizingMode::FIT },
-					.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-					.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
-					.padding = 10.0f,
-					.childGap = 20.0f });
-			UI::pushCircleFilled(80.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
-			UI::pushCircle(80.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
-		UI::closeElement();
+	UI::openElement();
+	UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+		.height = { .sizingMode = UI::UISizingMode::FIT },
+		.layoutDirection = UI::UILayoutDirection::VERTICAL,
+		.backgroundColor = { 0.0f, 0.0f, 1.0f, 1.0f },
+		.padding = 10.0f,
+		.childGap = 20.0f });
 
-		UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);
+	UI::sliderFloat3(&m_rendererState->mainCamera->position);
+	UI::sliderFloat4(&m_sceneData.sunlightDirection, 0.0f, 1.0f);
+
+	UI::openElement();
+	UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+		.height = { .sizingMode = UI::UISizingMode::FIT },
+		.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+		.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
+		.padding = 10.0f,
+		.childGap = 20.0f });
+	UI::pushCircleFilled(80.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
+	UI::pushCircle(80.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
+	UI::closeElement();
+
+	UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);
 
 	UI::closeElement();
 

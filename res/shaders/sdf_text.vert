@@ -35,10 +35,6 @@ layout (location = 0) out vec2 outUV;
 layout (location = 1) out vec3 outColor;
 
 void main() {
-  // TODO: This always returns 0
-  //       The whole `IndirectCommandData` structure is returned with 0's when inspected in RenderDoc
-  //       but when inspecting the actual buffer, the data is present.
-  //       For now, using gl_DrawIDARB instead just works, but maybe we want to rely on drawId later on.
   uint drawId = drawCommands[gl_DrawIDARB].drawId;
   UIVertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
 

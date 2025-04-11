@@ -215,6 +215,7 @@ target_include_directories(${ENGINE_LIB} PUBLIC "${STBIMAGE_DIR}")
 set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(extern/fastgltf EXCLUDE_FROM_ALL)
 target_include_directories(${ENGINE_LIB} PUBLIC extern/fastgltf/include)
+target_include_directories(${ENGINE_LIB} PUBLIC extern/fastgltf/deps/simdjson)
 
 set(BUILD_SHARED_LIBS ON)
 

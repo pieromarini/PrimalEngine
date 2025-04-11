@@ -1,5 +1,6 @@
 #pragma once
 
+#include "assets/asset.h"
 #include "material.h"
 #include "vulkan_loader.h"
 #include <SDL3/SDL.h>
@@ -355,7 +356,6 @@ private:
 	DescriptorAllocator fontDescriptorAllocator;
 	VkDescriptorSetLayout fontDescriptorLayout;
 	VkDescriptorSet fontDescriptorSet;
-	std::array<bmchar, 255> fontChars;
 	uint32_t fontIndexCount{ 0 };
 	VkPipelineLayout fontPipelineLayout;
 	VkPipeline fontPipeline;
@@ -375,6 +375,11 @@ private:
 	float physicalDeviceTimestampPeriod{};
 	VkQueryPool timestampPool;
 	VkQueryPool pipelineStatisticsPool;
+
+	// Testing fonts
+	FontAsset arialFont;
+	FontAsset sourceCodeFont;
+	AllocatedImage sourceCodeFontTexture;
 };
 
 }// namespace pm

@@ -382,10 +382,10 @@ void calculateFinalLayout() {
 	}
 }
 
-void setFont(FontInfo fontInfo) {
+void setFont(FontAsset* font) {
 	auto context = getUIContext();
 
-	context->fontInfo = fontInfo;
+	context->fontAsset = font;
 }
 
 void pushText(UIElementOptions options) {
@@ -393,8 +393,8 @@ void pushText(UIElementOptions options) {
 
 	float width{}, height{};
 
-	getTextDimensions(options.text, context->fontInfo, width, height);
-	// std::cout << std::format("text: {}x{}\n", width, height);
+	getTextDimensions(options.text, context->fontAsset, width, height);
+	// std::cout << std::format("text size: {}x{}\n", width, height);
 
 	auto& layoutElement = context->layoutElements.back();
 	layoutElement.isText = true;
@@ -421,12 +421,8 @@ void pushBox(UIElementOptions options) {
 	layoutElement.onClickCallback = options.onClickCallback;
 }
 
-void pushTriangle(UIElementOptions options) {
-	auto context = getUIContext();
-}
-
-void getTextDimensions(std::string_view text, FontInfo& fontInfo, float& width, float& height) {
-	auto [w, h] = generateTextFromFont(text, fontInfo.textureWidth, fontInfo.fontChars);
+void getTextDimensions(std::string_view text, FontAsset* font, float& width, float& height) {
+	auto [w, h] = generateTextFromFont(text, 16.0f, font);
 	width = w;
 	height = h;
 }

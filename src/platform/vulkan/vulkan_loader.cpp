@@ -1,11 +1,10 @@
+#include "assets/image_loader.h"
 #include "entity.h"
 #include "fastgltf/parser.hpp"
 #include "fastgltf/types.hpp"
 #include "material.h"
 #include <ratio>
 #include <vulkan/vulkan_core.h>
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
 #include "vulkan_loader.h"
 
 #include "vk_types.h"
@@ -35,31 +34,29 @@ std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asse
 				if (filePath.mimeType == fastgltf::MimeType::KTX2) {
 					// TODO
 				} else {
-					unsigned char* data = stbi_load(path.c_str(), &width, &height, &nrChannels, 4);
-					if (data) {
+					auto imageAsset = loadPNG(image.name.c_str(), path);
+					if (imageAsset.data) {
 						VkExtent3D imagesize;
-						imagesize.width = width;
-						imagesize.height = height;
+						imagesize.width = imageAsset.width;
+						imagesize.height = imageAsset.height;
 						imagesize.depth = 1;
 
-						newImage = renderer->createImage(image.name.c_str(), data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
-
-						stbi_image_free(data);
+						newImage = renderer->createImage(image.name.c_str(), imageAsset.data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 					}
+					destroyImageAsset(imageAsset);
 				}
 			},
 			[&](fastgltf::sources::Vector& vector) {
-				unsigned char* data = stbi_load_from_memory(vector.bytes.data(), static_cast<int>(vector.bytes.size()), &width, &height, &nrChannels, 4);
-				if (data) {
+				auto imageAsset = loadPNG(image.name.c_str(), vector.bytes.data(), vector.bytes.size());
+				if (imageAsset.data) {
 					VkExtent3D imagesize;
-					imagesize.width = width;
-					imagesize.height = height;
+					imagesize.width = imageAsset.width;
+					imagesize.height = imageAsset.height;
 					imagesize.depth = 1;
 
-					newImage = renderer->createImage(image.name.c_str(), data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
-
-					stbi_image_free(data);
+					newImage = renderer->createImage(image.name.c_str(), imageAsset.data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 				}
+				destroyImageAsset(imageAsset);
 			},
 			[&](fastgltf::sources::BufferView& view) {
 				auto& bufferView = asset.bufferViews[view.bufferViewIndex];
@@ -74,22 +71,16 @@ std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asse
 													 newImage = texture.value();
 												 }
 											 } else {
-												 unsigned char* data = stbi_load_from_memory(vector.bytes.data() + bufferView.byteOffset,
-													 static_cast<int>(bufferView.byteLength),
-													 &width,
-													 &height,
-													 &nrChannels,
-													 4);
-												 if (data) {
+											 	 auto imageAsset = loadPNG(image.name.c_str(), vector.bytes.data() + bufferView.byteOffset, bufferView.byteLength);
+												 if (imageAsset.data) {
 													 VkExtent3D imagesize;
-													 imagesize.width = width;
-													 imagesize.height = height;
+													 imagesize.width = imageAsset.width;
+													 imagesize.height = imageAsset.height;
 													 imagesize.depth = 1;
 
-													 newImage = renderer->createImage(image.name.c_str(), data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
-
-													 stbi_image_free(data);
+													 newImage = renderer->createImage(image.name.c_str(), imageAsset.data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 												 }
+												 destroyImageAsset(imageAsset);
 											 }
 										 } },
 					buffer.data);
