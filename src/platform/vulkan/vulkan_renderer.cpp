@@ -1802,68 +1802,67 @@ void VulkanRenderer::updateUIData() {
 	UI::beginLayout();
 
 	UI::openElement();
-	UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::GROW },
-		.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
-		.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-		.backgroundColor = { UI::isHovered() ? 0.0f : 1.0f, UI::isHovered() ? 0.0f : 1.0f, 0.0f, 1.0f },
-		.padding = 10.0f,
-		.childGap = 10.0f,
-		.onHoverCallback = [](uint32_t elementId, UI::PointerState pointerState) {} });
+		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::GROW },
+			.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+			.backgroundColor = { UI::isHovered() ? 0.0f : 1.0f, UI::isHovered() ? 0.0f : 1.0f, 0.0f, 1.0f },
+			.padding = 10.0f,
+			.childGap = 10.0f,
+			.onHoverCallback = [](uint32_t elementId, UI::PointerState pointerState) {} });
 
-	UI::openElement();
-	UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-		.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::FIT },
-		.layoutDirection = UI::UILayoutDirection::VERTICAL,
-		.backgroundColor = { 0.0f, 1.0f, 0.0f, 1.0f },
-		.padding = 10.0f,
-		.childGap = 10.0f });
+		UI::openElement();
+			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+				.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::FIT },
+				.layoutDirection = UI::UILayoutDirection::VERTICAL,
+				.backgroundColor = { 0.0f, 1.0f, 0.0f, 1.0f },
+				.padding = 10.0f,
+				.childGap = 10.0f });
 
-	UI::openTextElement();
-	UI::pushText({ .text = stats });
-	UI::closeTextElement();
+			UI::openTextElement();
+			UI::pushText({ .text = stats });
+			UI::closeTextElement();
 
-	UI::openTextElement();
-	UI::pushText({ .text = otherStats });
-	UI::closeTextElement();
+			UI::openTextElement();
+			UI::pushText({ .text = otherStats });
+			UI::closeTextElement();
+		UI::closeElement();
+
+		UI::openElement();
+			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+				.height = { .sizingMode = UI::UISizingMode::FIT },
+				.layoutDirection = UI::UILayoutDirection::VERTICAL,
+				.backgroundColor = { 0.2f, 0.3f, 1.0f, 1.0f },
+				.padding = 10.0f });
+
+			UI::openTextElement();
+			UI::pushText({ .text = "Hello there" });
+			UI::closeTextElement();
+		UI::closeElement();
 	UI::closeElement();
 
 	UI::openElement();
-	UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-		.height = { .sizingMode = UI::UISizingMode::FIT },
-		.layoutDirection = UI::UILayoutDirection::VERTICAL,
-		.backgroundColor = { 0.2f, 0.3f, 1.0f, 1.0f },
-		.padding = 10.0f });
+		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+			.height = { .sizingMode = UI::UISizingMode::FIT },
+			.layoutDirection = UI::UILayoutDirection::VERTICAL,
+			.backgroundColor = { 0.0f, 0.0f, 1.0f, 1.0f },
+			.padding = 10.0f,
+			.childGap = 20.0f });
 
-	UI::openTextElement();
-	UI::pushText({ .text = "Hello there" });
-	UI::closeTextElement();
-	UI::closeElement();
-	UI::closeElement();
+		UI::sliderFloat3(&m_rendererState->mainCamera->position);
+		UI::sliderFloat4(&m_sceneData.sunlightDirection, 0.0f, 1.0f);
 
-	UI::openElement();
-	UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-		.height = { .sizingMode = UI::UISizingMode::FIT },
-		.layoutDirection = UI::UILayoutDirection::VERTICAL,
-		.backgroundColor = { 0.0f, 0.0f, 1.0f, 1.0f },
-		.padding = 10.0f,
-		.childGap = 20.0f });
+		UI::openElement();
+			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+				.height = { .sizingMode = UI::UISizingMode::FIT },
+				.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+				.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
+				.padding = 10.0f,
+				.childGap = 20.0f });
+			UI::pushCircleFilled(80.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
+			UI::pushCircle(80.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
+		UI::closeElement();
 
-	UI::sliderFloat3(&m_rendererState->mainCamera->position);
-	UI::sliderFloat4(&m_sceneData.sunlightDirection, 0.0f, 1.0f);
-
-	UI::openElement();
-	UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-		.height = { .sizingMode = UI::UISizingMode::FIT },
-		.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-		.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
-		.padding = 10.0f,
-		.childGap = 20.0f });
-	UI::pushCircleFilled(80.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
-	UI::pushCircle(80.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
-	UI::closeElement();
-
-	UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);
-
+		UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);
 	UI::closeElement();
 
 	getCurrentFrame().uiRenderCommands = UI::endLayout();
