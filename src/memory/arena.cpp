@@ -1,5 +1,6 @@
 #include "arena.h"
 #include <cassert>
+#include <cstring>
 #include <format>
 #include <iostream>
 
@@ -19,61 +20,87 @@
 
 namespace pm {
 
-// Each arena will do a virtual alloc.
-MemoryArena MemoryArena_alloc(uint64_t bytesToReserve) {
+char* alignMemory(char* ptr, uint32_t align) {
+	auto result = reinterpret_cast<uint64_t>(ptr);
+	uint64_t remainder = result % align;
+	if (remainder != 0) {
+		result += align - remainder;
+	}
+
+	return reinterpret_cast<char*>(result);
+}
+
+MemoryArena MemoryArena_create(uint64_t bytesToReserve) {
 	MemoryArena arena{};
 
 	arena.memory = static_cast<char*>(MemoryArena_os_reserve(bytesToReserve));
+	arena.allocated = arena.memory;
+	arena.committed = arena.memory;
 	arena.size = bytesToReserve;
-	arena.pos = 0;
 
-	// Don't allow application to continue if we can't allocate.
-	// assert(arena.memory != MAP_FAILED);
-
-	std::cout << std::format("Allocated {} bytes\n", bytesToReserve);
+	// std::cout << std::format("Allocated {} bytes\n", bytesToReserve);
 
 	return arena;
 }
 
-void MemoryArena_free(MemoryArena* arena) {
-#ifdef PLATFORM_WINDOWS
-#endif
-
-#ifdef PLATFORM_POSIX
-	munmap(arena->memory, arena->size);
+void MemoryArena_destroy(MemoryArena* arena) {
+	MemoryArena_os_release(arena->memory, 0);
 	arena->memory = nullptr;
+	arena->allocated = nullptr;
 	arena->size = 0;
-	arena->pos = 0;
-#endif
 }
 
-// TODO: implement alignment
-void* MemoryArena_push(MemoryArena* arena, uint64_t size) {
-	assert(arena->pos + size <= arena->size);
-
-	arena->pos += size;
-
-	return arena->memory;
+void MemoryArena_commit(MemoryArena* arena, uint64_t size) {
+	MemoryArena_os_commit(arena->allocated, size);
+	arena->committed += size;
 }
 
+void* MemoryArena_push(MemoryArena* arena, uint64_t size, uint64_t align) {
+	auto ptr = alignMemory(arena->allocated, align);
+	arena->allocated = ptr + size;
+
+	if (arena->committed < arena->allocated) {
+		uint64_t granularity = MemoryArena_os_getPageSize() * PAGES_PER_COMMIT;
+		auto sizeToCommit = (uint64_t)(arena->allocated - arena->committed);
+		sizeToCommit += -sizeToCommit & (granularity - 1);
+
+		auto result = MemoryArena_os_commit(arena->committed, sizeToCommit);
+		assert(result);
+
+		arena->committed += sizeToCommit;
+	}
+
+	return ptr;
+}
+
+// TODO(piero): I don't think this is working correctly?
 void MemoryArena_pop(MemoryArena* arena, uint64_t size) {
-	assert(arena->pos >= size);
+	arena->allocated -= size;
 
-	for (uint64_t i = arena->pos; i > arena->pos - size; --i) {
-		arena->memory[i] = 0;
+	auto startIndex = static_cast<uint64_t>(arena->allocated - arena->memory) - 1;
+	uint64_t endIndex = startIndex + size;
+	for (uint64_t i = startIndex; i < endIndex; i++) {
+		arena->allocated[i] = 0;
 	}
-	arena->pos -= size;
 }
 
-uint64_t MemoryArena_pos(MemoryArena* arena) {
-	return arena->pos;
-}
-
+// TODO(piero): Resets pointer to start of arena memory. 
+// 							Doesn't clear memory to 0. Could provide this as an option or another function.
 void MemoryArena_clear(MemoryArena* arena) {
-	// This should just 0 out all of the arena's memory.
-	for (uint64_t i = 0; i < arena->size; ++i) {
-		arena->memory[i] = 0;
+	/* TODO(piero): decommit on clear?
+	uint64_t commit_size = arena->committed - arena->memory;
+	uint64_t page_size = MemoryArena_os_getPageSize();
+
+	// If committed pages > 16, decommit pages after 16th
+	uint64_t page_limit = page_size * 16;
+	if (commit_size > page_limit) {
+		char* start_addr = arena->memory + page_limit;
+		MemoryArena_os_decommit(start_addr, commit_size - page_limit);
+		arena->committed = start_addr;
 	}
+	*/
+
+	arena->allocated = arena->memory;
 }
 
 void* MemoryArena_os_reserve(uint64_t bytesToReserve) {

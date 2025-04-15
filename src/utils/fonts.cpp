@@ -6,7 +6,7 @@
 
 namespace pm {
 
-std::pair<float, float> generateTextFromFont(std::string_view text, float fontSize, FontAsset* font, std::vector<UI::UIVertex>* vertices, std::vector<uint32_t>* indices) {
+std::pair<float, float> generateTextFromFont(PrimalString& text, float fontSize, FontAsset* font, std::vector<UI::UIVertex>* vertices, std::vector<uint32_t>* indices) {
 	auto& metadata = font->metadata;
 
 	uint32_t vertexIndex = 0;
@@ -26,7 +26,7 @@ std::pair<float, float> generateTextFromFont(std::string_view text, float fontSi
 
 	float textWidth = 0.0f;
 
-	for (size_t i = 0; i < text.length(); i++) {
+	for (size_t i = 0; i < text.length; i++) {
 		int unicode = static_cast<unsigned char>(text[i]);
 
 		if (unicode == '\r') {
@@ -49,7 +49,7 @@ std::pair<float, float> generateTextFromFont(std::string_view text, float fontSi
 		auto& glyph = *glyphIt;
 
 		// Apply kerning if there's a next character (and we have kerning)
-		if (i < text.length() - 1) {
+		if (i < text.length - 1) {
 			int nextUnicode = static_cast<unsigned char>(text[i + 1]);
 			auto kerningIt = std::ranges::find_if(metadata.kerning, [&unicode, &nextUnicode](const KerningPair& k) { return k.unicode1 == unicode && k.unicode2 == nextUnicode; });
 			if (kerningIt != metadata.kerning.end()) {

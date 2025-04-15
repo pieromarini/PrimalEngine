@@ -1,30 +1,36 @@
 #pragma once
 
 #include <cstdint>
+#include "data_structures/fixed_array.h"
 
 namespace pm {
 
 struct MemoryArena {
 	uint64_t size;
-	uint64_t pos;
 	char* memory;
+	char* allocated;
+	char* committed;
 };
 
+
+// TODO(piero): This should be dynamic per arena
 constexpr uint32_t PAGES_PER_COMMIT = 2;
 
 #define KILOBYTE(value) ((value) * 1024)
 #define MEGABYTE(value) (KILOBYTE(value) * 1024)
 #define GIGABYTE(value) (MEGABYTE(value) * 1024)
 
-#define MemoryArenaPush(T, count, arena) (T *) MemoryArena_push(arena, size_of(T) * count)
+#define MemoryArenaPush(T, count, arena) static_cast<T *>(MemoryArena_push(arena, sizeof(T) * count, alignof(T)))
 
-MemoryArena MemoryArena_alloc(uint64_t bytesToReserve);
-void MemoryArena_free(MemoryArena* arena);
+#define MemoryArenaCreateArray(A, T, elementCount, arena) A{ .size = elementCount, .length = 0, .data = MemoryArenaPush(T, elementCount, arena) }
 
-void* MemoryArena_push(MemoryArena* arena, uint64_t size);
+MemoryArena MemoryArena_create(uint64_t bytesToReserve);
+void MemoryArena_destroy(MemoryArena* arena);
+void MemoryArena_commit(MemoryArena* arena, uint64_t size);
+
+void* MemoryArena_push(MemoryArena* arena, uint64_t size, uint64_t align);
 
 void MemoryArena_pop(MemoryArena* arena, uint64_t size);
-uint64_t MemoryArena_pos(MemoryArena* arena);
 
 void MemoryArena_clear(MemoryArena* arena);
 
@@ -34,5 +40,7 @@ bool MemoryArena_os_commit(void* addr, uint64_t size);
 bool MemoryArena_os_decommit(void* addr, uint64_t size);
 void MemoryArena_os_release(void* addr, uint64_t size);
 uint64_t MemoryArena_os_getPageSize();
+
+char* alignMemory(char *ptr, uint32_t align);
 
 }// namespace pm

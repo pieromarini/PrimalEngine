@@ -380,6 +380,9 @@ private:
 	FontAsset arialFont;
 	FontAsset sourceCodeFont;
 	AllocatedImage sourceCodeFontTexture;
+
+	// Memory Arenas
+	MemoryArena uiMemoryArena;
 };
 
 }// namespace pm

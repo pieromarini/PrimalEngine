@@ -1,30 +1,39 @@
 #include "utils/fonts.h"
 #include "ui_types.h"
 #include "utils/geometry.h"
-#include <stack>
 #include <vector>
+#include "memory/data_structures/fixed_array.h"
+#include "memory/arena.h"
 
 namespace pm::UI {
+
+// TODO(piero): I think this is OK for now. I don't think we will have extremely nested/complicated UI layouts that could exceed this.
+// This is used to allocate FixedArrays
+constexpr uint32_t maxElementCount = 8192;
 
 struct UIContext {
 	std::vector<UIRenderCommand> renderCommands;
 
-	std::vector<UILayoutElement> layoutElements;
-	std::vector<UILayoutElementData> layoutElementsData;
-	std::vector<uint32_t> layoutElementChildrenIndices;
-	std::stack<uint32_t> openLayoutElements; // elements with an open Layout
+	FixedArray<UILayoutElement> layoutElements;
+	FixedArray<UILayoutElementData> layoutElementsData;
+	FixedArray<uint32_t> layoutElementChildrenIndices;
+
+	FixedArray<uint32_t> openLayoutElements; // elements with an open Layout
 
 
 	// Interactions
 	PointerState pointerState;
 	InteractionState interactionState;
-	std::vector<uint32_t> hoveredIds;
+	FixedArray<uint32_t> hoveredIds;
 
 	// Fonts
 	FontAsset* fontAsset;
 
 	// Window context
 	float windowWidth, windowHeight;
+
+	MemoryArena* arena;
+	MemoryArena tempArena;
 };
 
 static UIContext* uiContext;
@@ -33,7 +42,7 @@ struct InitRenderContextOptions {
 	float width, height;
 };
 
-void initRenderContext(InitRenderContextOptions options);
+void initRenderContext(MemoryArena* arena, InitRenderContextOptions options);
 void cleanupRenderContext();
 
 UIContext* getUIContext();
@@ -56,7 +65,7 @@ void closeTextElement();
 void closeCircleElement();
 
 // Utils
-void getTextDimensions(std::string_view text, FontAsset* font, float& width, float& height);
+void getTextDimensions(PrimalString& text, FontAsset* font, float& width, float& height);
 
 // Layout
 void computeFinalSizes();

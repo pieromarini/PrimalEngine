@@ -1,5 +1,6 @@
 #include "assets/font_loader.h"
 #include "config.h"
+#include "memory/arena.h"
 #include "ui/ui_types.h"
 #include "ui/widgets.h"
 #include <algorithm>
@@ -1876,7 +1877,8 @@ void VulkanRenderer::setPointerState(float mouseX, float mouseY, float relMouseX
 }
 
 void VulkanRenderer::initUI() {
-	UI::initRenderContext({ .width = static_cast<float>(m_rendererState->windowExtent.width), .height = static_cast<float>(m_rendererState->windowExtent.height) });
+	uiMemoryArena = MemoryArena_create(MEGABYTE(20));
+	UI::initRenderContext(&uiMemoryArena, { .width = static_cast<float>(m_rendererState->windowExtent.width), .height = static_cast<float>(m_rendererState->windowExtent.height) });
 
 	uiUniformBuffer = createBuffer("uiUniformBuffer", sizeof(UIUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 

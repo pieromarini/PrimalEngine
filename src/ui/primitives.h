@@ -14,6 +14,6 @@ UIElement triangle(std::vector<UIVertex>& vertices, std::vector<uint32_t>& indic
 UIElement circle(float radius, uint32_t segments, float thickness, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices);
 UIElement circleFilled(float radius, uint32_t segments, std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices);
 
-UIElement text(std::string_view text, float fontSize, FontAsset* font, std::vector<UIVertex>* vertices, std::vector<uint32_t>* indices);
+UIElement text(PrimalString& text, float fontSize, FontAsset* font, std::vector<UIVertex>* vertices, std::vector<uint32_t>* indices);
 
 }// namespace pm::UI

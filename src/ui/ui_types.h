@@ -1,10 +1,13 @@
 #pragma once
 
+#include "memory/data_structures/fixed_array.h"
 #include <string>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <vector>
+
+#include "memory/data_structures/primal_string.h"
 
 namespace pm::UI {
 
@@ -72,7 +75,7 @@ struct UIRenderCommand {
 	glm::vec4 backgroundColor;
 
 	// text
-	std::string text;
+	PrimalString text;
 
 	// circle
 	float radius;
@@ -146,9 +149,9 @@ struct UILayoutElement {
 
 	bool isText{ false }; // TODO: REMOVE THIS
 	bool isCircle{ false };
-	std::string text;
+	PrimalString text;
 	uint32_t parent;
-	std::vector<uint32_t> children; // reference to context->layoutElementChildrenIndices
+	FixedArray<uint32_t> children; // reference to context->layoutElementChildrenIndices
 
 	float radius;
 	uint32_t segments;
@@ -173,7 +176,7 @@ struct UIElementOptions {
 	std::function<InteractionCallbackSignature> onHoverCallback;
 	std::function<InteractionCallbackSignature> onClickCallback;
 
-	std::string_view text;
+	std::string text;
 
 	UILayoutElementData data;
 };
