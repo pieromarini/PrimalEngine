@@ -126,19 +126,19 @@ void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouse
 		switch (element->data.dataType) {
 		case INT: {
 			if (element->data.valueInt) {
-				*element->data.valueInt = std::clamp(static_cast<int>(*element->data.valueInt + context->pointerState.xRel * 0.01f), element->data.minInt, element->data.maxInt);
+				*element->data.valueInt = std::min(static_cast<int>(*element->data.valueInt + context->pointerState.xRel * 0.01f), std::max(element->data.minInt, element->data.maxInt));
 			}
 			break;
 		}
 		case FLOAT: {
 			if (element->data.valueFloat) {
-				*element->data.valueFloat = std::clamp(*element->data.valueFloat + context->pointerState.xRel * 0.01f, element->data.minFloat, element->data.maxFloat);
+				*element->data.valueFloat = std::min(*element->data.valueFloat + context->pointerState.xRel * 0.01f, std::max(element->data.minFloat, element->data.maxFloat));
 			}
 			break;
 		}
 		case DOUBLE: {
 			if (element->data.valueDouble) {
-				*element->data.valueDouble = std::clamp(*element->data.valueDouble + context->pointerState.xRel * 0.01, element->data.minDouble, element->data.maxDouble);
+				*element->data.valueDouble = std::min(*element->data.valueDouble + context->pointerState.xRel * 0.01, std::max(element->data.minDouble, element->data.maxDouble));
 			}
 			break;
 		}
@@ -398,7 +398,7 @@ void calculateFinalLayout() {
 			c.text = layoutElement->text;
 		}
 
-		context->renderCommands.push_back(c);
+		context->renderCommands.emplace_back(c);
 
 		for (uint32_t i = 0; i < layoutElement->children.length; ++i) {
 			auto childIndex = FixedArray_getValue(layoutElement->children, i);
