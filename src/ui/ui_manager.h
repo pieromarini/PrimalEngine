@@ -12,7 +12,7 @@ namespace pm::UI {
 constexpr uint32_t maxElementCount = 8192;
 
 struct UIContext {
-	std::vector<UIRenderCommand> renderCommands;
+	FixedArray<UIRenderCommand> renderCommands;
 
 	FixedArray<UILayoutElement> layoutElements;
 	FixedArray<UILayoutElementData> layoutElementsData;
@@ -55,7 +55,7 @@ BoundingBox getTextSize();
 void clearContext();
 
 void beginLayout();
-std::vector<UIRenderCommand> endLayout();
+FixedArray<UIRenderCommand> endLayout();
 
 void openElement();
 void closeElement();

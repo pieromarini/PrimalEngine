@@ -29,7 +29,7 @@ void initRenderContext(MemoryArena* arena, InitRenderContextOptions options) {
 	uiContext->layoutElementsData = MemoryArenaCreateArray(FixedArray<UILayoutElementData>, UILayoutElementData, maxElementCount, &tempArena);
 	uiContext->layoutElementChildrenIndices = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &tempArena);
 	uiContext->openLayoutElements = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &tempArena);
-
+	uiContext->renderCommands = MemoryArenaCreateArray(FixedArray<UIRenderCommand>, UIRenderCommand, maxElementCount, &tempArena);
 }
 
 void cleanupRenderContext() {
@@ -40,7 +40,6 @@ void cleanupRenderContext() {
 
 void clearContext() {
 	auto context = getUIContext();
-	context->renderCommands.clear();
 
 	// Clear temp arena and re-init per-frame arrays
 	auto tempArena = context->tempArena;
@@ -50,6 +49,7 @@ void clearContext() {
 	uiContext->layoutElementsData = MemoryArenaCreateArray(FixedArray<UILayoutElementData>, UILayoutElementData, maxElementCount, &tempArena);
 	uiContext->layoutElementChildrenIndices = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &tempArena);
 	uiContext->openLayoutElements = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &tempArena);
+	uiContext->renderCommands = MemoryArenaCreateArray(FixedArray<UIRenderCommand>, UIRenderCommand, maxElementCount, &tempArena);
 }
 
 UIContext* getUIContext() {
@@ -168,7 +168,7 @@ void beginLayout() {
 	rootElement->childGap = 20.0f;
 }
 
-std::vector<UIRenderCommand> endLayout() {
+FixedArray<UIRenderCommand> endLayout() {
 	auto context = getUIContext();
 	closeElement();
 
@@ -398,7 +398,7 @@ void calculateFinalLayout() {
 			c.text = layoutElement->text;
 		}
 
-		context->renderCommands.emplace_back(c);
+		FixedArray_add(context->renderCommands, c);
 
 		for (uint32_t i = 0; i < layoutElement->children.length; ++i) {
 			auto childIndex = FixedArray_getValue(layoutElement->children, i);

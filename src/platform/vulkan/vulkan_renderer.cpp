@@ -1,6 +1,7 @@
 #include "assets/font_loader.h"
 #include "config.h"
 #include "memory/arena.h"
+#include "memory/data_structures/fixed_array.h"
 #include "ui/ui_types.h"
 #include "ui/widgets.h"
 #include <algorithm>
@@ -450,25 +451,26 @@ void VulkanRenderer::cleanup() {
 	vkDestroyInstance(m_instance, nullptr);
 }
 
-std::vector<UI::UIElement> VulkanRenderer::buildUIGeometry(std::vector<UI::UIRenderCommand>& renderCommands, std::vector<UI::UIVertex>& vertices, std::vector<uint32_t>& indices) {
+std::vector<UI::UIElement> VulkanRenderer::buildUIGeometry(FixedArray<UI::UIRenderCommand>& renderCommands, std::vector<UI::UIVertex>& vertices, std::vector<uint32_t>& indices) {
 	std::vector<UI::UIElement> elements;
 
-	for (auto& renderCommand : renderCommands) {
-		switch (renderCommand.commandType) {
+	for (uint32_t i = 0; i < renderCommands.length; ++i) {
+		auto renderCommand = FixedArray_get(renderCommands, i);
+		switch (renderCommand->commandType) {
 		case pm::UI::UIRenderCommandType::RECTANGLE: {
 			elements.push_back(UI::box(vertices, indices));
 			break;
 		}
 		case pm::UI::UIRenderCommandType::CIRCLE: {
-			if (renderCommand.circleType == UI::CircleType::FILLED) {
-				elements.push_back(UI::circleFilled(renderCommand.radius, renderCommand.segments, vertices, indices));
+			if (renderCommand->circleType == UI::CircleType::FILLED) {
+				elements.push_back(UI::circleFilled(renderCommand->radius, renderCommand->segments, vertices, indices));
 			} else {
-				elements.push_back(UI::circle(renderCommand.radius, renderCommand.segments, renderCommand.thickness, vertices, indices));
+				elements.push_back(UI::circle(renderCommand->radius, renderCommand->segments, renderCommand->thickness, vertices, indices));
 			}
 			break;
 		}
 		case pm::UI::UIRenderCommandType::TEXT: {
-			elements.push_back(UI::text(renderCommand.text, 16.0f, &sourceCodeFont, &vertices, &indices));
+			elements.push_back(UI::text(renderCommand->text, 16.0f, &sourceCodeFont, &vertices, &indices));
 			break;
 		}
 		}
@@ -477,7 +479,7 @@ std::vector<UI::UIElement> VulkanRenderer::buildUIGeometry(std::vector<UI::UIRen
 	return elements;
 }
 
-void VulkanRenderer::buildUIDrawBatches(std::vector<UI::UIRenderCommand>& renderCommands) {
+void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderCommands) {
 	auto start = std::chrono::system_clock::now();
 
 	getCurrentFrame().uiDrawBatches.clear();
@@ -512,14 +514,14 @@ void VulkanRenderer::buildUIDrawBatches(std::vector<UI::UIRenderCommand>& render
 	uint32_t uiDrawIdCount{ 0 }, textDrawIdCount{ 0 };
 
 	for (uint32_t i = 0; i < elements.size(); ++i) {
-		auto& renderCommand = renderCommands.at(i);
+		auto renderCommand = FixedArray_get(renderCommands, i);
 		auto& uiElement = elements.at(i);
 
 
-		auto& bb = renderCommand.boundingBox;
+		auto& bb = renderCommand->boundingBox;
 		auto transform = glm::mat4{ 1.0f };
 
-		switch (renderCommand.commandType) {
+		switch (renderCommand->commandType) {
 		case pm::UI::UIRenderCommandType::RECTANGLE: {
 			transform = glm::translate(transform, glm::vec3(bb.x + bb.width / 2.0f, bb.y + bb.height / 2.0f, 0.0f));
 			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -533,7 +535,7 @@ void VulkanRenderer::buildUIDrawBatches(std::vector<UI::UIRenderCommand>& render
 					.vertexOffset = uiElement.vertexOffset,
 					.firstInstance = uiDrawIdCount } });
 			uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-			uiMaterialData.push_back({ .backgroundColor = renderCommand.backgroundColor });
+			uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
 			uiDrawIdCount++;
 			break;
 		}
@@ -550,7 +552,7 @@ void VulkanRenderer::buildUIDrawBatches(std::vector<UI::UIRenderCommand>& render
 					.vertexOffset = uiElement.vertexOffset,
 					.firstInstance = uiDrawIdCount } });
 			uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-			uiMaterialData.push_back({ .backgroundColor = renderCommand.backgroundColor });
+			uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
 			uiDrawIdCount++;
 			break;
 		}
@@ -1733,7 +1735,7 @@ void VulkanRenderer::updateFontData() {
 
 void VulkanRenderer::initFontData() {
 	sourceCodeFont = loadFontSDF("SauceCodePro-Light", "res/fonts/SauceCodePro-Light.png", "res/fonts/SauceCodePro-Light.json");
-	// arialFont = loadFontSDF("Arial", "res/fonts/arial.png", "res/fonts/arial.json");
+	arialFont = loadFontSDF("Arial", "res/fonts/arial.png", "res/fonts/arial.json");
 
 	auto extents = VkExtent3D{
 		sourceCodeFont.image.width,

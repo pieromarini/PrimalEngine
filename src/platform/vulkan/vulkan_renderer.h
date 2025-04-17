@@ -164,7 +164,7 @@ struct FrameData {
 
 	std::vector<DrawBatch> drawBatches{};
 	std::vector<DrawBatch> uiDrawBatches{};
-	std::vector<UI::UIRenderCommand> uiRenderCommands{};
+	FixedArray<UI::UIRenderCommand> uiRenderCommands{};
 };
 
 struct GPUSceneData {
@@ -206,8 +206,8 @@ public:
 	void initDefaultData();
 
 	void buildDrawBatches(std::vector<Model*>& models);
-	void buildUIDrawBatches(std::vector<UI::UIRenderCommand>& renderCommands);
-	std::vector<UI::UIElement> buildUIGeometry(std::vector<UI::UIRenderCommand>& renderCommands, std::vector<UI::UIVertex>& vertices, std::vector<uint32_t>& indices);
+	void buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderCommands);
+	std::vector<UI::UIElement> buildUIGeometry(FixedArray<UI::UIRenderCommand>& renderCommands, std::vector<UI::UIVertex>& vertices, std::vector<uint32_t>& indices);
 
 	// drawing
 	void draw(float deltaTime);
