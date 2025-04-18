@@ -149,10 +149,6 @@ void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouse
 	}
 }
 
-BoundingBox getTextSize() {
-	return {};
-}
-
 void beginLayout() {
 	clearContext();
 	auto context = getUIContext();

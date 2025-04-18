@@ -50,8 +50,6 @@ UIContext* getUIContext();
 void onResizeCallback(float width, float height);
 void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown);
 
-BoundingBox getTextSize();
-
 void clearContext();
 
 void beginLayout();
