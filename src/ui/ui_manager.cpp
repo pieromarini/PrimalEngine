@@ -23,13 +23,13 @@ void initRenderContext(MemoryArena* arena, InitRenderContextOptions options) {
 	uiContext->tempArena = MemoryArena_create(MEGABYTE(10));
 	MemoryArena_commit(&uiContext->tempArena, uiContext->tempArena.size);
 
-	auto tempArena = uiContext->tempArena;
+	auto tempArena = &uiContext->tempArena;
 
-	uiContext->layoutElements = MemoryArenaCreateArray(FixedArray<UILayoutElement>, UILayoutElement, maxElementCount, &tempArena);
-	uiContext->layoutElementsData = MemoryArenaCreateArray(FixedArray<UILayoutElementData>, UILayoutElementData, maxElementCount, &tempArena);
-	uiContext->layoutElementChildrenIndices = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &tempArena);
-	uiContext->openLayoutElements = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &tempArena);
-	uiContext->renderCommands = MemoryArenaCreateArray(FixedArray<UIRenderCommand>, UIRenderCommand, maxElementCount, &tempArena);
+	uiContext->layoutElements = MemoryArenaCreateArray(FixedArray<UILayoutElement>, UILayoutElement, maxElementCount, tempArena);
+	uiContext->layoutElementsData = MemoryArenaCreateArray(FixedArray<UILayoutElementData>, UILayoutElementData, maxElementCount, tempArena);
+	uiContext->layoutElementChildrenIndices = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, tempArena);
+	uiContext->openLayoutElements = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, tempArena);
+	uiContext->renderCommands = MemoryArenaCreateArray(FixedArray<UIRenderCommand>, UIRenderCommand, maxElementCount, tempArena);
 }
 
 void cleanupRenderContext() {
@@ -42,14 +42,14 @@ void clearContext() {
 	auto context = getUIContext();
 
 	// Clear temp arena and re-init per-frame arrays
-	auto tempArena = context->tempArena;
-	MemoryArena_clear(&context->tempArena);
+	auto tempArena = &context->tempArena;
+	MemoryArena_clear(tempArena);
 
-	uiContext->layoutElements = MemoryArenaCreateArray(FixedArray<UILayoutElement>, UILayoutElement, maxElementCount, &tempArena);
-	uiContext->layoutElementsData = MemoryArenaCreateArray(FixedArray<UILayoutElementData>, UILayoutElementData, maxElementCount, &tempArena);
-	uiContext->layoutElementChildrenIndices = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &tempArena);
-	uiContext->openLayoutElements = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &tempArena);
-	uiContext->renderCommands = MemoryArenaCreateArray(FixedArray<UIRenderCommand>, UIRenderCommand, maxElementCount, &tempArena);
+	uiContext->layoutElements = MemoryArenaCreateArray(FixedArray<UILayoutElement>, UILayoutElement, maxElementCount, tempArena);
+	uiContext->layoutElementsData = MemoryArenaCreateArray(FixedArray<UILayoutElementData>, UILayoutElementData, maxElementCount, tempArena);
+	uiContext->layoutElementChildrenIndices = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, tempArena);
+	uiContext->openLayoutElements = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, tempArena);
+	uiContext->renderCommands = MemoryArenaCreateArray(FixedArray<UIRenderCommand>, UIRenderCommand, maxElementCount, tempArena);
 }
 
 UIContext* getUIContext() {
@@ -101,7 +101,7 @@ void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouse
 	bool firstEvent{ true };
 	for (int32_t i = (int)context->layoutElements.length - 1; i >= 0; --i) {
 		auto element = FixedArray_get(context->layoutElements, i);
-		auto bb = BoundingBox{ .x = element->x, .y = element->y, .width = element->width.size, .height = element->height.size };
+		auto bb = BoundingRect{ .x = element->x, .y = element->y, .width = element->width.size, .height = element->height.size };
 		if (isInsideBoundingBox(mouseX, mouseY, bb)) {
 			// Don't process hover callbacks if we are dragging the mouse around.
 			// TODO(piero): Do we actually want this? Maybe make it an option.
@@ -161,7 +161,7 @@ void beginLayout() {
 	rootElement->width.size = context->windowWidth;
 	rootElement->height.size = context->windowHeight;
 	rootElement->layoutDirection = UILayoutDirection::VERTICAL;
-	rootElement->childGap = 20.0f;
+	rootElement->childGap = 0.0f;
 }
 
 FixedArray<UIRenderCommand> endLayout() {
@@ -185,10 +185,10 @@ void openElement() {
 void closeElement() {
 	auto context = getUIContext();
 
-	auto closedElementIndex = std::move(FixedArray_top(context->openLayoutElements));
+	auto closedElementIndex = *FixedArray_top(context->openLayoutElements);
 	FixedArray_pop(context->openLayoutElements);
 
-	auto openLayoutElement = FixedArray_get(context->layoutElements, *closedElementIndex);
+	auto openLayoutElement = FixedArray_get(context->layoutElements, closedElementIndex);
 
 	// Set parent to the open layout element
 	if (!FixedArray_empty(context->openLayoutElements)) {
@@ -205,12 +205,13 @@ void closeElement() {
 
 	// add children indices to closing layout element
 	// Find the starting index in the children array for the open layout index we are currently closing
-	auto beginIndex = FixedArray_findIndex(context->layoutElementChildrenIndices, *closedElementIndex);
-	if ((beginIndex != -1) && (beginIndex + 1) < context->layoutElementChildrenIndices.length) {
+	auto beginIndex = FixedArray_findIndex(context->layoutElementChildrenIndices, closedElementIndex);
+	if ((beginIndex != -1) && ((beginIndex + 1) < context->layoutElementChildrenIndices.length)) {
 
 		// copy indices
 		for (uint32_t i = beginIndex + 1; i < context->layoutElementChildrenIndices.length; ++i) {
-			FixedArray_add(openLayoutElement->children, FixedArray_getValue(context->layoutElementChildrenIndices, i));
+			auto t = FixedArray_getValue(context->layoutElementChildrenIndices, i);
+			FixedArray_add(openLayoutElement->children, t);
 		}
 
 		// remove copied indices
@@ -269,10 +270,10 @@ void openTextElement() {
 void closeTextElement() {
 	auto context = getUIContext();
 
-	auto closedElementIndex = std::move(FixedArray_top(context->openLayoutElements));
+	auto closedElementIndex = *FixedArray_top(context->openLayoutElements);
 	FixedArray_pop(context->openLayoutElements);
 
-	auto openLayoutElement = FixedArray_get(context->layoutElements, *closedElementIndex);
+	auto openLayoutElement = FixedArray_get(context->layoutElements, closedElementIndex);
 
 	// Set parent to the open layout element
 	if (!FixedArray_empty(context->openLayoutElements)) {
@@ -303,10 +304,10 @@ void closeTextElement() {
 void closeCircleElement() {
 	auto context = getUIContext();
 
-	auto closedElementIndex = std::move(FixedArray_top(context->openLayoutElements));
+	auto closedElementIndex = *FixedArray_top(context->openLayoutElements);
 	FixedArray_pop(context->openLayoutElements);
 
-	auto openLayoutElement = FixedArray_get(context->layoutElements, *closedElementIndex);
+	auto openLayoutElement = FixedArray_get(context->layoutElements, closedElementIndex);
 
 	// Set parent to the open layout element
 	if (!FixedArray_empty(context->openLayoutElements)) {
@@ -340,10 +341,10 @@ void computeFinalSizes() {
 	FixedArray_add(stack, static_cast<uint32_t>(0));
 
 	while (!FixedArray_empty(stack)) {
-		auto index = FixedArray_top(stack);
+		auto index = *FixedArray_top(stack);
 		FixedArray_pop(stack);
 
-		auto layoutElement = FixedArray_get(context->layoutElements, *index);
+		auto layoutElement = FixedArray_get(context->layoutElements, index);
 		auto parentElement = FixedArray_get(context->layoutElements, layoutElement->parent);
 
 		// Element positions are relative. Before rendering we need to add the parent's position.
@@ -366,13 +367,13 @@ void calculateFinalLayout() {
 	FixedArray_add(indices, static_cast<uint32_t>(0));
 
 	while (!FixedArray_empty(indices)) {
-		auto index = FixedArray_top(indices);
+		auto index = *FixedArray_top(indices);
 		FixedArray_pop(indices);
 
-		auto layoutElement = FixedArray_get(context->layoutElements, *index);
+		auto layoutElement = FixedArray_get(context->layoutElements, index);
 
 		UIRenderCommand c{
-			.id = *index,
+			.id = index,
 			.zindex = 0,
 			.boundingBox = {
 				.x = layoutElement->x,
@@ -471,7 +472,7 @@ bool isHovered() {
 	return false;
 }
 
-bool isInsideBoundingBox(float x, float y, BoundingBox bb) {
+bool isInsideBoundingBox(float x, float y, BoundingRect bb) {
 	return x >= bb.x && x <= bb.x + bb.width && y >= bb.y && y <= bb.y + bb.height;
 }
 

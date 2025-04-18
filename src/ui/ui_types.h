@@ -33,7 +33,7 @@ struct UIAxisSize {
 	UISizingMode sizingMode;
 };
 
-struct BoundingBox {
+struct BoundingRect {
 	float x, y;
 	float width, height;
 };
@@ -70,7 +70,7 @@ struct UIRenderCommand {
 	uint32_t id;
 	uint32_t zindex;
 
-	BoundingBox boundingBox;
+	BoundingRect boundingBox;
 
 	glm::vec4 backgroundColor;
 
@@ -188,7 +188,7 @@ struct UIElement {
 };
 
 struct UITextElement {
-	BoundingBox boundingBox;
+	BoundingRect boundingBox;
 	glm::vec4 backgroundColor;
 
 	std::string text;

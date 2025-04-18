@@ -1831,6 +1831,94 @@ void VulkanRenderer::updateUIData() {
 
 	UI::beginLayout();
 
+	// Title bar
+	UI::openElement();
+		UI::pushBox({ .width = { .size = 2048.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+			.backgroundColor = { 0.678f, 0.678f, 0.678f, 1.0f } });
+
+		// Show renderer stats
+		UI::openElement();
+			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+				.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::FIT },
+				.layoutDirection = UI::UILayoutDirection::VERTICAL,
+				.backgroundColor = { 0.0f, 0.0f, 0.0f, 0.0f },
+				.padding = 10.0f,
+				.childGap = 10.0f });
+
+			UI::openTextElement();
+			UI::pushText({ .text = stats });
+			UI::closeTextElement();
+
+			UI::openTextElement();
+			UI::pushText({ .text = otherStats });
+			UI::closeTextElement();
+		UI::closeElement();
+
+	UI::closeElement();
+
+	UI::openElement();
+		UI::pushBox({ .width = { .size = 1448.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.height = { .size = 1000.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+			.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
+
+		// Viewport + Asset browser
+		UI::openElement();
+			UI::pushBox({ .width = { .size = 1448.0f, .sizingMode = UI::UISizingMode::STATIC },
+				.height = { .size = 1000.0f, .sizingMode = UI::UISizingMode::STATIC },
+				.layoutDirection = UI::UILayoutDirection::VERTICAL,
+				.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
+
+			// Viewport
+			UI::openElement();
+				UI::pushBox({ .width = { .size = 1448.0f, .sizingMode = UI::UISizingMode::STATIC },
+					.height = { .size = 700.0f, .sizingMode = UI::UISizingMode::STATIC },
+					.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+					.backgroundColor = { 0.478f, 0.478f, 0.478f, 0.0f } });
+
+			UI::closeElement();
+
+			// Asset browser
+			UI::openElement();
+				UI::pushBox({ .width = { .size = 1448.0f, .sizingMode = UI::UISizingMode::STATIC },
+					.height = { .size = 300.0f, .sizingMode = UI::UISizingMode::STATIC },
+					.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+					.backgroundColor = { 0.3294f, 0.3294f, 0.3294f, 1.0f } });
+
+			UI::closeElement();
+
+		UI::closeElement();
+
+		// Info Panel
+		UI::openElement();
+			UI::pushBox({ .width = { .size = 600.0f, .sizingMode = UI::UISizingMode::STATIC },
+				.height = { .size = 1000.0f, .sizingMode = UI::UISizingMode::STATIC },
+				.layoutDirection = UI::UILayoutDirection::VERTICAL,
+				.backgroundColor = { 0.41960784313f, 0.41960784313f, 0.41960784313f, 1.0f },
+				.padding = 10.0f,
+				.childGap = 10.0f });
+
+			UI::sliderFloat3(&m_rendererState->mainCamera->position);
+			UI::sliderFloat4(&m_sceneData.sunlightDirection, 0.0f, 1.0f);
+
+			UI::openElement();
+				UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+					.height = { .sizingMode = UI::UISizingMode::FIT },
+					.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+					.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
+					.padding = 10.0f,
+					.childGap = 20.0f });
+				UI::pushCircleFilled(80.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
+				UI::pushCircle(80.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
+			UI::closeElement();
+
+			UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);
+		UI::closeElement();
+	UI::closeElement();
+
+	/*
 	UI::openElement();
 		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::GROW },
 			.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
@@ -1894,6 +1982,7 @@ void VulkanRenderer::updateUIData() {
 
 		UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);
 	UI::closeElement();
+	*/
 
 	getCurrentFrame().uiRenderCommands = UI::endLayout();
 

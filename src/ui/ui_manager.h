@@ -1,7 +1,6 @@
 #include "utils/fonts.h"
 #include "ui_types.h"
 #include "utils/geometry.h"
-#include <vector>
 #include "memory/data_structures/fixed_array.h"
 #include "memory/arena.h"
 
@@ -79,6 +78,6 @@ void pushCircleFilled(float radius, uint32_t segments, glm::vec4 color);
 
 // Interactions
 bool isHovered();
-bool isInsideBoundingBox(float x, float y, BoundingBox bb);
+bool isInsideBoundingBox(float x, float y, BoundingRect bb);
 
 }// namespace pm::UI

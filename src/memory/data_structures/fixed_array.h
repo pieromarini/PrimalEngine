@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cassert>
+#include <iostream>
 
 namespace pm {
 
@@ -27,6 +28,7 @@ inline T FixedArray_getValue(FixedArray<T>& array, uint32_t index) {
 
 template<typename T>
 inline T* FixedArray_back(FixedArray<T>& array) {
+	assert((array.length - 1) >= 0);
 	return &array.data[array.length - 1];
 }
 
@@ -66,6 +68,16 @@ inline void FixedArray_removeRange(FixedArray<T>& array, uint32_t startIndex, ui
 	for (uint32_t i = startIndex; i < endIndex; ++i) {
 		array.data[i] = {};
 	}
+}
+
+template<typename T>
+inline void FixedArray_print(FixedArray<T>& array) {
+	std::cout << "FixedArray: ";
+	for (int32_t i = 0; i < array.length; ++i) {
+		auto item = FixedArray_getValue(array, i);
+		std::cout << item << ' ';
+	}
+	std::cout << '\n';
 }
 
 // NOTE(piero): this breaks for non-comparable type T's
