@@ -858,9 +858,11 @@ void VulkanRenderer::draw(float deltaTime) {
 
 	VK_CHECK(vkResetCommandBuffer(commandBuffer, 0));
 
+	// Build draw batches
 	std::vector<Model*> modelsToRender{};
 	modelsToRender.push_back(&loadedModels["testModel"]);
 	buildDrawBatches(modelsToRender);
+	buildUIDrawBatches(getCurrentFrame().uiRenderCommands);
 
 	auto commandBeginInfo = commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
@@ -886,6 +888,7 @@ void VulkanRenderer::draw(float deltaTime) {
 	vkCmdBeginQuery(commandBuffer, pipelineStatisticsPool, 0, 0);
 
 	drawGeometry(commandBuffer);
+	drawUI(commandBuffer);
 
 	vkCmdEndQuery(commandBuffer, pipelineStatisticsPool, 0);
 
@@ -965,6 +968,63 @@ void VulkanRenderer::drawBackground(VkCommandBuffer commandBuffer) {
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_skyPipelineLayout, 0, 1, &m_drawImageDescriptors, 0, nullptr);
 	vkCmdPushConstants(commandBuffer, m_skyPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &data);
 	vkCmdDispatch(commandBuffer, std::ceil(m_drawExtent.width / 16.0), std::ceil(m_drawExtent.height / 16.0), 1);
+}
+
+void VulkanRenderer::drawUI(VkCommandBuffer commandBuffer) {
+	auto uiStart = std::chrono::system_clock::now();
+
+	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(m_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
+	VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(m_depthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+
+	VkRenderingInfo renderInfo = renderingInfo(m_drawExtent, &colorAttachment, &depthAttachment);
+	vkCmdBeginRendering(commandBuffer, &renderInfo);
+
+	VkViewport viewport = {};
+	viewport.x = 0;
+	viewport.y = 0;
+	viewport.width = static_cast<float>(m_drawExtent.width);
+	viewport.height = static_cast<float>(m_drawExtent.height);
+	viewport.minDepth = 0.f;
+	viewport.maxDepth = 1.f;
+	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+	VkRect2D scissor = {};
+	scissor.offset.x = 0;
+	scissor.offset.y = 0;
+	scissor.extent.width = m_drawExtent.width;
+	scissor.extent.height = m_drawExtent.height;
+	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+	for (auto& drawBatch : getCurrentFrame().uiDrawBatches) {
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipeline);
+
+		VkDescriptorSet drawBatchDescriptor = getCurrentFrame().m_frameDescriptors.allocate(m_device, drawBatch.descriptorSetLayout);
+		DescriptorWriter drawBatchDescriptorWriter;
+		for (auto& descriptor : drawBatch.descriptors) {
+			drawBatchDescriptorWriter.writeBuffer(descriptor.binding, descriptor.buffer.buffer, descriptor.size, descriptor.offset, descriptor.type);
+		}
+		for (auto& descriptor : drawBatch.imageDescriptors) {
+			drawBatchDescriptorWriter.writeImage(descriptor.binding, descriptor.imageView, descriptor.sampler, descriptor.imageLayout, descriptor.type);
+		}
+		drawBatchDescriptorWriter.updateSet(m_device, drawBatchDescriptor);
+
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 0, 1, &drawBatchDescriptor, 0, nullptr);
+
+		// TODO: Should be included as part of a Batch
+		UIPushConstants uiPushConstants{};
+		uiPushConstants.vertexBuffer = drawBatch.meshBuffers.vertexBufferAddress;
+
+		vkCmdBindIndexBuffer(commandBuffer, drawBatch.meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdPushConstants(commandBuffer, drawBatch.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
+		vkCmdDrawIndexedIndirect(commandBuffer, drawBatch.commands.buffer.buffer, drawBatch.commands.offset, drawBatch.commands.size, drawBatch.commands.stride);
+	}
+
+	auto uiEnd = std::chrono::system_clock::now();
+	auto uiElapsed = std::chrono::duration_cast<std::chrono::microseconds>(uiEnd - uiStart);
+
+	vkCmdEndRendering(commandBuffer);
+
+	m_rendererState->rendererStats.uiFrametimeAvg = m_rendererState->rendererStats.uiFrametimeAvg * 0.95 + (static_cast<float>(uiElapsed.count()) / 1000.0f) * 0.05;
 }
 
 void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
@@ -1053,42 +1113,9 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
-	// UI rendering
-
-	buildUIDrawBatches(getCurrentFrame().uiRenderCommands);
-
-	auto uiStart = std::chrono::system_clock::now();
-	for (auto& drawBatch : getCurrentFrame().uiDrawBatches) {
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipeline);
-
-		VkDescriptorSet drawBatchDescriptor = getCurrentFrame().m_frameDescriptors.allocate(m_device, drawBatch.descriptorSetLayout);
-		DescriptorWriter drawBatchDescriptorWriter;
-		for (auto& descriptor : drawBatch.descriptors) {
-			drawBatchDescriptorWriter.writeBuffer(descriptor.binding, descriptor.buffer.buffer, descriptor.size, descriptor.offset, descriptor.type);
-		}
-		for (auto& descriptor : drawBatch.imageDescriptors) {
-			drawBatchDescriptorWriter.writeImage(descriptor.binding, descriptor.imageView, descriptor.sampler, descriptor.imageLayout, descriptor.type);
-		}
-		drawBatchDescriptorWriter.updateSet(m_device, drawBatchDescriptor);
-
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 0, 1, &drawBatchDescriptor, 0, nullptr);
-
-		// TODO: Should be included as part of a Batch
-		UIPushConstants uiPushConstants{};
-		uiPushConstants.vertexBuffer = drawBatch.meshBuffers.vertexBufferAddress;
-
-		vkCmdBindIndexBuffer(commandBuffer, drawBatch.meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdPushConstants(commandBuffer, drawBatch.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
-		vkCmdDrawIndexedIndirect(commandBuffer, drawBatch.commands.buffer.buffer, drawBatch.commands.offset, drawBatch.commands.size, drawBatch.commands.stride);
-	}
-
-	auto uiEnd = std::chrono::system_clock::now();
-	auto uiElapsed = std::chrono::duration_cast<std::chrono::microseconds>(uiEnd - uiStart);
-
 	vkCmdEndRendering(commandBuffer);
 
 	m_rendererState->rendererStats.meshDrawTimeAvg = m_rendererState->rendererStats.meshDrawTimeAvg * 0.95 + (static_cast<float>(elapsed.count()) / 1000.0f) * 0.05;
-	m_rendererState->rendererStats.uiFrametimeAvg = m_rendererState->rendererStats.uiFrametimeAvg * 0.95 + (static_cast<float>(uiElapsed.count()) / 1000.0f) * 0.05;
 }
 
 void VulkanRenderer::initDescriptors() {

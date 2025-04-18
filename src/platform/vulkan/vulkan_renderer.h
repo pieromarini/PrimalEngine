@@ -213,6 +213,7 @@ public:
 	void draw(float deltaTime);
 	void drawBackground(VkCommandBuffer commandBuffer);
 	void drawGeometry(VkCommandBuffer commandBuffer);
+	void drawUI(VkCommandBuffer commandBuffer);
 
 	void cleanup();
 
