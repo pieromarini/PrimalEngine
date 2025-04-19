@@ -12,9 +12,9 @@ UIElement box(std::vector<UIVertex>& vertices, std::vector<uint32_t>& indices) {
 	element.vertexOffset = static_cast<int32_t>(vertices.size());
 
 	vertices.push_back({ .position = { 1.0f, 1.0f, 0.0f }, .uv_x = 1.0f, .color = { 1.0f, 0.0f, 0.0f }, .uv_y = 1.0f });
-	vertices.push_back({ .position = { -1.0f, 1.0f, 0.0f }, .uv_x = -1.0f, .color = { 0.0f, 1.0f, 0.0f }, .uv_y = 1.0f });
-	vertices.push_back({ .position = { -1.0f, -1.0f, 0.0f }, .uv_x = -1.0f, .color = { 1.0f, 0.0f, 1.0f }, .uv_y = -1.0f });
-	vertices.push_back({ .position = { 1.0f, -1.0f, 0.0f }, .uv_x = 1.0f, .color = { 0.0f, 1.0f, 1.0f }, .uv_y = -1.0f });
+	vertices.push_back({ .position = { -1.0f, 1.0f, 0.0f }, .uv_x = 0.0f, .color = { 0.0f, 1.0f, 0.0f }, .uv_y = 1.0f });
+	vertices.push_back({ .position = { -1.0f, -1.0f, 0.0f }, .uv_x = 0.0f, .color = { 1.0f, 0.0f, 1.0f }, .uv_y = 0.0f });
+	vertices.push_back({ .position = { 1.0f, -1.0f, 0.0f }, .uv_x = 1.0f, .color = { 0.0f, 1.0f, 1.0f }, .uv_y = 0.0f });
 
 	indices.push_back(0);
 	indices.push_back(1);
@@ -34,8 +34,8 @@ UIElement triangle(std::vector<UIVertex>& vertices, std::vector<uint32_t>& indic
 	element.vertexOffset = static_cast<int32_t>(vertices.size());
 
 	vertices.push_back({ .position = { 1.0f, 1.0f, 0.0f }, .uv_x = 1.0f, .color = { 1.0f, 0.0f, 0.0f }, .uv_y = 1.0f });
-	vertices.push_back({ .position = { -1.0f, 1.0f, 0.0f }, .uv_x = -1.0f, .color = { 0.0f, 1.0f, 0.0f }, .uv_y = 1.0f });
-	vertices.push_back({ .position = { -1.0f, -1.0f, 0.0f }, .uv_x = -1.0f, .color = { 1.0f, 0.0f, 1.0f }, .uv_y = -1.0f });
+	vertices.push_back({ .position = { -1.0f, 1.0f, 0.0f }, .uv_x = 0.0f, .color = { 0.0f, 1.0f, 0.0f }, .uv_y = 1.0f });
+	vertices.push_back({ .position = { -1.0f, -1.0f, 0.0f }, .uv_x = 0.0f, .color = { 1.0f, 0.0f, 1.0f }, .uv_y = 0.0f });
 
 	indices.push_back(0);
 	indices.push_back(1);
