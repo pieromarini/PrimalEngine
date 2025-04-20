@@ -161,8 +161,6 @@ void VulkanRenderer::initDefaultData() {
 	// Write viewport image
 	writeBindlessTextureToGlobalDescriptor(viewportTextureDescriptorSet, errorCheckerboardImage, defaultSamplerLinear, 0);
 
-	writeBindlessTextureToGlobalDescriptor(viewportTextureDescriptorSet, m_sceneDrawImage, defaultSamplerLinear, 1);
-
 	// Write default material to cache
 	MaterialCache_add(m_materialCache, 0, defaultMaterial);
 
@@ -698,11 +696,7 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderC
 		viewportDescriptors.emplace_back(1, viewportDrawCommandsBuffer, sizeof(UIIndirectCommand) * viewportDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 		viewportDescriptors.emplace_back(2, viewportTransformDataBuffer, sizeof(ViewportDrawData) * viewportDrawData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
-		// std::vector<DrawBatchImageDescriptor> viewportImageDescriptors;
-		// viewportImageDescriptors.emplace_back(3, m_sceneDrawImage.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-
 		viewportDrawBatch.descriptors = viewportDescriptors;
-		// viewportDrawBatch.imageDescriptors = viewportImageDescriptors;
 		viewportDrawBatch.descriptorSetLayout = viewportDescriptorLayout;
 
 		getCurrentFrame().uiDrawBatches.push_back(viewportDrawBatch);
@@ -2022,7 +2016,6 @@ void VulkanRenderer::updateUIData() {
 				.layoutDirection = UI::UILayoutDirection::VERTICAL,
 				.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
 
-			// Viewport
 			UI::viewport({ 
 					.id = 1000,
 					.width = 1448.0f,
@@ -2037,103 +2030,36 @@ void VulkanRenderer::updateUIData() {
 					.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
 					.backgroundColor = { 0.3294f, 0.3294f, 0.3294f, 1.0f } });
 
-		UI::closeElement();
-
-	UI::closeElement();
-
-	// Info Panel
-	UI::openElement();
-		UI::pushBox({ .width = { .size = 600.0f, .sizingMode = UI::UISizingMode::STATIC },
-			.height = { .size = 980.0f, .sizingMode = UI::UISizingMode::STATIC },
-			.layoutDirection = UI::UILayoutDirection::VERTICAL,
-			.backgroundColor = { 0.41960784313f, 0.41960784313f, 0.41960784313f, 1.0f },
-			.padding = 10.0f,
-			.childGap = 10.0f });
-
-			UI::sliderFloat3(&m_rendererState->mainCamera->position);
-			UI::sliderFloat4(&m_sceneData.sunlightDirection, 0.0f, 1.0f);
-
-			UI::openElement();
-				UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-					.height = { .sizingMode = UI::UISizingMode::FIT },
-					.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-					.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
-					.padding = 10.0f,
-					.childGap = 20.0f });
-
-					UI::pushCircleFilled(80.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
-					UI::pushCircle(80.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
 			UI::closeElement();
-
-			UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);
 		UI::closeElement();
-	UI::closeElement();
 
-	/*
-	UI::openElement();
-		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::GROW },
-			.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
-			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-			.backgroundColor = { UI::isHovered() ? 0.0f : 1.0f, UI::isHovered() ? 0.0f : 1.0f, 0.0f, 1.0f },
-			.padding = 10.0f,
-			.childGap = 10.0f,
-			.onHoverCallback = [](uint32_t elementId, UI::PointerState pointerState) {} });
-
+		// Info Panel
 		UI::openElement();
-			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-				.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::FIT },
+			UI::pushBox({ .width = { .size = 600.0f, .sizingMode = UI::UISizingMode::STATIC },
+				.height = { .size = 980.0f, .sizingMode = UI::UISizingMode::STATIC },
 				.layoutDirection = UI::UILayoutDirection::VERTICAL,
-				.backgroundColor = { 0.0f, 1.0f, 0.0f, 1.0f },
+				.backgroundColor = { 0.41960784313f, 0.41960784313f, 0.41960784313f, 1.0f },
 				.padding = 10.0f,
 				.childGap = 10.0f });
 
-			UI::openTextElement();
-			UI::pushText({ .text = stats });
-			UI::closeTextElement();
+				UI::sliderFloat3(&m_rendererState->mainCamera->position);
+				UI::sliderFloat4(&m_sceneData.sunlightDirection, 0.0f, 1.0f);
 
-			UI::openTextElement();
-			UI::pushText({ .text = otherStats });
-			UI::closeTextElement();
-		UI::closeElement();
+				UI::openElement();
+					UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+						.height = { .sizingMode = UI::UISizingMode::FIT },
+						.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+						.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
+						.padding = 10.0f,
+						.childGap = 20.0f });
 
-		UI::openElement();
-			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-				.height = { .sizingMode = UI::UISizingMode::FIT },
-				.layoutDirection = UI::UILayoutDirection::VERTICAL,
-				.backgroundColor = { 0.2f, 0.3f, 1.0f, 1.0f },
-				.padding = 10.0f });
+						UI::pushCircleFilled(80.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
+						UI::pushCircle(80.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
+				UI::closeElement();
 
-			UI::openTextElement();
-			UI::pushText({ .text = "Hello there" });
-			UI::closeTextElement();
+				UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);
 		UI::closeElement();
 	UI::closeElement();
-
-	UI::openElement();
-		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-			.height = { .sizingMode = UI::UISizingMode::FIT },
-			.layoutDirection = UI::UILayoutDirection::VERTICAL,
-			.backgroundColor = { 0.0f, 0.0f, 1.0f, 1.0f },
-			.padding = 10.0f,
-			.childGap = 20.0f });
-
-		UI::sliderFloat3(&m_rendererState->mainCamera->position);
-		UI::sliderFloat4(&m_sceneData.sunlightDirection, 0.0f, 1.0f);
-
-		UI::openElement();
-			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-				.height = { .sizingMode = UI::UISizingMode::FIT },
-				.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-				.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
-				.padding = 10.0f,
-				.childGap = 20.0f });
-			UI::pushCircleFilled(80.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
-			UI::pushCircle(80.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
-		UI::closeElement();
-
-		UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);
-	UI::closeElement();
-	*/
 
 	getCurrentFrame().uiRenderCommands = UI::endLayout();
 
@@ -2151,6 +2077,7 @@ void VulkanRenderer::initUI() {
 
 	// Register image to UI system
  	sceneTextureId = UI::registerImage(&m_sceneDrawImage);
+	writeBindlessTextureToGlobalDescriptor(viewportTextureDescriptorSet, m_sceneDrawImage, defaultSamplerLinear, sceneTextureId);
 
 	uiUniformBuffer = createBuffer("uiUniformBuffer", sizeof(UIUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
