@@ -553,6 +553,7 @@ void pushCircleFilled(float radius, uint32_t segments, glm::vec4 color) {
 	closeCircleElement();
 }
 
+// Register images. Ids start at 1. 0 is considered "invalid".
 uint32_t registerImage(AllocatedImage* image) {
 	auto context = getUIContext();
 

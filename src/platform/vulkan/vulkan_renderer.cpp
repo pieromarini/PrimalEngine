@@ -1982,8 +1982,6 @@ void VulkanRenderer::updateUIData() {
 
 	UI::beginLayout();
 
-	auto sceneTextureId = UI::registerImage(&m_sceneDrawImage);
-
 	// Title bar
 	UI::openElement();
 		UI::pushBox({ .width = { .size = 2048.0f, .sizingMode = UI::UISizingMode::STATIC },
@@ -2029,7 +2027,7 @@ void VulkanRenderer::updateUIData() {
 					.id = 1000,
 					.width = 1448.0f,
 					.height = 700.0f,
-					.textureId = 1 // TODO(piero): fetch dynamically
+					.textureId = sceneTextureId
 			});
 
 			// Asset browser
@@ -2150,6 +2148,9 @@ void VulkanRenderer::setPointerState(float mouseX, float mouseY, float relMouseX
 void VulkanRenderer::initUI() {
 	uiMemoryArena = MemoryArena_create(MEGABYTE(20));
 	UI::initRenderContext(&uiMemoryArena, { .width = static_cast<float>(m_rendererState->windowExtent.width), .height = static_cast<float>(m_rendererState->windowExtent.height) });
+
+	// Register image to UI system
+ 	sceneTextureId = UI::registerImage(&m_sceneDrawImage);
 
 	uiUniformBuffer = createBuffer("uiUniformBuffer", sizeof(UIUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 

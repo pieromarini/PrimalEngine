@@ -294,6 +294,9 @@ public:
 	VkDescriptorSetLayout viewportTextureSetLayout;
 	VkDescriptorSet viewportTextureDescriptorSet;
 
+	// store registered texture id from UI system to render into viewport
+	uint32_t sceneTextureId;
+
 	// Global materials
 	VkDescriptorSet materialsDescriptor;
 	AllocatedBuffer globalMaterialDataBuffer;
