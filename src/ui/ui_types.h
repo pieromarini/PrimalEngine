@@ -24,6 +24,7 @@ enum UISizingMode {
 
 enum UIRenderCommandType {
 	RECTANGLE,
+	VIEWPORT,
 	CIRCLE,
 	TEXT
 };
@@ -70,7 +71,7 @@ struct UIRenderCommand {
 	uint32_t id;
 	uint32_t zindex;
 
-	BoundingRect boundingBox;
+	BoundingRect boundingRect;
 
 	glm::vec4 backgroundColor;
 
@@ -82,6 +83,9 @@ struct UIRenderCommand {
 	float thickness;
 	uint32_t segments;
 	CircleType circleType;
+
+	// viewport
+	uint32_t textureId;
 
 	UIRenderCommandType commandType;
 };
@@ -149,6 +153,7 @@ struct UILayoutElement {
 
 	bool isText{ false }; // TODO: REMOVE THIS
 	bool isCircle{ false };
+	bool isViewport{ false };
 	PrimalString text;
 	uint32_t parent;
 	FixedArray<uint32_t> children; // reference to context->layoutElementChildrenIndices
@@ -157,6 +162,8 @@ struct UILayoutElement {
 	uint32_t segments;
 	float thickness;
 	CircleType circleType;
+
+	uint32_t textureId;
 
 	UILayoutElementData data;
 };
@@ -177,6 +184,8 @@ struct UIElementOptions {
 	std::function<InteractionCallbackSignature> onClickCallback;
 
 	std::string text;
+
+	uint32_t textureId;
 
 	UILayoutElementData data;
 };

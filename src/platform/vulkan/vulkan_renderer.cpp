@@ -1,15 +1,3 @@
-#include "assets/font_loader.h"
-#include "config.h"
-#include "memory/arena.h"
-#include "memory/data_structures/fixed_array.h"
-#include "ui/ui_types.h"
-#include "ui/widgets.h"
-#include <algorithm>
-#include <chrono>
-#include <iterator>
-#include <ratio>
-#include <vulkan/vulkan_core.h>
-
 #define VMA_LEAK_LOG_FORMAT(format, ...) \
 	do {                                   \
 		printf((format), __VA_ARGS__);       \
@@ -17,12 +5,29 @@
 	} while (false)
 
 #define VMA_IMPLEMENTATION
+#include <vk_mem_alloc.h>
+
+#include "vk_types.h"
+
+#include "assets/font_loader.h"
+#include "config.h"
+#include "memory/arena.h"
+#include "memory/data_structures/fixed_array.h"
+#include "ui/ui_types.h"
+#include "ui/viewport.h"
+#include "ui/widgets.h"
+#include <algorithm>
+#include <chrono>
+#include <iterator>
+#include <ratio>
+#include <vulkan/vulkan_core.h>
+
+#include <vk_mem_alloc.h>
 #include "entity.h"
 #include "platform/vulkan/vulkan_descriptor.h"
 #include "platform/vulkan/vulkan_images.h"
 #include "platform/vulkan/vulkan_loader.h"
 #include "ui/primitives.h"
-#include "vk_types.h"
 #include "vulkan_pipeline.h"
 #include "vulkan_renderer.h"
 #include "vulkan_shader.h"
@@ -42,7 +47,8 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	initCommands();
 	initSyncStructures();
 	initDescriptors();
-	initBindlessTextureDescriptor();
+	initBindlessTextureDescriptor(bindlessPool, bindlessTexturesSetLayout, bindlessTexturesDescriptorSet);
+	initBindlessTextureDescriptor(viewportDescriptorPool, viewportTextureSetLayout, viewportTextureDescriptorSet);
 	initPipelines();
 	initQueryPools();
 
@@ -151,6 +157,11 @@ void VulkanRenderer::initDefaultData() {
 	writeBindlessTextureToGlobalDescriptor(bindlessTexturesDescriptorSet, errorCheckerboardImage, defaultSamplerLinear, 0);
 	defaultMaterial.passType = MaterialPass::MainColor;
 	defaultMaterial.pipeline = &opaquePipeline;
+
+	// Write viewport image
+	writeBindlessTextureToGlobalDescriptor(viewportTextureDescriptorSet, errorCheckerboardImage, defaultSamplerLinear, 0);
+
+	writeBindlessTextureToGlobalDescriptor(viewportTextureDescriptorSet, m_sceneDrawImage, defaultSamplerLinear, 1);
 
 	// Write default material to cache
 	MaterialCache_add(m_materialCache, 0, defaultMaterial);
@@ -295,46 +306,34 @@ void VulkanRenderer::initVulkan() {
 void VulkanRenderer::initSwapchain() {
 	createSwapchain(m_rendererState->windowExtent.width, m_rendererState->windowExtent.height);
 
-	// For render image and depth iamge, we want to allocate them from gpu local memory
-	VmaAllocationCreateInfo rimg_allocinfo = {};
-	rimg_allocinfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-	rimg_allocinfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-	// draw image size will match the window
 	VkExtent3D drawImageExtent = {
 		m_rendererState->windowExtent.width,
 		m_rendererState->windowExtent.height,
 		1
 	};
 
-	m_drawImage.imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-	m_drawImage.imageExtent = drawImageExtent;
+	VkExtent3D sceneDrawImageExtent = {
+		1448,
+		700,
+		1
+	};
 
 	VkImageUsageFlags drawImageUsages{};
 	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
 	drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	
 
-	VkImageCreateInfo rimg_info = imageCreateInfo(m_drawImage.imageFormat, drawImageUsages, drawImageExtent);
-
-	vmaCreateImage(m_allocator, &rimg_info, &rimg_allocinfo, &m_drawImage.image, &m_drawImage.allocation, nullptr);
-	VkImageViewCreateInfo rview_info = imageViewCreateInfo(m_drawImage.imageFormat, m_drawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
-
-	VK_CHECK(vkCreateImageView(m_device, &rview_info, nullptr, &m_drawImage.imageView));
+	m_drawImage = createImage("drawImage", drawImageExtent, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
+	m_sceneDrawImage = createImage("scene drawImage", sceneDrawImageExtent, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
 
 	// Depth image
-	m_depthImage.imageFormat = VK_FORMAT_D32_SFLOAT;
-	m_depthImage.imageExtent = drawImageExtent;
 	VkImageUsageFlags depthImageUsages{};
 	depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-	VkImageCreateInfo dimg_info = imageCreateInfo(m_depthImage.imageFormat, depthImageUsages, drawImageExtent);
-
-	vmaCreateImage(m_allocator, &dimg_info, &rimg_allocinfo, &m_depthImage.image, &m_depthImage.allocation, nullptr);
-	VkImageViewCreateInfo dview_info = imageViewCreateInfo(m_depthImage.imageFormat, m_depthImage.image, VK_IMAGE_ASPECT_DEPTH_BIT);
-
-	VK_CHECK(vkCreateImageView(m_device, &dview_info, nullptr, &m_depthImage.imageView));
+	m_depthImage = createImage("depthImage", drawImageExtent, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
+	m_sceneDepthImage = createImage("scene depthImage", sceneDrawImageExtent, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
 
 	m_mainDeletionQueue.push([&]() {
 		vkDestroyImageView(m_device, m_drawImage.imageView, nullptr);
@@ -342,6 +341,12 @@ void VulkanRenderer::initSwapchain() {
 
 		vkDestroyImageView(m_device, m_depthImage.imageView, nullptr);
 		vmaDestroyImage(m_allocator, m_depthImage.image, m_depthImage.allocation);
+
+		vkDestroyImageView(m_device, m_sceneDrawImage.imageView, nullptr);
+		vmaDestroyImage(m_allocator, m_sceneDrawImage.image, m_sceneDrawImage.allocation);
+
+		vkDestroyImageView(m_device, m_sceneDepthImage.imageView, nullptr);
+		vmaDestroyImage(m_allocator, m_sceneDepthImage.image, m_sceneDepthImage.allocation);
 	});
 }
 
@@ -461,6 +466,10 @@ std::vector<UI::UIElement> VulkanRenderer::buildUIGeometry(FixedArray<UI::UIRend
 			elements.push_back(UI::box(vertices, indices));
 			break;
 		}
+		case pm::UI::UIRenderCommandType::VIEWPORT: {
+			elements.push_back(UI::box(vertices, indices));
+			break;
+		}
 		case pm::UI::UIRenderCommandType::CIRCLE: {
 			if (renderCommand->circleType == UI::CircleType::FILLED) {
 				elements.push_back(UI::circleFilled(renderCommand->radius, renderCommand->segments, vertices, indices));
@@ -486,14 +495,18 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderC
 
 	std::vector<UIDrawData> uiDrawData;
 	std::vector<glm::mat4> textTransformData;
+	std::vector<ViewportDrawData> viewportDrawData;
 
 	std::vector<UIIndirectCommand> uiDrawCommands;
 	std::vector<UIIndirectCommand> textDrawCommands;
+	std::vector<UIIndirectCommand> viewportDrawCommands;
 
-	DrawBatch uiDrawBatch{};
-	DrawBatch textDrawBatch{};
+	std::vector<uint32_t> viewportImageViewIds;
 
-	// TODO: generate vertex/index data
+	DrawBatch uiDrawBatch{ .type = DrawBatchType::UI_BATCH };
+	DrawBatch textDrawBatch{ .type = DrawBatchType::TEXT_BATCH };
+	DrawBatch viewportDrawBatch{ .type = DrawBatchType::VIEWPORT_BATCH };
+
 	std::vector<UI::UIVertex> vertices;
 	std::vector<uint32_t> indices;
 	auto elements = buildUIGeometry(renderCommands, vertices, indices);
@@ -511,22 +524,25 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderC
 	textDrawBatch.pipeline = fontPipeline;
 	textDrawBatch.pipelineLayout = fontPipelineLayout;
 
-	uint32_t uiDrawIdCount{ 0 }, textDrawIdCount{ 0 };
+	viewportDrawBatch.meshBuffers = uiGeometryBuffers;
+	viewportDrawBatch.pipeline = viewportPipeline;
+	viewportDrawBatch.pipelineLayout = viewportPipelineLayout;
+
+	uint32_t uiDrawIdCount{ 0 }, textDrawIdCount{ 0 }, viewportDrawIdCount{ 0 };
 
 	for (uint32_t i = 0; i < elements.size(); ++i) {
 		auto renderCommand = FixedArray_get(renderCommands, i);
 		auto& uiElement = elements.at(i);
 
 
-		auto& bb = renderCommand->boundingBox;
+		auto& rect = renderCommand->boundingRect;
 		auto transform = glm::mat4{ 1.0f };
 
 		switch (renderCommand->commandType) {
 		case pm::UI::UIRenderCommandType::RECTANGLE: {
-			transform = glm::translate(transform, glm::vec3(bb.x + bb.width / 2.0f, bb.y + bb.height / 2.0f, 0.0f));
+			transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
 			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-			transform = glm::scale(transform, glm::vec3(bb.width / 2.0f, bb.height / 2.0f, 1.0f));
-			// uiDrawCommands.push_back(getBoxDrawCommand(renderCommand));
+			transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
 			uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
 				.command = {
 					.indexCount = uiElement.indexCount,
@@ -539,11 +555,25 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderC
 			uiDrawIdCount++;
 			break;
 		}
+		case pm::UI::UIRenderCommandType::VIEWPORT: {
+			transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
+			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+			transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
+			viewportDrawCommands.push_back({ .drawId = viewportDrawIdCount,
+				.command = {
+					.indexCount = uiElement.indexCount,
+					.instanceCount = 1,
+					.firstIndex = uiElement.firstIndex,
+					.vertexOffset = uiElement.vertexOffset,
+					.firstInstance = viewportDrawIdCount } });
+			viewportDrawData.push_back({ .transform = transform, .textureIndex = renderCommand->textureId });
+			viewportDrawIdCount++;
+			break;
+		}
 		case pm::UI::UIRenderCommandType::CIRCLE: {
-			transform = glm::translate(transform, glm::vec3(bb.x + bb.width / 2.0f, bb.y + bb.height / 2.0f, 0.0f));
+			transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
 			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
 			transform = glm::scale(transform, glm::vec3(1.0f, 1.0f, 1.0f));
-			// uiDrawCommands.push_back(getBoxDrawCommand(renderCommand));
 			uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
 				.command = {
 					.indexCount = uiElement.indexCount,
@@ -557,10 +587,9 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderC
 			break;
 		}
 		case pm::UI::UIRenderCommandType::TEXT: {
-			transform = glm::translate(transform, glm::vec3(bb.x, bb.y, 0.0f));
+			transform = glm::translate(transform, glm::vec3(rect.x, rect.y, 0.0f));
 			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
 			transform = glm::scale(transform, glm::vec3(1.0f, 1.0f, 1.0f));
-			// textDrawCommands.push_back(getTextDrawCommand(renderCommand));
 			textDrawCommands.push_back({ .drawId = textDrawIdCount,
 				.command = {
 					.indexCount = uiElement.indexCount,
@@ -633,7 +662,6 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderC
 		textDescriptors.emplace_back(3, textTransformDataBuffer, sizeof(glm::mat4) * textTransformData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
 		std::vector<DrawBatchImageDescriptor> textImageDescriptors;
-		// textImageDescriptors.emplace_back(1, fontSDF.view, fontSDF.sampler, fontSDF.imageLayout, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		textImageDescriptors.emplace_back(1, sourceCodeFontTexture.imageView, sourceCodeFontTexture.sampler, sourceCodeFontTexture.imageLayout, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
 		textDrawBatch.descriptors = textDescriptors;
@@ -645,6 +673,43 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderC
 		getCurrentFrame().m_deletionQueue.push([this, textDrawCommandsBuffer, textTransformDataBuffer]() {
 			destroyBuffer(textDrawCommandsBuffer);
 			destroyBuffer(textTransformDataBuffer);
+		});
+	}
+
+	// viewport
+	if (viewportDrawCommands.size() > 0) {
+		auto viewportDrawCommandsBuffer = createBuffer("viewportIndirectCommandBuffer", sizeof(UIIndirectCommand) * viewportDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		void* tdd = viewportDrawCommandsBuffer.allocation->GetMappedData();
+		memcpy(tdd, viewportDrawCommands.data(), sizeof(UIIndirectCommand) * viewportDrawCommands.size());
+
+		auto viewportTransformDataBuffer = createBuffer("viewportTransformBuffer", sizeof(ViewportDrawData) * viewportDrawData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		void* ttd = viewportTransformDataBuffer.allocation->GetMappedData();
+		memcpy(ttd, viewportDrawData.data(), sizeof(ViewportDrawData) * viewportDrawData.size());
+
+		viewportDrawBatch.commands = {
+			.buffer = viewportDrawCommandsBuffer,
+			.offset = offsetof(UIIndirectCommand, command),
+			.size = static_cast<uint32_t>(viewportDrawCommands.size()),
+			.stride = sizeof(UIIndirectCommand)
+		};
+
+		std::vector<DrawBatchDescriptor> viewportDescriptors;
+		viewportDescriptors.emplace_back(0, uiUniformBuffer, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+		viewportDescriptors.emplace_back(1, viewportDrawCommandsBuffer, sizeof(UIIndirectCommand) * viewportDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		viewportDescriptors.emplace_back(2, viewportTransformDataBuffer, sizeof(ViewportDrawData) * viewportDrawData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+
+		// std::vector<DrawBatchImageDescriptor> viewportImageDescriptors;
+		// viewportImageDescriptors.emplace_back(3, m_sceneDrawImage.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+
+		viewportDrawBatch.descriptors = viewportDescriptors;
+		// viewportDrawBatch.imageDescriptors = viewportImageDescriptors;
+		viewportDrawBatch.descriptorSetLayout = viewportDescriptorLayout;
+
+		getCurrentFrame().uiDrawBatches.push_back(viewportDrawBatch);
+
+		getCurrentFrame().m_deletionQueue.push([this, viewportDrawCommandsBuffer, viewportTransformDataBuffer]() {
+			destroyBuffer(viewportDrawCommandsBuffer);
+			destroyBuffer(viewportTransformDataBuffer);
 		});
 	}
 
@@ -665,7 +730,7 @@ void VulkanRenderer::buildDrawBatches(std::vector<Model*>& models) {
 	getCurrentFrame().drawBatches.clear();
 
 
-	// TODO: Right now each model use their own vertex and index buffers
+	// TODO: Right now each model uses their own vertex and index buffers
 	// 			 This might not be efficient since we can, very likely,
 	// 			 combine multiple models and render them in the same draw batches
 	// 			 if they use the same vertex/index buffers.
@@ -680,17 +745,17 @@ void VulkanRenderer::buildDrawBatches(std::vector<Model*>& models) {
 		std::vector<DrawBatch> drawBatches{};
 
 		auto startGen = std::chrono::high_resolution_clock::now();
-		DrawBatch opaque{};
+		DrawBatch opaque{ .type = DrawBatchType::MESH_BATCH };
 		opaque.meshBuffers = model->modelBuffers;
 		opaque.pipeline = opaquePipeline.pipeline;
 		opaque.pipelineLayout = opaquePipeline.layout;
 
-		DrawBatch transparent{};
+		DrawBatch transparent{ .type = DrawBatchType::MESH_BATCH };
 		transparent.meshBuffers = model->modelBuffers;
 		transparent.pipeline = transparentPipeline.pipeline;
 		transparent.pipelineLayout = transparentPipeline.layout;
 
-		DrawBatch doubleSided{};
+		DrawBatch doubleSided{ .type = DrawBatchType::MESH_BATCH };
 		doubleSided.meshBuffers = model->modelBuffers;
 		doubleSided.pipeline = doubleSidedPipeline.pipeline;
 		doubleSided.pipelineLayout = doubleSidedPipeline.layout;
@@ -876,24 +941,32 @@ void VulkanRenderer::draw(float deltaTime) {
 
 	// transition our main draw image into general layout so we can write into it
 	// we will overwrite it all so we dont care about what was the older layout
-	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	// transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	transitionImage(commandBuffer, m_sceneDrawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
 	drawBackground(commandBuffer);
 
 	// transition the draw image and the depth image into their correct attachment layouts
-	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	transitionImage(commandBuffer, m_depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+
+	transitionImage(commandBuffer, m_sceneDrawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	transitionImage(commandBuffer, m_sceneDepthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
 	vkCmdResetQueryPool(commandBuffer, pipelineStatisticsPool, 0, 1);
 	vkCmdBeginQuery(commandBuffer, pipelineStatisticsPool, 0, 0);
 
 	drawGeometry(commandBuffer);
+
+	transitionImage(commandBuffer, m_sceneDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
 	drawUI(commandBuffer);
 
 	vkCmdEndQuery(commandBuffer, pipelineStatisticsPool, 0);
 
 	// transition the draw image and the swapchain image into their correct transfer layouts
 	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
 	transitionImage(commandBuffer, m_swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 	// execute a copy from the draw image into the swapchain
@@ -967,16 +1040,21 @@ void VulkanRenderer::drawBackground(VkCommandBuffer commandBuffer) {
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_skyPipeline);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_skyPipelineLayout, 0, 1, &m_drawImageDescriptors, 0, nullptr);
 	vkCmdPushConstants(commandBuffer, m_skyPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &data);
-	vkCmdDispatch(commandBuffer, std::ceil(m_drawExtent.width / 16.0), std::ceil(m_drawExtent.height / 16.0), 1);
+	auto width = 1448;
+	auto height = 700;
+	vkCmdDispatch(commandBuffer, std::ceil(width / 16.0), std::ceil(height / 16.0), 1);
 }
 
 void VulkanRenderer::drawUI(VkCommandBuffer commandBuffer) {
 	auto uiStart = std::chrono::system_clock::now();
 
-	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(m_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
+	VkClearValue clearColor{
+		.color = { 0.0, 0.0, 0.0, 1.0 }
+	};
+	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(m_drawImage.imageView, &clearColor, VK_IMAGE_LAYOUT_GENERAL);
 	VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(m_depthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
-	VkRenderingInfo renderInfo = renderingInfo(m_drawExtent, &colorAttachment, &depthAttachment);
+	VkRenderingInfo renderInfo = renderingInfo({ .extent = m_drawExtent }, &colorAttachment, &depthAttachment);
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
 
 	VkViewport viewport = {};
@@ -1010,6 +1088,12 @@ void VulkanRenderer::drawUI(VkCommandBuffer commandBuffer) {
 
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 0, 1, &drawBatchDescriptor, 0, nullptr);
 
+		// Bind global viewport texture descriptor set
+		// TODO(piero): The batch should include information about the global descriptor sets
+		if (drawBatch.type == DrawBatchType::VIEWPORT_BATCH) {
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 1, 1, &viewportTextureDescriptorSet, 0, nullptr);
+		}
+
 		// TODO: Should be included as part of a Batch
 		UIPushConstants uiPushConstants{};
 		uiPushConstants.vertexBuffer = drawBatch.meshBuffers.vertexBufferAddress;
@@ -1032,17 +1116,17 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 
 	auto start = std::chrono::system_clock::now();
 
-	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(m_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
-	VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(m_depthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(m_sceneDrawImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
+	VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(m_sceneDepthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
-	VkRenderingInfo renderInfo = renderingInfo(m_drawExtent, &colorAttachment, &depthAttachment);
+	VkRenderingInfo renderInfo = renderingInfo({ .extent = { .width = m_sceneDrawImage.imageExtent.width, .height = m_sceneDrawImage.imageExtent.height} }, &colorAttachment, &depthAttachment);
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
 
 	VkViewport viewport = {};
 	viewport.x = 0;
 	viewport.y = 0;
-	viewport.width = static_cast<float>(m_drawExtent.width);
-	viewport.height = static_cast<float>(m_drawExtent.height);
+	viewport.width = static_cast<float>(m_sceneDrawImage.imageExtent.width);
+	viewport.height = static_cast<float>(m_sceneDrawImage.imageExtent.height);
 	viewport.minDepth = 0.f;
 	viewport.maxDepth = 1.f;
 	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -1050,8 +1134,8 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	VkRect2D scissor = {};
 	scissor.offset.x = 0;
 	scissor.offset.y = 0;
-	scissor.extent.width = m_drawExtent.width;
-	scissor.extent.height = m_drawExtent.height;
+	scissor.extent.width = m_sceneDrawImage.imageExtent.width;
+	scissor.extent.height = m_sceneDrawImage.imageExtent.height;
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 	// allocate a new uniform buffer for the scene data
@@ -1120,7 +1204,7 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 
 void VulkanRenderer::initDescriptors() {
 	std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
-		{ .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 1 }
+		{ .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 1 },
 	};
 
 	m_globalDescriptorAllocator.init(m_device, 10, sizes);
@@ -1139,7 +1223,7 @@ void VulkanRenderer::initDescriptors() {
 
 	{
 		DescriptorWriter writer;
-		writer.writeImage(0, m_drawImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		writer.writeImage(0, m_sceneDrawImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 		writer.updateSet(m_device, m_drawImageDescriptors);
 	}
 
@@ -1188,7 +1272,7 @@ void VulkanRenderer::initDescriptors() {
 		{ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio = 2 },
 		{ .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .ratio = 2 }
 	};
-	fontDescriptorAllocator.init(m_device, 4, fontPoolSizes);
+	fontDescriptorAllocator.init(m_device, 10, fontPoolSizes);
 	m_mainDeletionQueue.push([&]() {
 		fontDescriptorAllocator.destroyPools(m_device);
 	});
@@ -1206,7 +1290,19 @@ void VulkanRenderer::initDescriptors() {
 		vkDestroyDescriptorSetLayout(m_device, fontDescriptorLayout, nullptr);
 	});
 
-	fontDescriptorSet = fontDescriptorAllocator.allocate(m_device, fontDescriptorLayout);
+	// Viewport
+	{
+		DescriptorLayoutBuilder builder;
+		builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
+		builder.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
+		builder.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		builder.addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+		viewportDescriptorLayout = builder.build(m_device);
+	}
+
+	m_mainDeletionQueue.push([&]() {
+		vkDestroyDescriptorSetLayout(m_device, viewportDescriptorLayout, nullptr);
+	});
 
 	// UI Descriptors
 	std::vector<DescriptorAllocator::PoolSizeRatio> uiPoolSizes = {
@@ -1230,8 +1326,6 @@ void VulkanRenderer::initDescriptors() {
 	m_mainDeletionQueue.push([&]() {
 		vkDestroyDescriptorSetLayout(m_device, uiDescriptorLayout, nullptr);
 	});
-
-	uiDescriptorSet = uiDescriptorAllocator.allocate(m_device, uiDescriptorLayout);
 }
 
 void VulkanRenderer::initPipelines() {
@@ -1242,6 +1336,7 @@ void VulkanRenderer::initPipelines() {
 	buildDefaultPipelines();
 	initUIPipeline();
 	initFontPipeline();
+	initViewportPipeline();
 }
 
 void VulkanRenderer::initBackgroundPipelines() {
@@ -1337,6 +1432,62 @@ void VulkanRenderer::initUIPipeline() {
 
 	vkDestroyShaderModule(m_device, uiFragShader, nullptr);
 	vkDestroyShaderModule(m_device, uiVertexShader, nullptr);
+}
+
+void VulkanRenderer::initViewportPipeline() {
+	VkShaderModule viewportFragShader{};
+	if (!loadShaderModule("res/shaders/ui_texture.frag.spv", m_device, &viewportFragShader)) {
+		std::cout << std::format("Error when building the viewport fragment shader module") << '\n';
+	}
+
+	VkShaderModule viewportVertexShader{};
+	if (!loadShaderModule("res/shaders/ui_texture.vert.spv", m_device, &viewportVertexShader)) {
+		std::cout << std::format("Error when building the viewport vertex shader module") << '\n';
+	}
+
+	VkDescriptorSetLayout layouts[] = {
+		viewportDescriptorLayout,
+		viewportTextureSetLayout
+	};
+
+	VkPushConstantRange pushConstantRange{};
+	pushConstantRange.offset = 0;
+	pushConstantRange.size = sizeof(UIPushConstants);
+	pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkPipelineLayoutCreateInfo viewportLayoutInfo = pipelineLayoutCreateInfo();
+	viewportLayoutInfo.pPushConstantRanges = &pushConstantRange;
+	viewportLayoutInfo.pushConstantRangeCount = 1;
+	viewportLayoutInfo.setLayoutCount = 2;
+	viewportLayoutInfo.pSetLayouts = layouts;
+
+	VK_CHECK(vkCreatePipelineLayout(m_device, &viewportLayoutInfo, nullptr, &viewportPipelineLayout));
+
+	m_mainDeletionQueue.push([&]() {
+		vkDestroyPipelineLayout(m_device, viewportPipelineLayout, nullptr);
+	});
+
+	PipelineBuilder pipelineBuilder;
+	pipelineBuilder.setPipelineLayout(viewportPipelineLayout);
+	pipelineBuilder.setShaders(viewportVertexShader, viewportFragShader);
+	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
+	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	pipelineBuilder.setMultisamplingNone();
+	pipelineBuilder.enableBlendingAlphablend();
+	pipelineBuilder.disableDepthTest();
+
+	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
+	pipelineBuilder.setDepthFormat(m_depthImage.imageFormat);
+
+	viewportPipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
+
+	m_mainDeletionQueue.push([&]() {
+		vkDestroyPipeline(m_device, viewportPipeline, nullptr);
+	});
+
+	vkDestroyShaderModule(m_device, viewportFragShader, nullptr);
+	vkDestroyShaderModule(m_device, viewportVertexShader, nullptr);
 }
 
 void VulkanRenderer::initFontPipeline() {
@@ -1579,7 +1730,7 @@ void VulkanRenderer::destroyImage(const AllocatedImage& img) {
 	vmaDestroyImage(m_allocator, img.image, img.allocation);
 }
 
-void VulkanRenderer::initBindlessTextureDescriptor() {
+void VulkanRenderer::initBindlessTextureDescriptor(VkDescriptorPool& pool, VkDescriptorSetLayout& descriptorSetLayout, VkDescriptorSet& descriptorSet) {
 	constexpr uint32_t maxBindlessTextureResources = 1000;
 
 	VkDescriptorPoolSize poolSizesBindless[] = {
@@ -1592,7 +1743,7 @@ void VulkanRenderer::initBindlessTextureDescriptor() {
 	poolInfo.poolSizeCount = 1;
 	poolInfo.pPoolSizes = poolSizesBindless;
 
-	VK_CHECK(vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &bindlessPool));
+	VK_CHECK(vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &pool));
 
 	VkDescriptorBindingFlags bindlessFlags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
 
@@ -1614,24 +1765,24 @@ void VulkanRenderer::initBindlessTextureDescriptor() {
 
 	bindlessTextureLayoutInfo.pNext = &extended_info;
 
-	vkCreateDescriptorSetLayout(m_device, &bindlessTextureLayoutInfo, nullptr, &bindlessTexturesSetLayout);
+	vkCreateDescriptorSetLayout(m_device, &bindlessTextureLayoutInfo, nullptr, &descriptorSetLayout);
 
 	VkDescriptorSetVariableDescriptorCountAllocateInfo countInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO };
 	countInfo.descriptorSetCount = 1;
 	countInfo.pDescriptorCounts = &maxBindlessTextureResources;
 
 	VkDescriptorSetAllocateInfo setAllocateInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
-	setAllocateInfo.descriptorPool = bindlessPool;
+	setAllocateInfo.descriptorPool = pool;
 	setAllocateInfo.descriptorSetCount = 1;
-	setAllocateInfo.pSetLayouts = &bindlessTexturesSetLayout;
+	setAllocateInfo.pSetLayouts = &descriptorSetLayout;
 
 	setAllocateInfo.pNext = &countInfo;
 
-	VK_CHECK(vkAllocateDescriptorSets(m_device, &setAllocateInfo, &bindlessTexturesDescriptorSet));
+	VK_CHECK(vkAllocateDescriptorSets(m_device, &setAllocateInfo, &descriptorSet));
 
 	m_mainDeletionQueue.push([&]() {
-		vkDestroyDescriptorSetLayout(m_device, bindlessTexturesSetLayout, nullptr);
-		vkDestroyDescriptorPool(m_device, bindlessPool, nullptr);
+		vkDestroyDescriptorSetLayout(m_device, descriptorSetLayout, nullptr);
+		vkDestroyDescriptorPool(m_device, pool, nullptr);
 	});
 }
 
@@ -1687,8 +1838,8 @@ void VulkanRenderer::buildDefaultPipelines() {
 	pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
 	// render format
-	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
-	pipelineBuilder.setDepthFormat(m_depthImage.imageFormat);
+	pipelineBuilder.setColorAttachmentFormat(m_sceneDrawImage.imageFormat);
+	pipelineBuilder.setDepthFormat(m_sceneDepthImage.imageFormat);
 
 	// build opaque pipeline
 	opaquePipeline.pipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
@@ -1831,6 +1982,8 @@ void VulkanRenderer::updateUIData() {
 
 	UI::beginLayout();
 
+	auto sceneTextureId = UI::registerImage(&m_sceneDrawImage);
+
 	// Title bar
 	UI::openElement();
 		UI::pushBox({ .width = { .size = 2048.0f, .sizingMode = UI::UISizingMode::STATIC },
@@ -1848,37 +2001,36 @@ void VulkanRenderer::updateUIData() {
 				.childGap = 10.0f });
 
 			UI::openTextElement();
-			UI::pushText({ .text = stats });
+				UI::pushText({ .text = stats });
 			UI::closeTextElement();
 
 			UI::openTextElement();
-			UI::pushText({ .text = otherStats });
+				UI::pushText({ .text = otherStats });
 			UI::closeTextElement();
 		UI::closeElement();
 
 	UI::closeElement();
 
 	UI::openElement();
-		UI::pushBox({ .width = { .size = 1448.0f, .sizingMode = UI::UISizingMode::STATIC },
-			.height = { .size = 1000.0f, .sizingMode = UI::UISizingMode::STATIC },
+		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+			.height = { .sizingMode = UI::UISizingMode::FIT },
 			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
 			.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
 
 		// Viewport + Asset browser
 		UI::openElement();
-			UI::pushBox({ .width = { .size = 1448.0f, .sizingMode = UI::UISizingMode::STATIC },
-				.height = { .size = 1000.0f, .sizingMode = UI::UISizingMode::STATIC },
+			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+				.height = { .sizingMode = UI::UISizingMode::FIT },
 				.layoutDirection = UI::UILayoutDirection::VERTICAL,
 				.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
 
 			// Viewport
-			UI::openElement();
-				UI::pushBox({ .width = { .size = 1448.0f, .sizingMode = UI::UISizingMode::STATIC },
-					.height = { .size = 700.0f, .sizingMode = UI::UISizingMode::STATIC },
-					.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-					.backgroundColor = { 0.478f, 0.478f, 0.478f, 0.0f } });
-
-			UI::closeElement();
+			UI::viewport({ 
+					.id = 1000,
+					.width = 1448.0f,
+					.height = 700.0f,
+					.textureId = 1 // TODO(piero): fetch dynamically
+			});
 
 			// Asset browser
 			UI::openElement();
@@ -1887,18 +2039,18 @@ void VulkanRenderer::updateUIData() {
 					.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
 					.backgroundColor = { 0.3294f, 0.3294f, 0.3294f, 1.0f } });
 
-			UI::closeElement();
-
 		UI::closeElement();
 
-		// Info Panel
-		UI::openElement();
-			UI::pushBox({ .width = { .size = 600.0f, .sizingMode = UI::UISizingMode::STATIC },
-				.height = { .size = 1000.0f, .sizingMode = UI::UISizingMode::STATIC },
-				.layoutDirection = UI::UILayoutDirection::VERTICAL,
-				.backgroundColor = { 0.41960784313f, 0.41960784313f, 0.41960784313f, 1.0f },
-				.padding = 10.0f,
-				.childGap = 10.0f });
+	UI::closeElement();
+
+	// Info Panel
+	UI::openElement();
+		UI::pushBox({ .width = { .size = 600.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.height = { .size = 980.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.layoutDirection = UI::UILayoutDirection::VERTICAL,
+			.backgroundColor = { 0.41960784313f, 0.41960784313f, 0.41960784313f, 1.0f },
+			.padding = 10.0f,
+			.childGap = 10.0f });
 
 			UI::sliderFloat3(&m_rendererState->mainCamera->position);
 			UI::sliderFloat4(&m_sceneData.sunlightDirection, 0.0f, 1.0f);
@@ -1910,8 +2062,9 @@ void VulkanRenderer::updateUIData() {
 					.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
 					.padding = 10.0f,
 					.childGap = 20.0f });
-				UI::pushCircleFilled(80.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
-				UI::pushCircle(80.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
+
+					UI::pushCircleFilled(80.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
+					UI::pushCircle(80.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
 			UI::closeElement();
 
 			UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);

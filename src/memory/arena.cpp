@@ -113,6 +113,7 @@ void* MemoryArena_os_reserve(uint64_t bytesToReserve) {
 #ifdef PLATFORM_POSIX
 	mem = mmap(nullptr, bytesToReserve, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 #endif
+	assert(mem);
 
 	return mem;
 }
@@ -122,7 +123,7 @@ bool MemoryArena_os_commit(void* addr, uint64_t size) {
 
 #ifdef PLATFORM_WINDOWS
 	auto ptr = VirtualAlloc(addr, size, MEM_COMMIT, PAGE_READWRITE);
-	assert(ptr);
+	assert(ptr); // We probably ran out of memory in our arena
 #endif
 
 #ifdef PLATFORM_POSIX

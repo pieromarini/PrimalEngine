@@ -4,6 +4,8 @@
 #include <limits>
 #include <string>
 
+#include "viewport.h"
+
 /*
  * Planned Widgets:
  * - Checkbox
@@ -35,5 +37,7 @@ void sliderInt3(glm::ivec3* value, int min = std::numeric_limits<int>::min(), in
 void sliderInt4(glm::ivec4* value, int min = std::numeric_limits<int>::min(), int max = std::numeric_limits<int>::max());
 
 void textInput(std::string* value);
+
+void viewport(Viewport viewport);
 
 }// namespace pm::UI

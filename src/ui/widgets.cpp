@@ -141,4 +141,17 @@ void sliderInt4(glm::ivec4* value, int min, int max) {
 void textInput(std::string* value) {
 }
 
+void viewport(Viewport viewport) {
+	auto width = viewport.width;
+	auto height = viewport.height;
+
+	openElement();
+		pushBox({ .width = { .size = width, .sizingMode = UI::UISizingMode::STATIC },
+			.height = { .size = height, .sizingMode = UI::UISizingMode::STATIC },
+			.backgroundColor = { 0.478f, 0.478f, 0.478f, 0.0f },
+			.textureId = viewport.textureId });
+
+	closeViewportElement();
+}
+
 };// namespace pm::UI

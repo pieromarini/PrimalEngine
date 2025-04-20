@@ -12,9 +12,9 @@
 
 #include <format>
 
-#include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 
+#include <vk_mem_alloc.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 #include <glm/mat4x4.hpp>

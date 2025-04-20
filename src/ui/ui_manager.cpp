@@ -18,9 +18,10 @@ void initRenderContext(MemoryArena* arena, InitRenderContextOptions options) {
 	uiContext->windowHeight = options.height;
 	// Persistent data
 	uiContext->hoveredIds = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, arena);
+	uiContext->registeredImageIds = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, arena);
 
 	// Ephemeral data. Reset each frame.
-	uiContext->tempArena = MemoryArena_create(MEGABYTE(10));
+	uiContext->tempArena = MemoryArena_create(MEGABYTE(20));
 	MemoryArena_commit(&uiContext->tempArena, uiContext->tempArena.size);
 
 	auto tempArena = &uiContext->tempArena;
@@ -333,6 +334,39 @@ void closeCircleElement() {
 	}
 }
 
+void closeViewportElement() {
+	auto context = getUIContext();
+
+	auto closedElementIndex = *FixedArray_top(context->openLayoutElements);
+	FixedArray_pop(context->openLayoutElements);
+
+	auto openLayoutElement = FixedArray_get(context->layoutElements, closedElementIndex);
+
+	// Set parent to the open layout element
+	if (!FixedArray_empty(context->openLayoutElements)) {
+		auto parentIndex = FixedArray_top(context->openLayoutElements);
+		openLayoutElement->parent = *parentIndex;
+	}
+
+	// add parent padding
+	if (openLayoutElement->parent >= 0) {
+		auto parent = FixedArray_get(context->layoutElements, openLayoutElement->parent);
+		openLayoutElement->x += parent->padding.left;
+		openLayoutElement->y += parent->padding.top;
+	}
+
+	float horizontalPadding = openLayoutElement->padding.left + openLayoutElement->padding.right;
+	float verticalPadding = openLayoutElement->padding.top + openLayoutElement->padding.bottom;
+
+	// Calculate closing element's Width and Height
+	if (openLayoutElement->layoutDirection == UILayoutDirection::HORIZONTAL) {
+		openLayoutElement->width.size += horizontalPadding;
+	} else {
+		openLayoutElement->height.size += verticalPadding;
+	}
+}
+
+
 // DFS to add parent position to children
 void computeFinalSizes() {
 	auto context = getUIContext();
@@ -375,7 +409,7 @@ void calculateFinalLayout() {
 		UIRenderCommand c{
 			.id = index,
 			.zindex = 0,
-			.boundingBox = {
+			.boundingRect = {
 				.x = layoutElement->x,
 				.y = layoutElement->y,
 				.width = layoutElement->width.size,
@@ -393,6 +427,9 @@ void calculateFinalLayout() {
 		} else if (layoutElement->isText) {
 			c.commandType = UIRenderCommandType::TEXT;
 			c.text = layoutElement->text;
+		} else if (layoutElement->isViewport) {
+			c.commandType = UIRenderCommandType::VIEWPORT;
+			c.textureId = layoutElement->textureId;
 		}
 
 		FixedArray_add(context->renderCommands, c);
@@ -442,6 +479,13 @@ void pushBox(UIElementOptions options) {
 	layoutElement->childGap = options.childGap;
 	layoutElement->onHoverCallback = options.onHoverCallback;
 	layoutElement->onClickCallback = options.onClickCallback;
+
+	// if we have a valid texture id, this is a viewport.
+	// TODO(piero): create dedicated widget for this?
+	if (options.textureId > 0) {
+		layoutElement->textureId = options.textureId;
+		layoutElement->isViewport = true;
+	}
 }
 
 void getTextDimensions(PrimalString& text, FontAsset* font, float& width, float& height) {
@@ -507,6 +551,14 @@ void pushCircleFilled(float radius, uint32_t segments, glm::vec4 color) {
 	layoutElement->circleType = CircleType::FILLED;
 
 	closeCircleElement();
+}
+
+uint32_t registerImage(AllocatedImage* image) {
+	auto context = getUIContext();
+
+	auto imageId = FixedArray_add(context->registeredImageIds, context->registeredImageIds.length + 1);
+
+	return *imageId;
 }
 
 }// namespace pm::UI

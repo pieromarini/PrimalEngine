@@ -9,8 +9,6 @@
 #include "primal.h"
 #include "SDL3/SDL_keycode.h"
 
-constexpr bool bUseValidationLayers = true;
-
 namespace pm {
 
 PrimalApp* loadedEngine = nullptr;

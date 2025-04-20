@@ -53,6 +53,11 @@ struct alignas(16) UIDrawData {
 	float padding[3]{ 0.0f, 0.0f, 0.0f };
 };
 
+struct alignas(16) ViewportDrawData {
+	glm::mat4 transform{};
+	uint32_t textureIndex{};
+};
+
 struct alignas(16) UIMaterialData {
 	glm::vec4 backgroundColor;
 };
@@ -85,7 +90,15 @@ struct DrawBatchCommands {
 	uint32_t stride;
 };
 
+enum DrawBatchType {
+	MESH_BATCH,
+	UI_BATCH,
+	TEXT_BATCH,
+	VIEWPORT_BATCH
+};
+
 struct DrawBatch {
+	DrawBatchType type; // TODO(piero): Remove this. This is only used to bind global descriptor sets for a batch but we should include global descriptor sets in the batch itself.
 	DrawBatchCommands commands{};
 	std::vector<DrawBatchDescriptor> descriptors{};
 	std::vector<DrawBatchImageDescriptor> imageDescriptors{};
@@ -238,6 +251,17 @@ public:
 	AllocatedImage m_drawImage;
 	AllocatedImage m_depthImage;
 
+	// NOTE(piero): Testing viewport rendering
+	AllocatedImage m_sceneDrawImage;
+	AllocatedImage m_sceneDepthImage;
+	VkDescriptorSet m_sceneDrawImageDescriptor;
+	VkDescriptorSetLayout m_sceneDrawImageDescriptorLayout;
+
+	VkDescriptorSetLayout viewportDescriptorLayout;
+	VkDescriptorSet viewportDescriptorSet;
+	VkPipelineLayout viewportPipelineLayout;
+	VkPipeline viewportPipeline;
+
 	DeletionQueue m_mainDeletionQueue;
 
 	// Font Rendering
@@ -258,11 +282,19 @@ public:
 
 	std::unordered_map<std::string, Model> loadedModels;
 
-	// bindless textures
+	// Bindless Global texture arrays
+
+	// Mesh textures
 	VkDescriptorPool bindlessPool;
 	VkDescriptorSetLayout bindlessTexturesSetLayout;
 	VkDescriptorSet bindlessTexturesDescriptorSet;
 
+	// Viewport textures
+	VkDescriptorPool viewportDescriptorPool;
+	VkDescriptorSetLayout viewportTextureSetLayout;
+	VkDescriptorSet viewportTextureDescriptorSet;
+
+	// Global materials
 	VkDescriptorSet materialsDescriptor;
 	AllocatedBuffer globalMaterialDataBuffer;
 
@@ -299,12 +331,13 @@ private:
 	void initPipelines();
 	void initFontData();
 	void initUI();
-	void initBindlessTextureDescriptor();
+	void initBindlessTextureDescriptor(VkDescriptorPool& pool, VkDescriptorSetLayout& descriptorSetLayout, VkDescriptorSet& descriptotSet);
 	void initQueryPools();
 
 	// specific pipelines
 	void initBackgroundPipelines();
 	void initFontPipeline();
+	void initViewportPipeline();
 	void initUIPipeline();
 
 	VulkanRendererConfig* m_rendererState;

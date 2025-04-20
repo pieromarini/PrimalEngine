@@ -3,6 +3,7 @@
 #include "utils/geometry.h"
 #include "memory/data_structures/fixed_array.h"
 #include "memory/arena.h"
+#include "vk_types.h"
 
 namespace pm::UI {
 
@@ -19,6 +20,8 @@ struct UIContext {
 
 	FixedArray<uint32_t> openLayoutElements; // elements with an open Layout
 
+	FixedArray<uint32_t> registeredImageIds;
+	FixedArray<VkImageView> imageViews;
 
 	// Interactions
 	PointerState pointerState;
@@ -60,6 +63,7 @@ void closeElement();
 void openTextElement();
 void closeTextElement();
 void closeCircleElement();
+void closeViewportElement();
 
 // Utils
 void getTextDimensions(PrimalString& text, FontAsset* font, float& width, float& height);
@@ -79,5 +83,9 @@ void pushCircleFilled(float radius, uint32_t segments, glm::vec4 color);
 // Interactions
 bool isHovered();
 bool isInsideBoundingBox(float x, float y, BoundingRect bb);
+
+// Textures
+// TODO(piero): This technically makes this UI system dependant on Vulkan. We should find a way to make this generic to any renderer.
+uint32_t registerImage(AllocatedImage* image);
 
 }// namespace pm::UI
