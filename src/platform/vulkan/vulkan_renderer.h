@@ -2,6 +2,7 @@
 
 #include "assets/asset.h"
 #include "material.h"
+#include "platform/vulkan/swapchain.h"
 #include "vulkan_loader.h"
 #include <SDL3/SDL.h>
 #include <VkBootstrap.h>
@@ -358,8 +359,7 @@ private:
 	VkSurfaceKHR m_surface;
 
 	// Swapchain
-	void createSwapchain(uint32_t width, uint32_t height);
-	void destroySwapchain();
+	PrimalSwapchain mainSwapchain;
 	VkSwapchainKHR m_swapchain;
 	VkFormat m_swapchainImageFormat;
 	std::vector<VkImage> m_swapchainImages;

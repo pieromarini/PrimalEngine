@@ -12,6 +12,7 @@
 
 #include "assets/font_loader.h"
 #include "config.h"
+#include "swapchain.h"
 #include "memory/arena.h"
 #include "memory/data_structures/fixed_array.h"
 #include "ui/ui_types.h"
@@ -93,7 +94,7 @@ void VulkanRenderer::initQueryPools() {
 void VulkanRenderer::resizeSwapchain() {
 	vkDeviceWaitIdle(m_device);
 
-	destroySwapchain();
+	destroySwapchain(m_device, &mainSwapchain);
 
 	int w{}, h{};
 	getWindowSize(m_rendererState->window, &w, &h);
@@ -105,7 +106,7 @@ void VulkanRenderer::resizeSwapchain() {
 	m_rendererState->windowExtent.height = h;
 	m_renderScale = static_cast<float>(displayWidth) / static_cast<float>(w);
 
-	createSwapchain(m_rendererState->windowExtent.width, m_rendererState->windowExtent.height);
+	mainSwapchain = createSwapchain(m_device, m_chosenGPU, m_surface, m_rendererState->windowExtent.width, m_rendererState->windowExtent.height, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
 
 	UI::onResizeCallback(static_cast<float>(m_rendererState->windowExtent.width), static_cast<float>(m_rendererState->windowExtent.height));
 
@@ -302,7 +303,7 @@ void VulkanRenderer::initVulkan() {
 }
 
 void VulkanRenderer::initSwapchain() {
-	createSwapchain(m_rendererState->windowExtent.width, m_rendererState->windowExtent.height);
+	mainSwapchain = createSwapchain(m_device, m_chosenGPU, m_surface, m_rendererState->windowExtent.width, m_rendererState->windowExtent.height, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
 
 	VkExtent3D drawImageExtent = {
 		m_rendererState->windowExtent.width,
@@ -390,38 +391,6 @@ void VulkanRenderer::initSyncStructures() {
 	}
 }
 
-void VulkanRenderer::createSwapchain(uint32_t width, uint32_t height) {
-	vkb::SwapchainBuilder swapchainBuilder{ m_chosenGPU, m_device, m_surface };
-
-	m_swapchainImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
-
-	vkb::Swapchain vkbSwapchain = swapchainBuilder
-																	.set_desired_format(VkSurfaceFormatKHR{ .format = m_swapchainImageFormat, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR })
-#if VSYNC
-																	.set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-#else
-																	.set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
-#endif
-																	.set_desired_extent(width, height)
-																	.add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-																	.build()
-																	.value();
-
-	m_swapchainExtent = vkbSwapchain.extent;
-	m_swapchain = vkbSwapchain.swapchain;
-	m_swapchainImages = vkbSwapchain.get_images().value();
-	m_swapchainImageViews = vkbSwapchain.get_image_views().value();
-}
-
-void VulkanRenderer::destroySwapchain() {
-	vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
-
-	// destroy swapchain resources
-	for (auto& swapchainImageView : m_swapchainImageViews) {
-		vkDestroyImageView(m_device, swapchainImageView, nullptr);
-	}
-}
-
 void VulkanRenderer::cleanup() {
 	vkDeviceWaitIdle(m_device);
 
@@ -446,7 +415,7 @@ void VulkanRenderer::cleanup() {
 
 	UI::cleanupRenderContext();
 
-	destroySwapchain();
+	destroySwapchain(m_device, &mainSwapchain);
 	vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
 	vmaDestroyAllocator(m_allocator);
 	vkDestroyDevice(m_device, nullptr);
@@ -905,7 +874,7 @@ void VulkanRenderer::draw(float deltaTime) {
 	getCurrentFrame().m_frameDescriptors.clearPools(m_device);
 
 	uint32_t swapchainImageIndex{};
-	VkResult e = vkAcquireNextImageKHR(m_device, m_swapchain, 1000000000, getCurrentFrame().m_swapchainSemaphore, nullptr, &swapchainImageIndex);
+	VkResult e = vkAcquireNextImageKHR(m_device, mainSwapchain.handle, 1000000000, getCurrentFrame().m_swapchainSemaphore, nullptr, &swapchainImageIndex);
 	if (e == VK_ERROR_OUT_OF_DATE_KHR) {
 		m_rendererState->resizeRequested = true;
 		return;
@@ -925,8 +894,8 @@ void VulkanRenderer::draw(float deltaTime) {
 
 	auto commandBeginInfo = commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-	m_drawExtent.width = std::min(m_swapchainExtent.width, m_drawImage.imageExtent.width) * m_renderScale;
-	m_drawExtent.height = std::min(m_swapchainExtent.height, m_drawImage.imageExtent.height) * m_renderScale;
+	m_drawExtent.width = std::min(mainSwapchain.extent.width, m_drawImage.imageExtent.width) * m_renderScale;
+	m_drawExtent.height = std::min(mainSwapchain.extent.height, m_drawImage.imageExtent.height) * m_renderScale;
 
 	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &commandBeginInfo));
 
@@ -961,13 +930,13 @@ void VulkanRenderer::draw(float deltaTime) {
 	// transition the draw image and the swapchain image into their correct transfer layouts
 	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
-	transitionImage(commandBuffer, m_swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	transitionImage(commandBuffer, mainSwapchain.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 	// execute a copy from the draw image into the swapchain
-	copyImageToImage(commandBuffer, m_drawImage.image, m_swapchainImages[swapchainImageIndex], m_drawExtent, m_swapchainExtent);
+	copyImageToImage(commandBuffer, m_drawImage.image, mainSwapchain.images[swapchainImageIndex], m_drawExtent, mainSwapchain.extent);
 
 	// set swapchain image layout to Present so we can show it on the screen
-	transitionImage(commandBuffer, m_swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+	transitionImage(commandBuffer, mainSwapchain.images[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
 
 	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampPool, 1);
@@ -994,7 +963,7 @@ void VulkanRenderer::draw(float deltaTime) {
 	// as its necessary that drawing commands have finished before the image is displayed to the user
 	VkPresentInfoKHR presentInfo = {};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	presentInfo.pSwapchains = &m_swapchain;
+	presentInfo.pSwapchains = &mainSwapchain.handle;
 	presentInfo.swapchainCount = 1;
 
 	presentInfo.pWaitSemaphores = &getCurrentFrame().m_renderSemaphore;
