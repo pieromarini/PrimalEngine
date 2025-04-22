@@ -407,7 +407,7 @@ void VulkanRenderer::cleanup() {
 	destroyImage(sourceCodeFontTexture);
 
 	destroyFontSDF(sourceCodeFont);
-	destroyFontSDF(arialFont);
+	// destroyFontSDF(arialFont);
 
 	vkDestroyPipelineCache(m_device, m_pipelineCache, nullptr);
 
@@ -1876,7 +1876,7 @@ void VulkanRenderer::updateFontData() {
 
 void VulkanRenderer::initFontData() {
 	sourceCodeFont = loadFontSDF("SauceCodePro-Light", "res/fonts/SauceCodePro-Light.png", "res/fonts/SauceCodePro-Light.json");
-	arialFont = loadFontSDF("Arial", "res/fonts/arial.png", "res/fonts/arial.json");
+	// arialFont = loadFontSDF("Arial", "res/fonts/arial.png", "res/fonts/arial.json");
 
 	auto extents = VkExtent3D{
 		sourceCodeFont.image.width,

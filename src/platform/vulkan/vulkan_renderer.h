@@ -360,11 +360,6 @@ private:
 
 	// Swapchain
 	PrimalSwapchain mainSwapchain;
-	VkSwapchainKHR m_swapchain;
-	VkFormat m_swapchainImageFormat;
-	std::vector<VkImage> m_swapchainImages;
-	std::vector<VkImageView> m_swapchainImageViews;
-	VkExtent2D m_swapchainExtent;
 
 	// Commands
 	FrameData m_frames[FRAME_OVERLAP]{};
