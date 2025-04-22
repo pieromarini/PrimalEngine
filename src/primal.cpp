@@ -21,15 +21,11 @@ PrimalApp::PrimalApp() {
 
 	SDL_Init(SDL_INIT_VIDEO);
 
-	auto window_flags = static_cast<SDL_WindowFlags>(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+	auto windowFlags = static_cast<SDL_WindowFlags>(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
-	m_window = SDL_CreateWindow(
-		"Primal Engine",
-		static_cast<int32_t>(m_windowExtent.width),
-		static_cast<int32_t>(m_windowExtent.height),
-		window_flags);
+	m_window = createPrimalWindow("Primal Engine", static_cast<int32_t>(m_windowExtent.width), static_cast<int32_t>(m_windowExtent.height), windowFlags);
 
-	SDL_SetWindowRelativeMouseMode(m_window, windowRelativeMouseMode);
+	setWindowRelativeMouseMode(&m_window, windowRelativeMouseMode);
 
 	m_mainCamera = std::make_shared<Camera>(m_windowExtent.width, m_windowExtent.height);
 	m_mainCamera->velocity = glm::vec3(0.f);
@@ -41,7 +37,7 @@ PrimalApp::PrimalApp() {
 	m_rendererState = {
 		.useValidationLayers = true,
 		.windowExtent = m_windowExtent,
-		.window = m_window,
+		.window = &m_window,
 		.mainCamera = m_mainCamera
 	};
 
@@ -53,7 +49,7 @@ PrimalApp::PrimalApp() {
 void PrimalApp::cleanup() {
 	if (m_isInitialized) {
 		m_renderer.cleanup();
-		SDL_DestroyWindow(m_window);
+		destroyPrimalWindow(&m_window);
 	}
 	loadedEngine = nullptr;
 }
@@ -84,7 +80,7 @@ void PrimalApp::run() {
 			if (e.type == SDL_EVENT_KEY_UP) {
 				if (e.key.key == SDLK_ESCAPE) {
 					windowRelativeMouseMode = !windowRelativeMouseMode;
-					SDL_SetWindowRelativeMouseMode(m_window, windowRelativeMouseMode);
+					setWindowRelativeMouseMode(&m_window, windowRelativeMouseMode);
 
 					// Disable camera panning when relative mouse mode is disabled
 					m_mainCamera->setMouseControlEnabled(windowRelativeMouseMode);

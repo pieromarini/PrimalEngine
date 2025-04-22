@@ -1,0 +1,30 @@
+#pragma once
+
+#include "SDL3/SDL_video.h"
+#include <string_view>
+#include <vulkan/vulkan_core.h>
+
+namespace pm {
+
+struct PrimalWindow {
+	uint32_t id{};
+	SDL_Window* handle{ nullptr };
+	SDL_WindowFlags windowFlags{};
+
+	int32_t width{}, height{};
+
+	bool hasFocus{ false };
+};
+
+PrimalWindow createPrimalWindow(std::string_view title, int32_t width, int32_t height, SDL_WindowFlags flags);
+
+void destroyPrimalWindow(PrimalWindow* window);
+
+void getWindowSize(PrimalWindow* window, int* width, int* height);
+void getWindowSizeInPixels(PrimalWindow* window, int* width, int* height);
+
+void setWindowRelativeMouseMode(PrimalWindow* window, bool enabled);
+
+VkSurfaceKHR createVulkanSurface(PrimalWindow* window, VkInstance instance, VkAllocationCallbacks* callbacks);
+
+};// namespace pm

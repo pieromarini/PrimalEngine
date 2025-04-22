@@ -3,6 +3,7 @@
 #include "camera.h"
 #include "platform/vulkan/vulkan_renderer.h"
 #include "vk_types.h"
+#include "window.h"
 
 namespace pm {
 
@@ -26,7 +27,7 @@ private:
 
 	bool windowRelativeMouseMode{ true };
 
-	SDL_Window* m_window{ nullptr };
+	PrimalWindow m_window;
   std::shared_ptr<Camera> m_mainCamera;
 };
 

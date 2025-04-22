@@ -1,3 +1,4 @@
+#include "window.h"
 #define VMA_LEAK_LOG_FORMAT(format, ...) \
 	do {                                   \
 		printf((format), __VA_ARGS__);       \
@@ -32,7 +33,6 @@
 #include "vulkan_renderer.h"
 #include "vulkan_shader.h"
 #include "vulkan_structures_helpers.h"
-#include <SDL3/SDL_vulkan.h>
 #include <array>
 #include <cmath>
 #include <glm/gtx/transform.hpp>
@@ -96,10 +96,10 @@ void VulkanRenderer::resizeSwapchain() {
 	destroySwapchain();
 
 	int w{}, h{};
-	SDL_GetWindowSize(m_rendererState->window, &w, &h);
+	getWindowSize(m_rendererState->window, &w, &h);
 
 	int displayWidth{}, displayHeight{};
-	SDL_GetWindowSizeInPixels(m_rendererState->window, &displayWidth, &displayHeight);
+	getWindowSizeInPixels(m_rendererState->window, &displayWidth, &displayHeight);
 
 	m_rendererState->windowExtent.width = w;
 	m_rendererState->windowExtent.height = h;
@@ -158,11 +158,11 @@ void VulkanRenderer::initDefaultData() {
 	defaultMaterial.passType = MaterialPass::MainColor;
 	defaultMaterial.pipeline = &opaquePipeline;
 
-	// Write viewport image
-	writeBindlessTextureToGlobalDescriptor(viewportTextureDescriptorSet, errorCheckerboardImage, defaultSamplerLinear, 0);
-
 	// Write default material to cache
 	MaterialCache_add(m_materialCache, 0, defaultMaterial);
+
+	// Write default viewport texture
+	writeBindlessTextureToGlobalDescriptor(viewportTextureDescriptorSet, errorCheckerboardImage, defaultSamplerLinear, 0);
 
 	m_mainDeletionQueue.push([&]() {
 		vkDestroySampler(m_device, defaultSamplerNearest, nullptr);
@@ -191,7 +191,7 @@ void VulkanRenderer::initVulkan() {
 	m_instance = vkbInstance.instance;
 	m_debug_messenger = vkbInstance.debug_messenger;
 
-	SDL_Vulkan_CreateSurface(m_rendererState->window, m_instance, nullptr, &m_surface);
+	m_surface = createVulkanSurface(m_rendererState->window, m_instance, nullptr);
 
 	// vulkan 1.3 features
 	VkPhysicalDeviceVulkan13Features features13{};
@@ -222,7 +222,7 @@ void VulkanRenderer::initVulkan() {
 	features.pipelineStatisticsQuery = VK_TRUE;
 
 	// Use VKBootstrap to select a gpu.
-	// We want a gpu that can write to the SDL surface and supports vulkan 1.3 with the correct features
+	// We want a gpu that can write to the surface and supports vulkan 1.3 with the correct features
 	vkb::PhysicalDeviceSelector selector{ vkbInstance };
 	vkb::PhysicalDevice physicalDevice = selector
 																				 .set_minimum_version(1, 3)

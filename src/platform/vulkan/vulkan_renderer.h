@@ -17,6 +17,7 @@
 
 #include "ui/ui_types.h"
 #include "ui/ui_manager.h"
+#include "window.h"
 
 namespace pm {
 
@@ -156,7 +157,7 @@ struct RendererStats {
 struct VulkanRendererConfig {
 	bool useValidationLayers;
 	VkExtent2D windowExtent;
-	SDL_Window* window;
+	PrimalWindow* window;
 	std::shared_ptr<Camera> mainCamera;
 	bool resizeRequested;
 	RendererStats rendererStats;
