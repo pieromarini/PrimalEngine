@@ -1,11 +1,12 @@
 #include "ui_manager.h"
-#include <chrono>
-#include <iostream>
-#include <format>
 #include "memory/arena.h"
 #include "memory/data_structures/fixed_array.h"
 #include "ui/ui_types.h"
 #include "utils/fonts.h"
+#include <chrono>
+#include <format>
+#include <iostream>
+
 
 namespace pm::UI {
 
@@ -418,18 +419,34 @@ void calculateFinalLayout() {
 			.commandType = UIRenderCommandType::RECTANGLE
 		};
 
-		if (layoutElement->isCircle) {
+		switch (layoutElement->type) {
+		case RECT_ELEMENT: {
+			break;
+		}
+		case TEXT_ELEMENT: {
+			c.commandType = UIRenderCommandType::TEXT;
+			c.text = layoutElement->text;
+			break;
+		}
+		case CIRCLE_ELEMENT: {
 			c.commandType = UIRenderCommandType::CIRCLE;
 			c.circleType = layoutElement->circleType;
 			c.thickness = layoutElement->thickness;
 			c.radius = layoutElement->radius;
 			c.segments = layoutElement->segments;
-		} else if (layoutElement->isText) {
-			c.commandType = UIRenderCommandType::TEXT;
-			c.text = layoutElement->text;
-		} else if (layoutElement->isViewport) {
+			break;
+		}
+		case VIEWPORT_ELEMENT: {
 			c.commandType = UIRenderCommandType::VIEWPORT;
 			c.textureId = layoutElement->textureId;
+			break;
+		}
+		case DOCKSPACE_ELEMENT: {
+			break;
+		}
+		default: {
+			break;
+		}
 		}
 
 		FixedArray_add(context->renderCommands, c);
@@ -458,7 +475,7 @@ void pushText(UIElementOptions options) {
 	getTextDimensions(layoutElement->text, context->fontAsset, width, height);
 	// std::cout << std::format("text size: {}x{}\n", width, height);
 
-	layoutElement->isText = true;
+	layoutElement->type = UILayoutElementType::TEXT_ELEMENT;
 	layoutElement->width.size = width;
 	layoutElement->height.size = height;
 
@@ -484,7 +501,7 @@ void pushBox(UIElementOptions options) {
 	// TODO(piero): create dedicated widget for this?
 	if (options.textureId > 0) {
 		layoutElement->textureId = options.textureId;
-		layoutElement->isViewport = true;
+		layoutElement->type = UILayoutElementType::VIEWPORT_ELEMENT;
 	}
 }
 
@@ -527,7 +544,7 @@ void pushCircle(float radius, uint32_t segments, float thickness, glm::vec4 colo
 
 	layoutElement->width.size = radius * 2;
 	layoutElement->height.size = radius * 2;
-	layoutElement->isCircle = true;
+	layoutElement->type = UILayoutElementType::CIRCLE_ELEMENT;
 	layoutElement->radius = radius;
 	layoutElement->segments = segments;
 	layoutElement->thickness = thickness;
@@ -544,7 +561,7 @@ void pushCircleFilled(float radius, uint32_t segments, glm::vec4 color) {
 
 	layoutElement->width.size = radius * 2;
 	layoutElement->height.size = radius * 2;
-	layoutElement->isCircle = true;
+	layoutElement->type = UILayoutElementType::CIRCLE_ELEMENT;
 	layoutElement->radius = radius;
 	layoutElement->segments = segments;
 	layoutElement->backgroundColor = color;

@@ -12,9 +12,9 @@
 
 #include "assets/font_loader.h"
 #include "config.h"
-#include "swapchain.h"
 #include "memory/arena.h"
 #include "memory/data_structures/fixed_array.h"
+#include "swapchain.h"
 #include "ui/ui_types.h"
 #include "ui/viewport.h"
 #include "ui/widgets.h"
@@ -24,7 +24,7 @@
 #include <ratio>
 #include <vulkan/vulkan_core.h>
 
-#include <vk_mem_alloc.h>
+
 #include "entity.h"
 #include "platform/vulkan/vulkan_descriptor.h"
 #include "platform/vulkan/vulkan_images.h"
@@ -38,6 +38,8 @@
 #include <cmath>
 #include <glm/gtx/transform.hpp>
 #include <vector>
+#include <vk_mem_alloc.h>
+
 
 namespace pm {
 
@@ -322,7 +324,7 @@ void VulkanRenderer::initSwapchain() {
 	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
 	drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-	
+
 
 	m_drawImage = createImage("drawImage", drawImageExtent, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
 	m_sceneDrawImage = createImage("scene drawImage", sceneDrawImageExtent, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
@@ -416,7 +418,8 @@ void VulkanRenderer::cleanup() {
 	UI::cleanupRenderContext();
 
 	destroySwapchain(m_device, &mainSwapchain);
-	vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+	destroyVulkanSurface(m_instance, m_surface, nullptr);
+
 	vmaDestroyAllocator(m_allocator);
 	vkDestroyDevice(m_device, nullptr);
 	vkb::destroy_debug_utils_messenger(m_instance, m_debug_messenger);
@@ -429,15 +432,23 @@ std::vector<UI::UIElement> VulkanRenderer::buildUIGeometry(FixedArray<UI::UIRend
 	for (uint32_t i = 0; i < renderCommands.length; ++i) {
 		auto renderCommand = FixedArray_get(renderCommands, i);
 		switch (renderCommand->commandType) {
-		case pm::UI::UIRenderCommandType::RECTANGLE: {
+		case UI::UIRenderCommandType::RECTANGLE: {
 			elements.push_back(UI::box(vertices, indices));
 			break;
 		}
-		case pm::UI::UIRenderCommandType::VIEWPORT: {
+		case UI::UIRenderCommandType::VIEWPORT: {
 			elements.push_back(UI::box(vertices, indices));
 			break;
 		}
-		case pm::UI::UIRenderCommandType::CIRCLE: {
+		case UI::UIRenderCommandType::PANEL: {
+			elements.push_back(UI::box(vertices, indices));
+			break;
+		}
+		case UI::UIRenderCommandType::DOCKSPACE: {
+			elements.push_back(UI::box(vertices, indices));
+			break;
+		}
+		case UI::UIRenderCommandType::CIRCLE: {
 			if (renderCommand->circleType == UI::CircleType::FILLED) {
 				elements.push_back(UI::circleFilled(renderCommand->radius, renderCommand->segments, vertices, indices));
 			} else {
@@ -506,7 +517,7 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderC
 		auto transform = glm::mat4{ 1.0f };
 
 		switch (renderCommand->commandType) {
-		case pm::UI::UIRenderCommandType::RECTANGLE: {
+		case UI::UIRenderCommandType::RECTANGLE: {
 			transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
 			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
 			transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
@@ -522,7 +533,7 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderC
 			uiDrawIdCount++;
 			break;
 		}
-		case pm::UI::UIRenderCommandType::VIEWPORT: {
+		case UI::UIRenderCommandType::VIEWPORT: {
 			transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
 			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
 			transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
@@ -537,7 +548,15 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderC
 			viewportDrawIdCount++;
 			break;
 		}
-		case pm::UI::UIRenderCommandType::CIRCLE: {
+		case UI::UIRenderCommandType::PANEL: {
+			// TODO
+			break;
+		}
+		case UI::UIRenderCommandType::DOCKSPACE: {
+			// TODO
+			break;
+		}
+		case UI::UIRenderCommandType::CIRCLE: {
 			transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
 			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
 			transform = glm::scale(transform, glm::vec3(1.0f, 1.0f, 1.0f));
@@ -553,7 +572,7 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderC
 			uiDrawIdCount++;
 			break;
 		}
-		case pm::UI::UIRenderCommandType::TEXT: {
+		case UI::UIRenderCommandType::TEXT: {
 			transform = glm::translate(transform, glm::vec3(rect.x, rect.y, 0.0f));
 			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
 			transform = glm::scale(transform, glm::vec3(1.0f, 1.0f, 1.0f));
@@ -1082,7 +1101,7 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(m_sceneDrawImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
 	VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(m_sceneDepthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
-	VkRenderingInfo renderInfo = renderingInfo({ .extent = { .width = m_sceneDrawImage.imageExtent.width, .height = m_sceneDrawImage.imageExtent.height} }, &colorAttachment, &depthAttachment);
+	VkRenderingInfo renderInfo = renderingInfo({ .extent = { .width = m_sceneDrawImage.imageExtent.width, .height = m_sceneDrawImage.imageExtent.height } }, &colorAttachment, &depthAttachment);
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
 
 	VkViewport viewport = {};
@@ -2045,7 +2064,7 @@ void VulkanRenderer::initUI() {
 	UI::initRenderContext(&uiMemoryArena, { .width = static_cast<float>(m_rendererState->windowExtent.width), .height = static_cast<float>(m_rendererState->windowExtent.height) });
 
 	// Register image to UI system
- 	sceneTextureId = UI::registerImage(&m_sceneDrawImage);
+	sceneTextureId = UI::registerImage(&m_sceneDrawImage);
 	writeBindlessTextureToGlobalDescriptor(viewportTextureDescriptorSet, m_sceneDrawImage, defaultSamplerLinear, sceneTextureId);
 
 	uiUniformBuffer = createBuffer("uiUniformBuffer", sizeof(UIUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);

@@ -9,9 +9,9 @@ PrimalWindow createPrimalWindow(std::string_view title, int32_t width, int32_t h
 
 	PrimalWindow window{
 		.id = idCounter++,
-		.windowFlags = flags,
 		.width = width,
 		.height = height,
+		.windowFlags = flags,
 		.hasFocus = false
 	};
 
@@ -42,6 +42,10 @@ VkSurfaceKHR createVulkanSurface(PrimalWindow* window, VkInstance instance, VkAl
 	SDL_Vulkan_CreateSurface(window->handle, instance, callbacks, &surface);
 
 	return surface;
+}
+
+void destroyVulkanSurface(VkInstance instance, VkSurfaceKHR surface, VkAllocationCallbacks* callbacks) {
+	SDL_Vulkan_DestroySurface(instance, surface, callbacks);
 }
 
 }// namespace pm

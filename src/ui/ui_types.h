@@ -24,9 +24,11 @@ enum UISizingMode {
 
 enum UIRenderCommandType {
 	RECTANGLE,
-	VIEWPORT,
 	CIRCLE,
-	TEXT
+	TEXT,
+	VIEWPORT,
+	PANEL,
+	DOCKSPACE
 };
 
 struct UIAxisSize {
@@ -134,6 +136,14 @@ struct UILayoutElementData {
 
 using InteractionCallbackSignature = void(uint32_t elementId, PointerState pointerState);
 
+enum UILayoutElementType {
+	RECT_ELEMENT,
+	TEXT_ELEMENT,
+	CIRCLE_ELEMENT,
+	VIEWPORT_ELEMENT,
+	DOCKSPACE_ELEMENT
+};
+
 struct UILayoutElement {
 	uint32_t id;
 
@@ -151,18 +161,21 @@ struct UILayoutElement {
 	std::function<InteractionCallbackSignature> onHoverCallback;
 	std::function<InteractionCallbackSignature> onClickCallback;
 
-	bool isText{ false }; // TODO: REMOVE THIS
-	bool isCircle{ false };
-	bool isViewport{ false };
-	PrimalString text;
+	UILayoutElementType type;
+
 	uint32_t parent;
 	FixedArray<uint32_t> children; // reference to context->layoutElementChildrenIndices
 
+	// text
+	PrimalString text;
+
+	// circle
 	float radius;
 	uint32_t segments;
 	float thickness;
 	CircleType circleType;
 
+	// viewport
 	uint32_t textureId;
 
 	UILayoutElementData data;
@@ -183,8 +196,15 @@ struct UIElementOptions {
 	std::function<InteractionCallbackSignature> onHoverCallback;
 	std::function<InteractionCallbackSignature> onClickCallback;
 
+	// text
 	std::string text;
 
+	// circle
+	float radius;
+	uint32_t segments;
+	float thickness;
+
+	// viewport
 	uint32_t textureId;
 
 	UILayoutElementData data;

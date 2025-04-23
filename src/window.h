@@ -8,10 +8,10 @@ namespace pm {
 
 struct PrimalWindow {
 	uint32_t id{};
+	int32_t width{}, height{};
+
 	SDL_Window* handle{ nullptr };
 	SDL_WindowFlags windowFlags{};
-
-	int32_t width{}, height{};
 
 	bool hasFocus{ false };
 };
@@ -26,5 +26,6 @@ void getWindowSizeInPixels(PrimalWindow* window, int* width, int* height);
 void setWindowRelativeMouseMode(PrimalWindow* window, bool enabled);
 
 VkSurfaceKHR createVulkanSurface(PrimalWindow* window, VkInstance instance, VkAllocationCallbacks* callbacks);
+void destroyVulkanSurface(VkInstance instance, VkSurfaceKHR surface, VkAllocationCallbacks* callbacks);
 
 };// namespace pm
