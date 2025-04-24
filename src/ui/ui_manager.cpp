@@ -78,6 +78,7 @@ void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouse
 	context->pointerState.xRel = relMouseX;
 	context->pointerState.yRel = relMouseY;
 
+	// Set Mouse click state
 	auto& clickState = context->pointerState.pointerClickState;
 	if (isPointerDown) {
 		if (clickState == PointerClickState::PRESSED_THIS_FRAME) {
@@ -367,6 +368,12 @@ void closeViewportElement() {
 	}
 }
 
+void closeDockSpaceElement() {
+	// Close dock space and wrapper element
+	closeElement();
+	closeElement();
+}
+
 
 // DFS to add parent position to children
 void computeFinalSizes() {
@@ -416,11 +423,11 @@ void calculateFinalLayout() {
 				.width = layoutElement->width.size,
 				.height = layoutElement->height.size },
 			.backgroundColor = layoutElement->backgroundColor,
-			.commandType = UIRenderCommandType::RECTANGLE
 		};
 
 		switch (layoutElement->type) {
 		case RECT_ELEMENT: {
+			c.commandType = UIRenderCommandType::RECTANGLE;
 			break;
 		}
 		case TEXT_ELEMENT: {
@@ -441,7 +448,16 @@ void calculateFinalLayout() {
 			c.textureId = layoutElement->textureId;
 			break;
 		}
+		case PANEL_ELEMENT: {
+			c.commandType = UIRenderCommandType::PANEL;
+			break;
+		}
+		case TITLEBAR_ELEMENT: {
+			c.commandType = UIRenderCommandType::TITLEBAR;
+			break;
+		}
 		case DOCKSPACE_ELEMENT: {
+			c.commandType = UIRenderCommandType::DOCKSPACE;
 			break;
 		}
 		default: {
@@ -513,6 +529,8 @@ void getTextDimensions(PrimalString& text, FontAsset* font, float& width, float&
 
 bool isHovered() {
 	auto context = getUIContext();
+
+	// Get first open element on the stack  (element which is currently being processed)
 	auto openElementIndex = FixedArray_top(context->openLayoutElements);
 	auto openLayoutElement = FixedArray_get(context->layoutElements, *openElementIndex);
 
@@ -568,6 +586,78 @@ void pushCircleFilled(float radius, uint32_t segments, glm::vec4 color) {
 	layoutElement->circleType = CircleType::FILLED;
 
 	closeCircleElement();
+}
+
+void pushPanel(UIElementOptions options) {
+	auto context = getUIContext();
+	auto layoutElement = FixedArray_back(context->layoutElements);
+	layoutElement->width = options.width;
+	layoutElement->height = options.height;
+	layoutElement->layoutDirection = options.layoutDirection;
+	layoutElement->backgroundColor = options.backgroundColor;
+	layoutElement->padding = options.padding;
+	layoutElement->childGap = options.childGap;
+	layoutElement->onHoverCallback = options.onHoverCallback;
+	layoutElement->onClickCallback = options.onClickCallback;
+	layoutElement->type = UILayoutElementType::PANEL_ELEMENT;
+}
+
+void pushTitleBar(UIElementOptions options) {
+	openElement();
+
+	auto context = getUIContext();
+	auto layoutElement = FixedArray_back(context->layoutElements);
+	layoutElement->width = options.width;
+	layoutElement->height = options.height;
+	layoutElement->layoutDirection = options.layoutDirection;
+	layoutElement->backgroundColor = options.backgroundColor;
+	layoutElement->padding = options.padding;
+	layoutElement->childGap = options.childGap;
+	layoutElement->onHoverCallback = options.onHoverCallback;
+	layoutElement->onClickCallback = options.onClickCallback;
+	layoutElement->type = UILayoutElementType::TITLEBAR_ELEMENT;
+
+	closeElement();
+}
+
+void pushDockSpace(UIElementOptions options) {
+	auto context = getUIContext();
+	constexpr float TITLE_BAR_HEIGHT = 20.0f;
+
+	// wrapper element for titlebar + dock space
+	openElement();
+	{
+		auto layoutElement = FixedArray_back(context->layoutElements);
+		layoutElement->width = options.width;
+		// Dockspace height needs to account for titlebar
+		layoutElement->height = options.height;
+		layoutElement->layoutDirection = UILayoutDirection::VERTICAL;
+		layoutElement->backgroundColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+		layoutElement->type = UILayoutElementType::RECT_ELEMENT;
+	}
+
+	// titlebar
+	UIElementOptions titleBarOptions {
+		.width = { .size = options.width.size, .sizingMode = UISizingMode::STATIC },
+		.height = { .size = TITLE_BAR_HEIGHT, .sizingMode = UISizingMode::STATIC },
+		.backgroundColor = { 1.0f, 0.0f, 0.0f, 1.0f }
+	};
+	pushTitleBar(titleBarOptions);
+
+	// dockspace
+	openElement();
+
+	auto layoutElement = FixedArray_back(context->layoutElements);
+	layoutElement->width = options.width;
+	// Dockspace height needs to account for titlebar
+	layoutElement->height = { .size = options.height.size - TITLE_BAR_HEIGHT, .sizingMode = options.height.sizingMode };
+	layoutElement->layoutDirection = options.layoutDirection;
+	layoutElement->backgroundColor = options.backgroundColor;
+	layoutElement->padding = options.padding;
+	layoutElement->childGap = options.childGap;
+	layoutElement->onHoverCallback = options.onHoverCallback;
+	layoutElement->onClickCallback = options.onClickCallback;
+	layoutElement->type = UILayoutElementType::DOCKSPACE_ELEMENT;
 }
 
 // Register images. Ids start at 1. 0 is considered "invalid".

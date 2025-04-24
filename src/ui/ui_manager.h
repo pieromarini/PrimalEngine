@@ -64,6 +64,12 @@ void openTextElement();
 void closeTextElement();
 void closeCircleElement();
 void closeViewportElement();
+void closeDockSpaceElement();
+
+inline UILayoutElement* getElementFromId(uint32_t elementId) {
+	auto context = getUIContext();
+	return FixedArray_get(context->layoutElements, elementId);
+}
 
 // Utils
 void getTextDimensions(PrimalString& text, FontAsset* font, float& width, float& height);
@@ -79,6 +85,10 @@ void pushText(UIElementOptions options);
 void pushBox(UIElementOptions options);
 void pushCircle(float radius, uint32_t segments, float thickness, glm::vec4 color);
 void pushCircleFilled(float radius, uint32_t segments, glm::vec4 color);
+
+void pushPanel(UIElementOptions options);
+void pushTitleBar(UIElementOptions options);
+void pushDockSpace(UIElementOptions options);
 
 // Interactions
 bool isHovered();

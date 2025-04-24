@@ -436,6 +436,10 @@ std::vector<UI::UIElement> VulkanRenderer::buildUIGeometry(FixedArray<UI::UIRend
 			elements.push_back(UI::box(vertices, indices));
 			break;
 		}
+		case UI::UIRenderCommandType::TITLEBAR: {
+			elements.push_back(UI::box(vertices, indices));
+			break;
+		}
 		case UI::UIRenderCommandType::VIEWPORT: {
 			elements.push_back(UI::box(vertices, indices));
 			break;
@@ -549,11 +553,51 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderC
 			break;
 		}
 		case UI::UIRenderCommandType::PANEL: {
-			// TODO
+			transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
+			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+			transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
+			uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
+				.command = {
+					.indexCount = uiElement.indexCount,
+					.instanceCount = 1,
+					.firstIndex = uiElement.firstIndex,
+					.vertexOffset = uiElement.vertexOffset,
+					.firstInstance = uiDrawIdCount } });
+			uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
+			uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
+			uiDrawIdCount++;
+			break;
+		}
+		case UI::UIRenderCommandType::TITLEBAR: {
+			transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
+			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+			transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
+			uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
+				.command = {
+					.indexCount = uiElement.indexCount,
+					.instanceCount = 1,
+					.firstIndex = uiElement.firstIndex,
+					.vertexOffset = uiElement.vertexOffset,
+					.firstInstance = uiDrawIdCount } });
+			uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
+			uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
+			uiDrawIdCount++;
 			break;
 		}
 		case UI::UIRenderCommandType::DOCKSPACE: {
-			// TODO
+			transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
+			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+			transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
+			uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
+				.command = {
+					.indexCount = uiElement.indexCount,
+					.instanceCount = 1,
+					.firstIndex = uiElement.firstIndex,
+					.vertexOffset = uiElement.vertexOffset,
+					.firstInstance = uiDrawIdCount } });
+			uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
+			uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
+			uiDrawIdCount++;
 			break;
 		}
 		case UI::UIRenderCommandType::CIRCLE: {
@@ -1999,36 +2043,42 @@ void VulkanRenderer::updateUIData() {
 
 		// Viewport + Asset browser
 		UI::openElement();
-			UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+			UI::pushPanel({ .width = { .sizingMode = UI::UISizingMode::FIT },
 				.height = { .sizingMode = UI::UISizingMode::FIT },
 				.layoutDirection = UI::UILayoutDirection::VERTICAL,
 				.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
 
-			UI::viewport({ 
-					.id = 1000,
-					.width = 1448.0f,
-					.height = 700.0f,
-					.textureId = sceneTextureId
-			});
+			// Viewport
+			UI::pushDockSpace({ .width = { .sizingMode = UI::UISizingMode::FIT },
+				.height = { .sizingMode = UI::UISizingMode::FIT },
+				.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+				.backgroundColor = { 0.3294f, 0.3294f, 0.3294f, 1.0f } });
+
+				UI::viewport({
+						.id = 1000,
+						.width = 1448.0f,
+						.height = 700.0f,
+						.textureId = sceneTextureId
+				});
+
+			UI::closeDockSpaceElement();
 
 			// Asset browser
-			UI::openElement();
-				UI::pushBox({ .width = { .size = 1448.0f, .sizingMode = UI::UISizingMode::STATIC },
-					.height = { .size = 300.0f, .sizingMode = UI::UISizingMode::STATIC },
-					.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-					.backgroundColor = { 0.3294f, 0.3294f, 0.3294f, 1.0f } });
+			UI::pushDockSpace({ .width = { .size = 1448.0f, .sizingMode = UI::UISizingMode::STATIC },
+				.height = { .size = 300.0f, .sizingMode = UI::UISizingMode::STATIC },
+				.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+				.backgroundColor = { 0.3294f, 0.3294f, 0.3294f, 1.0f } });
 
-			UI::closeElement();
+			UI::closeDockSpaceElement();
 		UI::closeElement();
 
 		// Info Panel
-		UI::openElement();
-			UI::pushBox({ .width = { .size = 600.0f, .sizingMode = UI::UISizingMode::STATIC },
-				.height = { .size = 980.0f, .sizingMode = UI::UISizingMode::STATIC },
-				.layoutDirection = UI::UILayoutDirection::VERTICAL,
-				.backgroundColor = { 0.41960784313f, 0.41960784313f, 0.41960784313f, 1.0f },
-				.padding = 10.0f,
-				.childGap = 10.0f });
+		UI::pushDockSpace({ .width = { .size = 600.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.height = { .size = 980.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.layoutDirection = UI::UILayoutDirection::VERTICAL,
+			.backgroundColor = { 0.41960784313f, 0.41960784313f, 0.41960784313f, 1.0f },
+			.padding = 10.0f,
+			.childGap = 10.0f });
 
 				UI::sliderFloat3(&m_rendererState->mainCamera->position);
 				UI::sliderFloat4(&m_sceneData.sunlightDirection, 0.0f, 1.0f);
@@ -2046,7 +2096,7 @@ void VulkanRenderer::updateUIData() {
 				UI::closeElement();
 
 				UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);
-		UI::closeElement();
+		UI::closeDockSpaceElement();
 	UI::closeElement();
 
 	getCurrentFrame().uiRenderCommands = UI::endLayout();

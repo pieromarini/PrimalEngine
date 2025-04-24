@@ -1,6 +1,7 @@
 #pragma once
 
 #include "memory/data_structures/fixed_array.h"
+#include "window.h"
 #include <string>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
@@ -28,6 +29,7 @@ enum UIRenderCommandType {
 	TEXT,
 	VIEWPORT,
 	PANEL,
+	TITLEBAR,
 	DOCKSPACE
 };
 
@@ -141,6 +143,8 @@ enum UILayoutElementType {
 	TEXT_ELEMENT,
 	CIRCLE_ELEMENT,
 	VIEWPORT_ELEMENT,
+	PANEL_ELEMENT,
+	TITLEBAR_ELEMENT,
 	DOCKSPACE_ELEMENT
 };
 
