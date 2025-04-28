@@ -29,9 +29,8 @@ class PipelineBuilder {
 		void enableDepthTest(bool depthWriteEnable, VkCompareOp op);
 		void disableDepthTest();
 
-		VkPipelineLayout m_pipelineLayout{};
-
 	private:
+		VkPipelineLayout m_pipelineLayout{};
 		std::vector<VkPipelineShaderStageCreateInfo> m_shaderStages{};
 		VkPipelineInputAssemblyStateCreateInfo m_inputAssembly{};
 		VkPipelineRasterizationStateCreateInfo m_rasterizer{};

@@ -68,8 +68,8 @@ void VulkanRenderer::loadTestScene() {
 	initFontData();
 	initUI();
 
-	const std::string modelPath = { "res/models/bistro/bistro_ktx2.glb" };
-	// const std::string modelPath = { "res/models/structure.glb" };
+	// const std::string modelPath = { "res/models/bistro/bistro_ktx2.glb" };
+	const std::string modelPath = { "res/models/structure.glb" };
 
 	auto start = std::chrono::system_clock::now();
 	auto loadedGLTF = loadGLTF(this, modelPath);
@@ -1550,7 +1550,7 @@ void VulkanRenderer::initViewportPipeline() {
 	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
 	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
 	pipelineBuilder.setMultisamplingNone();
-	pipelineBuilder.enableBlendingAlphablend();
+	pipelineBuilder.disableBlending();
 	pipelineBuilder.disableDepthTest();
 
 	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
