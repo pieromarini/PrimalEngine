@@ -1,4 +1,4 @@
-#include "SDL3/SDL_video.h"render.cp
+#include "SDL3/SDL_video.h"
 #include "platform/window.h"
 #include "primal.h"
 #include "ui/ui_manager.h"
