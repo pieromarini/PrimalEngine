@@ -432,9 +432,6 @@ void VulkanRenderer::cleanup() {
 		destroyPrimalWindow(&window);
 	}
 
-	// destroySwapchain(m_device, &mainSwapchain);
-	// destroyVulkanSurface(m_instance, m_surface, nullptr);
-
 	vmaDestroyAllocator(m_allocator);
 	vkDestroyDevice(m_device, nullptr);
 	vkb::destroy_debug_utils_messenger(m_instance, m_debug_messenger);
