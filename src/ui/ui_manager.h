@@ -1,3 +1,5 @@
+#pragma once
+
 #include "utils/fonts.h"
 #include "ui_types.h"
 #include "utils/geometry.h"
@@ -20,31 +22,27 @@ struct UIContext {
 
 	FixedArray<uint32_t> openLayoutElements; // elements with an open Layout
 
-	FixedArray<uint32_t> registeredImageIds;
-	FixedArray<VkImageView> imageViews;
-
 	// Interactions
 	PointerState pointerState;
 	InteractionState interactionState;
 	FixedArray<uint32_t> hoveredIds;
 
 	// Fonts
-	FontAsset* fontAsset;
+	FontAsset* fontAsset{};
 
 	// Window context
-	float windowWidth, windowHeight;
+	float windowWidth{}, windowHeight{};
 
-	MemoryArena* arena;
-	MemoryArena tempArena;
+	// Window target for this layout
+	PrimalWindow* window{};
+
+	MemoryArena* arena{};
+	MemoryArena tempArena{};
 };
 
 static UIContext* uiContext;
 
-struct InitRenderContextOptions {
-	float width, height;
-};
-
-void initRenderContext(MemoryArena* arena, InitRenderContextOptions options);
+void initRenderContext(MemoryArena* arena);
 void cleanupRenderContext();
 
 UIContext* getUIContext();
@@ -54,6 +52,9 @@ void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouse
 
 void clearContext();
 
+PrimalWindow* createWindow(std::string_view name, int32_t width, int32_t height);
+void beginWindow(PrimalWindow* window);
+void endWindow();
 void beginLayout();
 FixedArray<UIRenderCommand> endLayout();
 
@@ -65,11 +66,6 @@ void closeTextElement();
 void closeCircleElement();
 void closeViewportElement();
 void closeDockSpaceElement();
-
-inline UILayoutElement* getElementFromId(uint32_t elementId) {
-	auto context = getUIContext();
-	return FixedArray_get(context->layoutElements, elementId);
-}
 
 // Utils
 void getTextDimensions(PrimalString& text, FontAsset* font, float& width, float& height);
@@ -93,9 +89,5 @@ void pushDockSpace(UIElementOptions options);
 // Interactions
 bool isHovered();
 bool isInsideBoundingBox(float x, float y, BoundingRect bb);
-
-// Textures
-// TODO(piero): This technically makes this UI system dependant on Vulkan. We should find a way to make this generic to any renderer.
-uint32_t registerImage(AllocatedImage* image);
 
 }// namespace pm::UI

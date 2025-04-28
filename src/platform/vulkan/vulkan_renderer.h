@@ -6,6 +6,8 @@
 #include "vulkan_loader.h"
 #include <SDL3/SDL.h>
 #include <VkBootstrap.h>
+#include <string_view>
+#include <unordered_map>
 #include <vulkan/vulkan.h>
 
 #include <ranges>
@@ -18,7 +20,7 @@
 
 #include "ui/ui_types.h"
 #include "ui/ui_manager.h"
-#include "window.h"
+#include "platform/window.h"
 
 namespace pm {
 
@@ -156,8 +158,6 @@ struct RendererStats {
 };
 
 struct VulkanRendererConfig {
-	bool useValidationLayers;
-	VkExtent2D windowExtent;
 	PrimalWindow* window;
 	std::shared_ptr<Camera> mainCamera;
 	bool resizeRequested;
@@ -215,9 +215,12 @@ struct ModelDrawRender {
 
 class VulkanRenderer {
 public:
-	void init(VulkanRendererConfig* state);
+	void init();
+	void setup();
+	void setInitialState(VulkanRendererConfig* state);
 
-	// NOTE: load some default data for our engine to draw
+	void loadTestScene();
+
 	void initDefaultData();
 
 	void buildDrawBatches(std::vector<Model*>& models);
@@ -225,7 +228,7 @@ public:
 	std::vector<UI::UIElement> buildUIGeometry(FixedArray<UI::UIRenderCommand>& renderCommands, std::vector<UI::UIVertex>& vertices, std::vector<uint32_t>& indices);
 
 	// drawing
-	void draw(float deltaTime);
+	void draw();
 	void drawBackground(VkCommandBuffer commandBuffer);
 	void drawGeometry(VkCommandBuffer commandBuffer);
 	void drawUI(VkCommandBuffer commandBuffer);
@@ -245,9 +248,8 @@ public:
 	GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<VertexType> vertices, std::string name);
 
 	void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
-	void resizeSwapchain();
+	void resizeSwapchain(PrimalWindow* window);
 
-	VkDevice m_device;
 	VkDescriptorSetLayout m_gpuSceneDataDescriptorLayout;
 	VkDescriptorSetLayout m_modelDrawDescriptorLayout;
 	AllocatedImage m_drawImage;
@@ -270,6 +272,8 @@ public:
 	void updateScene(float deltaTime);
 	void updateFontData();
 	void updateUIData();
+
+	void update(float deltaTime);
 
 	void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown);
 
@@ -303,7 +307,12 @@ public:
 	VkDescriptorSet materialsDescriptor;
 	AllocatedBuffer globalMaterialDataBuffer;
 
+	VkDevice m_device;
 	VkPhysicalDevice m_chosenGPU;
+	VkInstance m_instance;
+
+
+	uint32_t getCurrentFrameIndex() { return m_frameNumber % FRAME_OVERLAP; }
 	FrameData& getCurrentFrame() { return m_frames[m_frameNumber % FRAME_OVERLAP]; };
 	VkQueue m_graphicsQueue{};
 
@@ -317,7 +326,7 @@ public:
 	bool anisotropyEnabled;
 	float maxSamplerAnisotropy;
 
-	void writeBindlessTextureToGlobalDescriptor(VkDescriptorSet bindlessTextureSet, AllocatedImage& image, VkSampler sampler, uint32_t index);
+	void writeBindlessTextureToGlobalDescriptor(VkDescriptorSet bindlessTextureSet, uint32_t binding, AllocatedImage& image, VkSampler sampler, uint32_t index);
 
 	// Default pipelines
 	void buildDefaultPipelines();
@@ -327,9 +336,13 @@ public:
 
 	MaterialCache m_materialCache;
 
+	// image registering for viewport rendering
+	uint32_t registerImage(AllocatedImage* image);
+	std::vector<AllocatedImage*> registeredImages;
+
 private:
 	void initVulkan();
-	void initSwapchain();
+	void initRenderTargets();
 	void initCommands();
 	void initSyncStructures();
 	void initDescriptors();
@@ -354,7 +367,6 @@ private:
 	VkCommandPool m_immCommandPool;
 
 	// Vulkan init stuff
-	VkInstance m_instance;
 	VkDebugUtilsMessengerEXT m_debug_messenger;
 	VkSurfaceKHR m_surface;
 
@@ -383,7 +395,6 @@ private:
 
 	// Text rendering
 	VkCommandBuffer fontCommandBuffer;
-	Texture2D fontSDF;
 	FontUniformData fontUniformData{};
 	AllocatedBuffer fontUniformBuffer;
 	DescriptorAllocator fontDescriptorAllocator;

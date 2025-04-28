@@ -263,7 +263,7 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 			auto imageSampler = model.images[img].sampler ? model.images[img].sampler : model.samplers[sampler];
 
 			// TODO: We are writing textures 1 by 1. We should batch these.
-			renderer->writeBindlessTextureToGlobalDescriptor(renderer->bindlessTexturesDescriptorSet, model.images[img], imageSampler, bindlessTextureIndex);
+			renderer->writeBindlessTextureToGlobalDescriptor(renderer->bindlessTexturesDescriptorSet, 0, model.images[img], imageSampler, bindlessTextureIndex);
 			bindlessTextureIndex++;
 		}
 

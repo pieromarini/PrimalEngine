@@ -3,19 +3,23 @@
 #include "camera.h"
 #include "platform/vulkan/vulkan_renderer.h"
 #include "vk_types.h"
-#include "window.h"
+#include "platform/window.h"
 
 namespace pm {
 
-class PrimalApp {
+class PrimalEngine {
 public:
-	PrimalApp();
+	PrimalEngine();
 	void run();
 	void draw(float deltaTime);
 	void cleanup();
-	PrimalApp& get();
+	void handleWindowEvent(SDL_Event& e);
+	PrimalWindow* createWindow(std::string_view name, int32_t width, int32_t height, SDL_WindowFlags flags);
+	static PrimalEngine& get();
 
 	GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
+
+	std::vector<PrimalWindow> windows;
 
 private:
 	bool m_isInitialized{ false };
@@ -27,8 +31,10 @@ private:
 
 	bool windowRelativeMouseMode{ true };
 
-	PrimalWindow m_window;
+	PrimalWindow* mainWindow;
   std::shared_ptr<Camera> m_mainCamera;
+
+	bool quitRequested{ false };
 };
 
 }// namespace pm

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "memory/data_structures/fixed_array.h"
-#include "window.h"
+#include "platform/window.h"
 #include <string>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>

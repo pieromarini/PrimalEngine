@@ -1,6 +1,7 @@
 #include "ui_manager.h"
 #include "memory/arena.h"
 #include "memory/data_structures/fixed_array.h"
+#include "primal.h"
 #include "ui/ui_types.h"
 #include "utils/fonts.h"
 #include <chrono>
@@ -10,19 +11,16 @@
 
 namespace pm::UI {
 
-void initRenderContext(MemoryArena* arena, InitRenderContextOptions options) {
+void initRenderContext(MemoryArena* arena) {
 	uiContext = MemoryArenaPush(UIContext, 1, arena);
 
 	uiContext->arena = arena;
 
-	uiContext->windowWidth = options.width;
-	uiContext->windowHeight = options.height;
 	// Persistent data
 	uiContext->hoveredIds = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, arena);
-	uiContext->registeredImageIds = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, arena);
 
 	// Ephemeral data. Reset each frame.
-	uiContext->tempArena = MemoryArena_create(MEGABYTE(20));
+	uiContext->tempArena = MemoryArena_create(MEGABYTE(40));
 	MemoryArena_commit(&uiContext->tempArena, uiContext->tempArena.size);
 
 	auto tempArena = &uiContext->tempArena;
@@ -152,8 +150,27 @@ void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouse
 	}
 }
 
-void beginLayout() {
+PrimalWindow* createWindow(std::string_view name, int32_t width, int32_t height) {
+	auto engine = PrimalEngine::get();
+	auto window = engine.createWindow(name, width, height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+
+	return window;
+}
+
+void beginWindow(PrimalWindow* window) {
 	clearContext();
+	auto context = getUIContext();
+
+	context->window = window;
+	context->windowWidth = (float)window->width;
+	context->windowHeight = (float)window->height;
+}
+
+void endWindow() {
+
+}
+
+void beginLayout() {
 	auto context = getUIContext();
 
 	// create root element
@@ -658,15 +675,6 @@ void pushDockSpace(UIElementOptions options) {
 	layoutElement->onHoverCallback = options.onHoverCallback;
 	layoutElement->onClickCallback = options.onClickCallback;
 	layoutElement->type = UILayoutElementType::DOCKSPACE_ELEMENT;
-}
-
-// Register images. Ids start at 1. 0 is considered "invalid".
-uint32_t registerImage(AllocatedImage* image) {
-	auto context = getUIContext();
-
-	auto imageId = FixedArray_add(context->registeredImageIds, context->registeredImageIds.length + 1);
-
-	return *imageId;
 }
 
 }// namespace pm::UI

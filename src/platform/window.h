@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SDL3/SDL_video.h"
+#include "platform/vulkan/swapchain.h"
 #include <string_view>
 #include <vulkan/vulkan_core.h>
 
@@ -13,12 +14,23 @@ struct PrimalWindow {
 	SDL_Window* handle{ nullptr };
 	SDL_WindowFlags windowFlags{};
 
-	bool hasFocus{ false };
+	bool mouseFocus{ false };
+	bool keyboardFocus{ false };
+	bool shown{ false };
+	bool isMinimized{ false };
+
+	bool resizeRequested{ false };
+
+	uint32_t nextImageIndex;
+
+	// Vulkan-specific
+	VkSurfaceKHR surface{ nullptr };
+	PrimalSwapchain swapchain{};
 };
 
 PrimalWindow createPrimalWindow(std::string_view title, int32_t width, int32_t height, SDL_WindowFlags flags);
 
-void destroyPrimalWindow(PrimalWindow* window);
+void destroyPrimalWindow(PrimalWindow* window, VkDevice device = nullptr, VkInstance instance = nullptr, VkAllocationCallbacks* callbacks = nullptr);
 
 void getWindowSize(PrimalWindow* window, int* width, int* height);
 void getWindowSizeInPixels(PrimalWindow* window, int* width, int* height);

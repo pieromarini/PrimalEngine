@@ -4,6 +4,7 @@
 imgui.ini
 compile_commands.json
 settings.json
+launch.json
 *.plist
 
 # clangd completion with compile-commands

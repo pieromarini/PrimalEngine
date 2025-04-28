@@ -1,7 +1,7 @@
 #include "primal.h"
 
 int main() {
-	pm::PrimalApp app;
+	pm::PrimalEngine app;
 
 	app.run();
 	app.cleanup();

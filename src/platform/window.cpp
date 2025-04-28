@@ -5,23 +5,30 @@
 namespace pm {
 
 PrimalWindow createPrimalWindow(std::string_view title, int32_t width, int32_t height, SDL_WindowFlags flags) {
-	static uint32_t idCounter{ 0 };
 
 	PrimalWindow window{
-		.id = idCounter++,
 		.width = width,
 		.height = height,
 		.windowFlags = flags,
-		.hasFocus = false
+		.mouseFocus = false,
+		.keyboardFocus = false,
+		.shown = false,
+		.isMinimized = false
 	};
 
 	window.handle = SDL_CreateWindow(title.data(), width, height, flags);
+
+	window.id = SDL_GetWindowID(window.handle);
 
 	return window;
 }
 
 
-void destroyPrimalWindow(PrimalWindow* window) {
+void destroyPrimalWindow(PrimalWindow* window, VkDevice device, VkInstance instance, VkAllocationCallbacks* callbacks) {
+	if (device && instance) {
+		destroyVulkanSurface(instance, window->surface, callbacks);
+		destroySwapchain(device, &window->swapchain);
+	}
 	SDL_DestroyWindow(window->handle);
 }
 

@@ -1,4 +1,7 @@
-#include "window.h"
+#include "SDL3/SDL_video.h"render.cp
+#include "platform/window.h"
+#include "primal.h"
+#include "ui/ui_manager.h"
 #define VMA_LEAK_LOG_FORMAT(format, ...) \
 	do {                                   \
 		printf((format), __VA_ARGS__);       \
@@ -43,10 +46,12 @@
 
 namespace pm {
 
-void VulkanRenderer::init(VulkanRendererConfig* state) {
-	m_rendererState = state;
+void VulkanRenderer::init() {
 	initVulkan();
-	initSwapchain();
+}
+
+void VulkanRenderer::setup() {
+	initRenderTargets();
 	initCommands();
 	initSyncStructures();
 	initDescriptors();
@@ -55,14 +60,16 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	initPipelines();
 	initQueryPools();
 
-	m_materialCache = MaterialCache_init();
+	loadTestScene();
+}
 
+void VulkanRenderer::loadTestScene() {
 	initDefaultData();
 	initFontData();
 	initUI();
 
-	// const std::string modelPath = { "res/models/bistro/bistro_ktx2.glb" };
-	const std::string modelPath = { "res/models/structure.glb" };
+	const std::string modelPath = { "res/models/bistro/bistro_ktx2.glb" };
+	// const std::string modelPath = { "res/models/structure.glb" };
 
 	auto start = std::chrono::system_clock::now();
 	auto loadedGLTF = loadGLTF(this, modelPath);
@@ -80,6 +87,10 @@ void VulkanRenderer::init(VulkanRendererConfig* state) {
 	loadedModels["testModel"] = loadedGLTF.value();
 }
 
+void VulkanRenderer::setInitialState(VulkanRendererConfig* state) {
+	m_rendererState = state;
+}
+
 void VulkanRenderer::initQueryPools() {
 	timestampPool = createQueryPool(m_device, 128, VK_QUERY_TYPE_TIMESTAMP);
 	assert(timestampPool);
@@ -93,26 +104,24 @@ void VulkanRenderer::initQueryPools() {
 	});
 }
 
-void VulkanRenderer::resizeSwapchain() {
+void VulkanRenderer::resizeSwapchain(PrimalWindow* window) {
 	vkDeviceWaitIdle(m_device);
 
-	destroySwapchain(m_device, &mainSwapchain);
+	destroySwapchain(m_device, &window->swapchain);
 
 	int w{}, h{};
-	getWindowSize(m_rendererState->window, &w, &h);
+	getWindowSize(window, &w, &h);
 
 	int displayWidth{}, displayHeight{};
-	getWindowSizeInPixels(m_rendererState->window, &displayWidth, &displayHeight);
+	getWindowSizeInPixels(window, &displayWidth, &displayHeight);
 
-	m_rendererState->windowExtent.width = w;
-	m_rendererState->windowExtent.height = h;
 	m_renderScale = static_cast<float>(displayWidth) / static_cast<float>(w);
 
-	mainSwapchain = createSwapchain(m_device, m_chosenGPU, m_surface, m_rendererState->windowExtent.width, m_rendererState->windowExtent.height, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
+	window->swapchain = createSwapchain(m_device, m_chosenGPU, window->surface, window->width, window->height, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
 
-	UI::onResizeCallback(static_cast<float>(m_rendererState->windowExtent.width), static_cast<float>(m_rendererState->windowExtent.height));
+	UI::onResizeCallback(static_cast<float>(window->width), static_cast<float>(window->height));
 
-	m_rendererState->resizeRequested = false;
+	window->resizeRequested = false;
 }
 
 void VulkanRenderer::initDefaultData() {
@@ -157,7 +166,7 @@ void VulkanRenderer::initDefaultData() {
 	sceneMaterialData[0] = defaultMaterial.materialData;
 
 	// Write default texture to descriptor set and set Material pass and pipeline
-	writeBindlessTextureToGlobalDescriptor(bindlessTexturesDescriptorSet, errorCheckerboardImage, defaultSamplerLinear, 0);
+	writeBindlessTextureToGlobalDescriptor(bindlessTexturesDescriptorSet, 0, errorCheckerboardImage, defaultSamplerLinear, 0);
 	defaultMaterial.passType = MaterialPass::MainColor;
 	defaultMaterial.pipeline = &opaquePipeline;
 
@@ -165,7 +174,7 @@ void VulkanRenderer::initDefaultData() {
 	MaterialCache_add(m_materialCache, 0, defaultMaterial);
 
 	// Write default viewport texture
-	writeBindlessTextureToGlobalDescriptor(viewportTextureDescriptorSet, errorCheckerboardImage, defaultSamplerLinear, 0);
+	writeBindlessTextureToGlobalDescriptor(viewportTextureDescriptorSet, 0, errorCheckerboardImage, defaultSamplerLinear, 0);
 
 	m_mainDeletionQueue.push([&]() {
 		vkDestroySampler(m_device, defaultSamplerNearest, nullptr);
@@ -183,7 +192,7 @@ void VulkanRenderer::initVulkan() {
 
 	// make the vulkan instance, with basic debug features
 	auto inst = builder.set_app_name("Primal Engine")
-								.request_validation_layers(m_rendererState->useValidationLayers)
+								.request_validation_layers(USE_VALIDATION)
 								.use_default_debug_messenger()
 								.require_api_version(1, 3, 0)
 								.build();
@@ -194,7 +203,7 @@ void VulkanRenderer::initVulkan() {
 	m_instance = vkbInstance.instance;
 	m_debug_messenger = vkbInstance.debug_messenger;
 
-	m_surface = createVulkanSurface(m_rendererState->window, m_instance, nullptr);
+	// m_rendererState->window->surface = createVulkanSurface(m_rendererState->window, m_instance, nullptr);
 
 	// vulkan 1.3 features
 	VkPhysicalDeviceVulkan13Features features13{};
@@ -233,7 +242,8 @@ void VulkanRenderer::initVulkan() {
 																				 .set_required_features_11(features11)
 																				 .set_required_features_13(features13)
 																				 .set_required_features_12(features12)
-																				 .set_surface(m_surface)
+																				 // .set_surface(m_rendererState->window->surface)
+																				 .defer_surface_initialization()
 																				 .add_required_extension("VK_EXT_scalar_block_layout")
 																				 .select()
 																				 .value();
@@ -304,15 +314,14 @@ void VulkanRenderer::initVulkan() {
 	vmaCreateAllocator(&allocatorInfo, &m_allocator);
 }
 
-void VulkanRenderer::initSwapchain() {
-	mainSwapchain = createSwapchain(m_device, m_chosenGPU, m_surface, m_rendererState->windowExtent.width, m_rendererState->windowExtent.height, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
-
+void VulkanRenderer::initRenderTargets() {
 	VkExtent3D drawImageExtent = {
-		m_rendererState->windowExtent.width,
-		m_rendererState->windowExtent.height,
+		static_cast<uint32_t>(m_rendererState->window->width),
+		static_cast<uint32_t>(m_rendererState->window->height),
 		1
 	};
 
+	// TODO(piero): what size should this be?
 	VkExtent3D sceneDrawImageExtent = {
 		1448,
 		700,
@@ -417,8 +426,14 @@ void VulkanRenderer::cleanup() {
 
 	UI::cleanupRenderContext();
 
-	destroySwapchain(m_device, &mainSwapchain);
-	destroyVulkanSurface(m_instance, m_surface, nullptr);
+	for (auto& window : PrimalEngine::get().windows) {
+		destroySwapchain(m_device, &window.swapchain);
+		destroyVulkanSurface(m_instance, window.surface, nullptr);
+		destroyPrimalWindow(&window);
+	}
+
+	// destroySwapchain(m_device, &mainSwapchain);
+	// destroyVulkanSurface(m_instance, m_surface, nullptr);
 
 	vmaDestroyAllocator(m_allocator);
 	vkDestroyDevice(m_device, nullptr);
@@ -768,8 +783,6 @@ void VulkanRenderer::buildDrawBatches(std::vector<Model*>& models) {
 		Entity_flattenHierarchy(model->root, glm::mat4{ 1.0f }, entities);
 		flattenTime += std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - start).count();
 
-		std::vector<DrawBatch> drawBatches{};
-
 		auto startGen = std::chrono::high_resolution_clock::now();
 		DrawBatch opaque{ .type = DrawBatchType::MESH_BATCH };
 		opaque.meshBuffers = model->modelBuffers;
@@ -924,30 +937,39 @@ void VulkanRenderer::buildDrawBatches(std::vector<Model*>& models) {
 	m_rendererState->rendererStats.drawBatchGenerationTimeAvg = m_rendererState->rendererStats.drawBatchGenerationTimeAvg * 0.95 + genTime * 0.05;
 }
 
-
-void VulkanRenderer::draw(float deltaTime) {
+void VulkanRenderer::update(float deltaTime) {
 	updateScene(deltaTime);
 	updateUIData();
 	updateFontData();
+}
 
+void VulkanRenderer::draw() {
 	// wait until the gpu has finished rendering the last frame. Timeout of 1 second
 	VK_CHECK(vkWaitForFences(m_device, 1, &getCurrentFrame().m_renderFence, true, 1000000000));
 
 	getCurrentFrame().m_deletionQueue.flush();
 	getCurrentFrame().m_frameDescriptors.clearPools(m_device);
 
+	/*
 	uint32_t swapchainImageIndex{};
 	VkResult e = vkAcquireNextImageKHR(m_device, mainSwapchain.handle, 1000000000, getCurrentFrame().m_swapchainSemaphore, nullptr, &swapchainImageIndex);
 	if (e == VK_ERROR_OUT_OF_DATE_KHR) {
 		m_rendererState->resizeRequested = true;
 		return;
 	}
+	*/
+
+	// Get next swapchain image for each window we render to
+	auto currentFrameIndex = getCurrentFrameIndex();
+	for (auto& window : PrimalEngine::get().windows) {
+		auto e = vkAcquireNextImageKHR(m_device, window.swapchain.handle, 1000000000, window.swapchain.swapchainSemaphores.at(currentFrameIndex), nullptr, &window.nextImageIndex);
+		if (e == VK_ERROR_OUT_OF_DATE_KHR) {
+			window.resizeRequested = true;
+			return;
+		}
+	}
 
 	VK_CHECK(vkResetFences(m_device, 1, &getCurrentFrame().m_renderFence));
-
-	auto commandBuffer = getCurrentFrame().m_commandBuffer;
-
-	VK_CHECK(vkResetCommandBuffer(commandBuffer, 0));
 
 	// Build draw batches
 	std::vector<Model*> modelsToRender{};
@@ -955,10 +977,15 @@ void VulkanRenderer::draw(float deltaTime) {
 	buildDrawBatches(modelsToRender);
 	buildUIDrawBatches(getCurrentFrame().uiRenderCommands);
 
+	auto commandBuffer = getCurrentFrame().m_commandBuffer;
+
+	VK_CHECK(vkResetCommandBuffer(commandBuffer, 0));
+
 	auto commandBeginInfo = commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-	m_drawExtent.width = std::min(mainSwapchain.extent.width, m_drawImage.imageExtent.width) * m_renderScale;
-	m_drawExtent.height = std::min(mainSwapchain.extent.height, m_drawImage.imageExtent.height) * m_renderScale;
+	// TODO(piero): remove this.
+	m_drawExtent.width = std::min(m_rendererState->window->swapchain.extent.width, m_drawImage.imageExtent.width) * m_renderScale;
+	m_drawExtent.height = std::min(m_rendererState->window->swapchain.extent.height, m_drawImage.imageExtent.height) * m_renderScale;
 
 	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &commandBeginInfo));
 
@@ -993,14 +1020,25 @@ void VulkanRenderer::draw(float deltaTime) {
 	// transition the draw image and the swapchain image into their correct transfer layouts
 	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
-	transitionImage(commandBuffer, mainSwapchain.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	// transitionImage(commandBuffer, mainSwapchain.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	// get all swapchains ready to be copied to
+	for (auto& window : PrimalEngine::get().windows) {
+		transitionImage(commandBuffer, window.swapchain.images[window.nextImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	}
 
 	// execute a copy from the draw image into the swapchain
-	copyImageToImage(commandBuffer, m_drawImage.image, mainSwapchain.images[swapchainImageIndex], m_drawExtent, mainSwapchain.extent);
+	// copyImageToImage(commandBuffer, m_drawImage.image, mainSwapchain.images[swapchainImageIndex], m_drawExtent, mainSwapchain.extent);
+	for (auto& window : PrimalEngine::get().windows) {
+		auto sourceImage = m_drawImage.image;
+		VkExtent2D sourceImageSize { .width = m_drawImage.imageExtent.width, .height = m_drawImage.imageExtent.height };
+		copyImageToImage(commandBuffer, sourceImage, window.swapchain.images[window.nextImageIndex], sourceImageSize, window.swapchain.extent);
+	}
 
 	// set swapchain image layout to Present so we can show it on the screen
-	transitionImage(commandBuffer, mainSwapchain.images[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-
+	// transitionImage(commandBuffer, mainSwapchain.images[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+	for (auto& window : PrimalEngine::get().windows) {
+		transitionImage(commandBuffer, window.swapchain.images[window.nextImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+	}
 
 	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampPool, 1);
 
@@ -1011,14 +1049,28 @@ void VulkanRenderer::draw(float deltaTime) {
 	// we will signal the m_renderSemaphore, to signal that rendering has finished
 	auto cmdinfo = commandBufferSubmitInfo(commandBuffer);
 
-	auto waitInfo = semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, getCurrentFrame().m_swapchainSemaphore);
 	auto signalInfo = semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, getCurrentFrame().m_renderSemaphore);
 
-	VkSubmitInfo2 submit = submitInfo(&cmdinfo, &signalInfo, &waitInfo);
+	std::vector<VkSemaphoreSubmitInfo> waitInfos{};
+	waitInfos.reserve(PrimalEngine::get().windows.size());
+
+	for (auto& window : PrimalEngine::get().windows) {
+		waitInfos.push_back(semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, window.swapchain.swapchainSemaphores.at(currentFrameIndex)));
+	}
+
+	VkSubmitInfo2 submit = submitInfo(&cmdinfo, &signalInfo, &waitInfos);
 
 	// submit command buffer to the queue and execute it.
 	// m_renderFence will now block until the graphic commands finish execution
 	VK_CHECK(vkQueueSubmit2(m_graphicsQueue, 1, &submit, getCurrentFrame().m_renderFence));
+
+	// TODO(piero): remove this. temp.
+	std::vector<VkSwapchainKHR> swapchains;
+	std::vector<uint32_t> imageIndices;
+	for (auto& window : PrimalEngine::get().windows) {
+		swapchains.push_back(window.swapchain.handle);
+		imageIndices.push_back(window.nextImageIndex);
+	}
 
 	// prepare present
 	// this will put the image we just rendered to into the visible window.
@@ -1026,17 +1078,17 @@ void VulkanRenderer::draw(float deltaTime) {
 	// as its necessary that drawing commands have finished before the image is displayed to the user
 	VkPresentInfoKHR presentInfo = {};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	presentInfo.pSwapchains = &mainSwapchain.handle;
-	presentInfo.swapchainCount = 1;
+	presentInfo.pSwapchains = swapchains.data();
+	presentInfo.swapchainCount = swapchains.size();
 
 	presentInfo.pWaitSemaphores = &getCurrentFrame().m_renderSemaphore;
 	presentInfo.waitSemaphoreCount = 1;
 
-	presentInfo.pImageIndices = &swapchainImageIndex;
+	presentInfo.pImageIndices = imageIndices.data();
 
 	VkResult presentResult = vkQueuePresentKHR(m_graphicsQueue, &presentInfo);
 	if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
-		m_rendererState->resizeRequested = true;
+		m_rendererState->window->resizeRequested = true;
 	}
 
 	// TODO: we are waiting on fences twice inside this function. Need to rework this logic.
@@ -1077,6 +1129,7 @@ void VulkanRenderer::drawUI(VkCommandBuffer commandBuffer) {
 	VkClearValue clearColor{
 		.color = { 0.0, 0.0, 0.0, 1.0 }
 	};
+
 	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(m_drawImage.imageView, &clearColor, VK_IMAGE_LAYOUT_GENERAL);
 	VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(m_depthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
@@ -1888,7 +1941,7 @@ void VulkanRenderer::buildDefaultPipelines() {
 	vkDestroyShaderModule(m_device, meshVertexShader, nullptr);
 }
 
-void VulkanRenderer::writeBindlessTextureToGlobalDescriptor(VkDescriptorSet bindlessTextureSet, AllocatedImage& image, VkSampler sampler, uint32_t index) {
+void VulkanRenderer::writeBindlessTextureToGlobalDescriptor(VkDescriptorSet bindlessTextureSet, uint32_t binding, AllocatedImage& image, VkSampler sampler, uint32_t index) {
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageView = image.imageView;
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1896,7 +1949,7 @@ void VulkanRenderer::writeBindlessTextureToGlobalDescriptor(VkDescriptorSet bind
 
 	VkWriteDescriptorSet write = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 	write.dstSet = bindlessTextureSet;
-	write.dstBinding = 0;
+	write.dstBinding = binding;
 	write.dstArrayElement = index;
 	write.descriptorCount = 1;
 	write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1928,8 +1981,8 @@ void VulkanRenderer::updateFontData() {
 
 	fontUniformData.view = glm::mat4(1.0f);
 
-	auto w = static_cast<float>(m_rendererState->windowExtent.width);
-	auto h = static_cast<float>(m_rendererState->windowExtent.height);
+	auto w = static_cast<float>(m_rendererState->window->width);
+	auto h = static_cast<float>(m_rendererState->window->height);
 	fontUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
 
 	// copy data into buffer
@@ -1956,15 +2009,14 @@ void VulkanRenderer::initFontData() {
 
 	m_mainDeletionQueue.push([&]() {
 		destroyBuffer(fontUniformBuffer);
-		fontSDF.destroy(m_device);
 	});
 }
 
 void VulkanRenderer::updateUIData() {
 	uiUniformData.view = glm::mat4(1.0f);
 
-	auto w = static_cast<float>(m_rendererState->windowExtent.width);
-	auto h = static_cast<float>(m_rendererState->windowExtent.height);
+	auto w = static_cast<float>(m_rendererState->window->width);
+	auto h = static_cast<float>(m_rendererState->window->height);
 	uiUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
 
 	void* data = uiUniformBuffer.allocation->GetMappedData();
@@ -2005,6 +2057,8 @@ void VulkanRenderer::updateUIData() {
 	UI::setFont(&sourceCodeFont);
 
 	auto start = std::chrono::high_resolution_clock::now();
+
+	UI::beginWindow(m_rendererState->window);
 
 	UI::beginLayout();
 
@@ -2101,6 +2155,8 @@ void VulkanRenderer::updateUIData() {
 
 	getCurrentFrame().uiRenderCommands = UI::endLayout();
 
+	UI::endWindow();
+
 	auto uiLayoutTime = std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - start).count();
 	m_rendererState->rendererStats.uiLayoutTimeAvg = m_rendererState->rendererStats.uiLayoutTimeAvg * 0.95 + uiLayoutTime * 0.05;
 }
@@ -2109,13 +2165,20 @@ void VulkanRenderer::setPointerState(float mouseX, float mouseY, float relMouseX
 	UI::setPointerState(mouseX, mouseY, relMouseX, relMouseY, isPointerDown);
 }
 
+uint32_t VulkanRenderer::registerImage(AllocatedImage* image) {
+	// Image are registered starting from 1. 0 is the fallback image.
+	auto index = registeredImages.size() + 1;
+	registeredImages.push_back(image);
+	return index;
+}
+
 void VulkanRenderer::initUI() {
 	uiMemoryArena = MemoryArena_create(MEGABYTE(20));
-	UI::initRenderContext(&uiMemoryArena, { .width = static_cast<float>(m_rendererState->windowExtent.width), .height = static_cast<float>(m_rendererState->windowExtent.height) });
+	UI::initRenderContext(&uiMemoryArena);
 
 	// Register image to UI system
-	sceneTextureId = UI::registerImage(&m_sceneDrawImage);
-	writeBindlessTextureToGlobalDescriptor(viewportTextureDescriptorSet, m_sceneDrawImage, defaultSamplerLinear, sceneTextureId);
+	sceneTextureId = registerImage(&m_sceneDrawImage);
+	writeBindlessTextureToGlobalDescriptor(viewportTextureDescriptorSet, 0, m_sceneDrawImage, defaultSamplerLinear, sceneTextureId);
 
 	uiUniformBuffer = createBuffer("uiUniformBuffer", sizeof(UIUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 

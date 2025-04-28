@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <array>
 #include <vulkan/vulkan.h>
 
 namespace pm {
@@ -10,6 +11,8 @@ struct PrimalSwapchain {
 	VkExtent2D extent;
 	std::vector<VkImage> images;
 	std::vector<VkImageView> imageViews;
+
+	std::array<VkSemaphore, 2> swapchainSemaphores{};
 };
 
 

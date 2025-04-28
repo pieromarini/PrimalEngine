@@ -1,10 +1,11 @@
 #include "swapchain.h"
+#include "platform/vulkan/vulkan_structures_helpers.h"
 #include <VkBootstrap.h>
 
 namespace pm {
 
 PrimalSwapchain createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32_t width, uint32_t height, VkFormat format, VkPresentModeKHR presentMode) {
-	PrimalSwapchain p{};
+	PrimalSwapchain newSwapchain{};
 
 	vkb::SwapchainBuilder swapchainBuilder{ physicalDevice, device, surface };
 
@@ -16,15 +17,26 @@ PrimalSwapchain createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice
 																	.build()
 																	.value();
 
-	p.extent = vkbSwapchain.extent;
-	p.handle = vkbSwapchain.swapchain;
-	p.images = vkbSwapchain.get_images().value();
-	p.imageViews = vkbSwapchain.get_image_views().value();
+	newSwapchain.extent = vkbSwapchain.extent;
+	newSwapchain.handle = vkbSwapchain.swapchain;
+	newSwapchain.images = vkbSwapchain.get_images().value();
+	newSwapchain.imageViews = vkbSwapchain.get_image_views().value();
 
-	return p;
+	auto semaphoreCreate = semaphoreCreateInfo();
+	for (auto& semaphore: newSwapchain.swapchainSemaphores) {
+		VK_CHECK(vkCreateSemaphore(device, &semaphoreCreate, nullptr, &semaphore));
+	}
+
+	return newSwapchain;
 }
 
 void destroySwapchain(VkDevice device, PrimalSwapchain* swapchain) {
+	for (auto semaphore: swapchain->swapchainSemaphores) {
+		if (semaphore) {
+			vkDestroySemaphore(device, semaphore, nullptr);
+		}
+	}
+
 	vkDestroySwapchainKHR(device, swapchain->handle, nullptr);
 
 	for (auto& swapchainImageView : swapchain->imageViews) {
