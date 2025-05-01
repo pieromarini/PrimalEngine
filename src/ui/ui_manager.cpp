@@ -19,37 +19,56 @@ void initRenderContext(MemoryArena* arena) {
 	// Persistent data
 	uiContext->hoveredIds = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, arena);
 
-	// Ephemeral data. Reset each frame.
-	uiContext->tempArena = MemoryArena_create(MEGABYTE(40));
-	MemoryArena_commit(&uiContext->tempArena, uiContext->tempArena.size);
+	// Per-frame data
+	uiContext->perFrameArena = MemoryArena_create(MEGABYTE(40));
+	MemoryArena_commit(&uiContext->perFrameArena, uiContext->perFrameArena.size);
 
-	auto tempArena = &uiContext->tempArena;
+	auto perFrameArena = &uiContext->perFrameArena;
 
-	uiContext->layoutElements = MemoryArenaCreateArray(FixedArray<UILayoutElement>, UILayoutElement, maxElementCount, tempArena);
-	uiContext->layoutElementsData = MemoryArenaCreateArray(FixedArray<UILayoutElementData>, UILayoutElementData, maxElementCount, tempArena);
-	uiContext->layoutElementChildrenIndices = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, tempArena);
-	uiContext->openLayoutElements = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, tempArena);
-	uiContext->renderCommands = MemoryArenaCreateArray(FixedArray<UIRenderCommand>, UIRenderCommand, maxElementCount, tempArena);
+	uiContext->windowCommands = MemoryArenaCreateArray(FixedArray<UIWindowBatchCommands>, UIWindowBatchCommands, maxElementCount, perFrameArena);
+	uiContext->layoutElements = MemoryArenaCreateArray(FixedArray<FixedArray<UILayoutElement>>, FixedArray<UILayoutElement>, maxElementCount, perFrameArena);
+
+	// Per-layout data (a frame can have more than one layout)
+	uiContext->perLayoutArena = MemoryArena_create(MEGABYTE(40));
+	MemoryArena_commit(&uiContext->perLayoutArena, uiContext->perLayoutArena.size);
+
+	auto perLayoutArena = &uiContext->perLayoutArena;
+
+	uiContext->layoutElementChildrenIndices = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, perLayoutArena);
+	uiContext->openLayoutElements = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, perLayoutArena);
 }
 
 void cleanupRenderContext() {
 	auto context = getUIContext();
-	MemoryArena_destroy(&context->tempArena);
+
+	windowLayoutElementsIndices.clear();
+
+	MemoryArena_destroy(&context->perLayoutArena);
+	MemoryArena_destroy(&context->perFrameArena);
 	MemoryArena_destroy(context->arena);
 }
 
-void clearContext() {
+void clearPerLayoutContext() {
+	auto context = getUIContext();
+
+	auto perLayoutArena = &context->perLayoutArena;
+	MemoryArena_clear(perLayoutArena);
+
+	context->layoutElementChildrenIndices = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, perLayoutArena);
+	context->openLayoutElements = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, perLayoutArena);
+}
+
+void clearPerFrameContext() {
 	auto context = getUIContext();
 
 	// Clear temp arena and re-init per-frame arrays
-	auto tempArena = &context->tempArena;
-	MemoryArena_clear(tempArena);
+	auto perFrameArena = &context->perFrameArena;
+	MemoryArena_clear(perFrameArena);
 
-	uiContext->layoutElements = MemoryArenaCreateArray(FixedArray<UILayoutElement>, UILayoutElement, maxElementCount, tempArena);
-	uiContext->layoutElementsData = MemoryArenaCreateArray(FixedArray<UILayoutElementData>, UILayoutElementData, maxElementCount, tempArena);
-	uiContext->layoutElementChildrenIndices = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, tempArena);
-	uiContext->openLayoutElements = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, tempArena);
-	uiContext->renderCommands = MemoryArenaCreateArray(FixedArray<UIRenderCommand>, UIRenderCommand, maxElementCount, tempArena);
+	windowLayoutElementsIndices.clear();
+
+	context->windowCommands = MemoryArenaCreateArray(FixedArray<UIWindowBatchCommands>, UIWindowBatchCommands, maxElementCount, perFrameArena);
+	context->layoutElements = MemoryArenaCreateArray(FixedArray<FixedArray<UILayoutElement>>, FixedArray<UILayoutElement>, maxElementCount, perFrameArena);
 }
 
 UIContext* getUIContext() {
@@ -61,12 +80,9 @@ void onResizeCallback(float width, float height) {
 	if (!context) {
 		return;
 	}
-
-	context->windowWidth = width;
-	context->windowHeight = height;
 }
 
-void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown) {
+void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown) {
 	auto context = getUIContext();
 
 	FixedArray_clear(context->hoveredIds);
@@ -100,8 +116,12 @@ void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouse
 	// We iterate the elements in reverse to go up the tree starting from the deepest children
 	// TODO(piero): Probably need to rework this logic when adding floating elements.
 	bool firstEvent{ true };
-	for (int32_t i = (int)context->layoutElements.length - 1; i >= 0; --i) {
-		auto element = FixedArray_get(context->layoutElements, i);
+
+	auto& index = windowLayoutElementsIndices.at(windowId);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
+	for (int32_t i = (int)layoutElements.length - 1; i >= 0; --i) {
+		auto element = FixedArray_get(layoutElements, i);
 		auto bb = BoundingRect{ .x = element->x, .y = element->y, .width = element->width.size, .height = element->height.size };
 		if (isInsideBoundingBox(mouseX, mouseY, bb)) {
 			// Don't process hover callbacks if we are dragging the mouse around.
@@ -123,7 +143,7 @@ void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouse
 
 	// Value dragging
 	if (context->pointerState.pointerClickState == PointerClickState::PRESSED && context->interactionState.isDragging) {
-		auto element = FixedArray_get(context->layoutElements, context->interactionState.elementId);
+		auto element = FixedArray_get(layoutElements, context->interactionState.elementId);
 		switch (element->data.dataType) {
 		case INT: {
 			if (element->data.valueInt) {
@@ -158,57 +178,76 @@ PrimalWindow* createWindow(std::string_view name, int32_t width, int32_t height)
 }
 
 void beginWindow(PrimalWindow* window) {
-	clearContext();
+	clearPerLayoutContext();
+
 	auto context = getUIContext();
 
+	// setup window target
 	context->window = window;
 	context->windowWidth = (float)window->width;
 	context->windowHeight = (float)window->height;
-}
 
-void endWindow() {
+	// allocate a new window batch
+	FixedArray_add(context->windowCommands, { .window = window, .renderCommands = MemoryArenaCreateArray(FixedArray<UIRenderCommand>, UIRenderCommand, maxElementCount, &context->perFrameArena) });
 
-}
+	// Allocate new array of layout elements
+	windowLayoutElementsIndices.emplace(context->window->id, context->layoutElements.length);
+	FixedArray_add(context->layoutElements, MemoryArenaCreateArray(FixedArray<UILayoutElement>, UILayoutElement, maxElementCount, &context->perFrameArena));
 
-void beginLayout() {
-	auto context = getUIContext();
-
-	// create root element
+	// create and configure root element
 	openElement();
 
-	// Configure root element
-	auto rootElement = FixedArray_back(context->layoutElements);
+	auto& index = windowLayoutElementsIndices.at(window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
+	auto rootElement = FixedArray_back(layoutElements);
 	rootElement->width.size = context->windowWidth;
 	rootElement->height.size = context->windowHeight;
 	rootElement->layoutDirection = UILayoutDirection::VERTICAL;
 	rootElement->childGap = 0.0f;
 }
 
-FixedArray<UIRenderCommand> endLayout() {
+void endWindow() {
 	auto context = getUIContext();
+
 	closeElement();
 
 	calculateFinalLayout();
+}
 
-	return context->renderCommands;
+void beginFrame() {
+	clearPerFrameContext();
+	clearPerLayoutContext();
+}
+
+FixedArray<UIWindowBatchCommands> endFrame() {
+	auto context = getUIContext();
+
+	return context->windowCommands;
 }
 
 void openElement() {
 	auto context = getUIContext();
 
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
 	// Create new layout for the element
-	FixedArray_add(context->layoutElements, { .id = context->layoutElements.length, .children = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &context->tempArena) });
-	FixedArray_add(context->openLayoutElements, context->layoutElements.length - 1);
-	FixedArray_add(context->layoutElementChildrenIndices, context->layoutElements.length - 1);
+	FixedArray_add(layoutElements, { .id = layoutElements.length, .children = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &context->perLayoutArena) });
+	FixedArray_add(context->openLayoutElements, layoutElements.length - 1);
+	FixedArray_add(context->layoutElementChildrenIndices, layoutElements.length - 1);
 }
 
 void closeElement() {
 	auto context = getUIContext();
 
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
 	auto closedElementIndex = *FixedArray_top(context->openLayoutElements);
 	FixedArray_pop(context->openLayoutElements);
 
-	auto openLayoutElement = FixedArray_get(context->layoutElements, closedElementIndex);
+	auto openLayoutElement = FixedArray_get(layoutElements, closedElementIndex);
 
 	// Set parent to the open layout element
 	if (!FixedArray_empty(context->openLayoutElements)) {
@@ -218,7 +257,7 @@ void closeElement() {
 
 	// add parent padding
 	if (openLayoutElement->parent >= 0) {
-		auto parent = FixedArray_get(context->layoutElements, openLayoutElement->parent);
+		auto parent = FixedArray_get(layoutElements, openLayoutElement->parent);
 		openLayoutElement->x += parent->padding.left;
 		openLayoutElement->y += parent->padding.top;
 	}
@@ -252,7 +291,7 @@ void closeElement() {
 		openLayoutElement->width.size += static_cast<float>(openLayoutElement->children.length - 1) * openLayoutElement->childGap;
 		for (uint32_t i = 0; i < openLayoutElement->children.length; ++i) {
 			auto childIndex = FixedArray_getValue(openLayoutElement->children, i);
-			auto child = FixedArray_get(context->layoutElements, childIndex);
+			auto child = FixedArray_get(layoutElements, childIndex);
 			child->x += leftOffset;
 			if (openLayoutElement->width.sizingMode != UISizingMode::STATIC) {
 				openLayoutElement->width.size += child->width.size;
@@ -268,7 +307,7 @@ void closeElement() {
 		openLayoutElement->height.size += static_cast<float>(openLayoutElement->children.length - 1) * openLayoutElement->childGap;
 		for (uint32_t i = 0; i < openLayoutElement->children.length; ++i) {
 			auto childIndex = FixedArray_getValue(openLayoutElement->children, i);
-			auto child = FixedArray_get(context->layoutElements, childIndex);
+			auto child = FixedArray_get(layoutElements, childIndex);
 			child->y += topOffset;
 			if (openLayoutElement->height.sizingMode != UISizingMode::STATIC) {
 				openLayoutElement->width.size = std::max(child->width.size + horizontalPadding, openLayoutElement->width.size);
@@ -282,18 +321,24 @@ void closeElement() {
 void openTextElement() {
 	auto context = getUIContext();
 
-	FixedArray_add(context->layoutElements, { .id = context->layoutElements.length });
-	FixedArray_add(context->openLayoutElements, context->layoutElements.length - 1);
-	FixedArray_add(context->layoutElementChildrenIndices, context->layoutElements.length - 1);
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
+	FixedArray_add(layoutElements, { .id = layoutElements.length });
+	FixedArray_add(context->openLayoutElements, layoutElements.length - 1);
+	FixedArray_add(context->layoutElementChildrenIndices, layoutElements.length - 1);
 }
 
 void closeTextElement() {
 	auto context = getUIContext();
 
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
 	auto closedElementIndex = *FixedArray_top(context->openLayoutElements);
 	FixedArray_pop(context->openLayoutElements);
 
-	auto openLayoutElement = FixedArray_get(context->layoutElements, closedElementIndex);
+	auto openLayoutElement = FixedArray_get(layoutElements, closedElementIndex);
 
 	// Set parent to the open layout element
 	if (!FixedArray_empty(context->openLayoutElements)) {
@@ -303,7 +348,7 @@ void closeTextElement() {
 
 	// add parent padding
 	if (openLayoutElement->parent >= 0) {
-		auto parent = FixedArray_get(context->layoutElements, openLayoutElement->parent);
+		auto parent = FixedArray_get(layoutElements, openLayoutElement->parent);
 		openLayoutElement->x += parent->padding.left;
 		openLayoutElement->y += parent->padding.top;
 	}
@@ -324,10 +369,13 @@ void closeTextElement() {
 void closeCircleElement() {
 	auto context = getUIContext();
 
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
 	auto closedElementIndex = *FixedArray_top(context->openLayoutElements);
 	FixedArray_pop(context->openLayoutElements);
 
-	auto openLayoutElement = FixedArray_get(context->layoutElements, closedElementIndex);
+	auto openLayoutElement = FixedArray_get(layoutElements, closedElementIndex);
 
 	// Set parent to the open layout element
 	if (!FixedArray_empty(context->openLayoutElements)) {
@@ -337,7 +385,7 @@ void closeCircleElement() {
 
 	// add parent padding
 	if (openLayoutElement->parent >= 0) {
-		auto parent = FixedArray_get(context->layoutElements, openLayoutElement->parent);
+		auto parent = FixedArray_get(layoutElements, openLayoutElement->parent);
 		openLayoutElement->x += parent->padding.left;
 		openLayoutElement->y += parent->padding.top;
 	}
@@ -356,10 +404,13 @@ void closeCircleElement() {
 void closeViewportElement() {
 	auto context = getUIContext();
 
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
 	auto closedElementIndex = *FixedArray_top(context->openLayoutElements);
 	FixedArray_pop(context->openLayoutElements);
 
-	auto openLayoutElement = FixedArray_get(context->layoutElements, closedElementIndex);
+	auto openLayoutElement = FixedArray_get(layoutElements, closedElementIndex);
 
 	// Set parent to the open layout element
 	if (!FixedArray_empty(context->openLayoutElements)) {
@@ -369,7 +420,7 @@ void closeViewportElement() {
 
 	// add parent padding
 	if (openLayoutElement->parent >= 0) {
-		auto parent = FixedArray_get(context->layoutElements, openLayoutElement->parent);
+		auto parent = FixedArray_get(layoutElements, openLayoutElement->parent);
 		openLayoutElement->x += parent->padding.left;
 		openLayoutElement->y += parent->padding.top;
 	}
@@ -396,15 +447,18 @@ void closeDockSpaceElement() {
 void computeFinalSizes() {
 	auto context = getUIContext();
 
-	auto stack = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &uiContext->tempArena);
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
+	auto stack = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &context->perLayoutArena);
 	FixedArray_add(stack, static_cast<uint32_t>(0));
 
 	while (!FixedArray_empty(stack)) {
 		auto index = *FixedArray_top(stack);
 		FixedArray_pop(stack);
 
-		auto layoutElement = FixedArray_get(context->layoutElements, index);
-		auto parentElement = FixedArray_get(context->layoutElements, layoutElement->parent);
+		auto layoutElement = FixedArray_get(layoutElements, index);
+		auto parentElement = FixedArray_get(layoutElements, layoutElement->parent);
 
 		// Element positions are relative. Before rendering we need to add the parent's position.
 		layoutElement->x += parentElement->x;
@@ -420,16 +474,19 @@ void computeFinalSizes() {
 void calculateFinalLayout() {
 	auto context = getUIContext();
 
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
 	computeFinalSizes();
 
-	auto indices = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &uiContext->tempArena);
+	auto indices = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &context->perLayoutArena);
 	FixedArray_add(indices, static_cast<uint32_t>(0));
 
 	while (!FixedArray_empty(indices)) {
 		auto index = *FixedArray_top(indices);
 		FixedArray_pop(indices);
 
-		auto layoutElement = FixedArray_get(context->layoutElements, index);
+		auto layoutElement = FixedArray_get(layoutElements, index);
 
 		UIRenderCommand c{
 			.id = index,
@@ -482,7 +539,8 @@ void calculateFinalLayout() {
 		}
 		}
 
-		FixedArray_add(context->renderCommands, c);
+		auto windowCommands = FixedArray_back(context->windowCommands);
+		FixedArray_add(windowCommands->renderCommands, c);
 
 		for (uint32_t i = 0; i < layoutElement->children.length; ++i) {
 			auto childIndex = FixedArray_getValue(layoutElement->children, i);
@@ -500,9 +558,12 @@ void setFont(FontAsset* font) {
 void pushText(UIElementOptions options) {
 	auto context = getUIContext();
 
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
 	float width{}, height{};
 
-	auto layoutElement = FixedArray_back(context->layoutElements);
+	auto layoutElement = FixedArray_back(layoutElements);
 	layoutElement->text = options.text;
 
 	getTextDimensions(layoutElement->text, context->fontAsset, width, height);
@@ -520,7 +581,12 @@ void pushText(UIElementOptions options) {
 
 void pushBox(UIElementOptions options) {
 	auto context = getUIContext();
-	auto layoutElement = FixedArray_back(context->layoutElements);
+
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
+	auto layoutElement = FixedArray_back(layoutElements);
+
 	layoutElement->width = options.width;
 	layoutElement->height = options.height;
 	layoutElement->layoutDirection = options.layoutDirection;
@@ -547,9 +613,12 @@ void getTextDimensions(PrimalString& text, FontAsset* font, float& width, float&
 bool isHovered() {
 	auto context = getUIContext();
 
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
 	// Get first open element on the stack  (element which is currently being processed)
 	auto openElementIndex = FixedArray_top(context->openLayoutElements);
-	auto openLayoutElement = FixedArray_get(context->layoutElements, *openElementIndex);
+	auto openLayoutElement = FixedArray_get(layoutElements, *openElementIndex);
 
 	// Don't process hover while dragging
 	// TODO(piero): There is a "possible" bug here. We probably want to still process
@@ -573,9 +642,14 @@ bool isInsideBoundingBox(float x, float y, BoundingRect bb) {
 }
 
 void pushCircle(float radius, uint32_t segments, float thickness, glm::vec4 color) {
-	openElement();
 	auto context = getUIContext();
-	auto layoutElement = FixedArray_back(context->layoutElements);
+
+	openElement();
+
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
+	auto layoutElement = FixedArray_back(layoutElements);
 
 	layoutElement->width.size = radius * 2;
 	layoutElement->height.size = radius * 2;
@@ -590,9 +664,14 @@ void pushCircle(float radius, uint32_t segments, float thickness, glm::vec4 colo
 }
 
 void pushCircleFilled(float radius, uint32_t segments, glm::vec4 color) {
-	openElement();
 	auto context = getUIContext();
-	auto layoutElement = FixedArray_back(context->layoutElements);
+
+	openElement();
+
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
+	auto layoutElement = FixedArray_back(layoutElements);
 
 	layoutElement->width.size = radius * 2;
 	layoutElement->height.size = radius * 2;
@@ -607,7 +686,12 @@ void pushCircleFilled(float radius, uint32_t segments, glm::vec4 color) {
 
 void pushPanel(UIElementOptions options) {
 	auto context = getUIContext();
-	auto layoutElement = FixedArray_back(context->layoutElements);
+
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
+	auto layoutElement = FixedArray_back(layoutElements);
+
 	layoutElement->width = options.width;
 	layoutElement->height = options.height;
 	layoutElement->layoutDirection = options.layoutDirection;
@@ -623,7 +707,11 @@ void pushTitleBar(UIElementOptions options) {
 	openElement();
 
 	auto context = getUIContext();
-	auto layoutElement = FixedArray_back(context->layoutElements);
+
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
+	auto layoutElement = FixedArray_back(layoutElements);
 	layoutElement->width = options.width;
 	layoutElement->height = options.height;
 	layoutElement->layoutDirection = options.layoutDirection;
@@ -641,10 +729,13 @@ void pushDockSpace(UIElementOptions options) {
 	auto context = getUIContext();
 	constexpr float TITLE_BAR_HEIGHT = 20.0f;
 
+	auto& index = windowLayoutElementsIndices.at(context->window->id);
+	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+
 	// wrapper element for titlebar + dock space
 	openElement();
 	{
-		auto layoutElement = FixedArray_back(context->layoutElements);
+		auto layoutElement = FixedArray_back(layoutElements);
 		layoutElement->width = options.width;
 		// Dockspace height needs to account for titlebar
 		layoutElement->height = options.height;
@@ -654,7 +745,7 @@ void pushDockSpace(UIElementOptions options) {
 	}
 
 	// titlebar
-	UIElementOptions titleBarOptions {
+	UIElementOptions titleBarOptions{
 		.width = { .size = options.width.size, .sizingMode = UISizingMode::STATIC },
 		.height = { .size = TITLE_BAR_HEIGHT, .sizingMode = UISizingMode::STATIC },
 		.backgroundColor = { 1.0f, 0.0f, 0.0f, 1.0f }
@@ -664,7 +755,7 @@ void pushDockSpace(UIElementOptions options) {
 	// dockspace
 	openElement();
 
-	auto layoutElement = FixedArray_back(context->layoutElements);
+	auto layoutElement = FixedArray_back(layoutElements);
 	layoutElement->width = options.width;
 	// Dockspace height needs to account for titlebar
 	layoutElement->height = { .size = options.height.size - TITLE_BAR_HEIGHT, .sizingMode = options.height.sizingMode };

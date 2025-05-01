@@ -2,6 +2,7 @@
 
 #include "SDL3/SDL_video.h"
 #include "platform/vulkan/swapchain.h"
+#include "vk_types.h"
 #include <string_view>
 #include <vulkan/vulkan_core.h>
 
@@ -21,7 +22,10 @@ struct PrimalWindow {
 
 	bool resizeRequested{ false };
 
-	uint32_t nextImageIndex;
+	uint32_t nextImageIndex{};
+
+	AllocatedImage* renderTarget{};
+	AllocatedImage* depthTarget{};
 
 	// Vulkan-specific
 	VkSurfaceKHR surface{ nullptr };

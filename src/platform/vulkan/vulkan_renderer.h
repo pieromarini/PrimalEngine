@@ -112,6 +112,12 @@ struct DrawBatch {
 	VkDescriptorSetLayout descriptorSetLayout{};
 };
 
+// Group batches for a specific window
+struct UIWindowBatch {
+	PrimalWindow* window;
+	std::vector<DrawBatch> drawBatches;
+};
+
 struct UIUniformData {
 	glm::mat4 projection;
 	glm::mat4 view;
@@ -178,8 +184,10 @@ struct FrameData {
 	DescriptorAllocator m_frameDescriptors;
 
 	std::vector<DrawBatch> drawBatches{};
-	std::vector<DrawBatch> uiDrawBatches{};
-	FixedArray<UI::UIRenderCommand> uiRenderCommands{};
+	std::vector<UIWindowBatch> uiWindowBatches{};
+
+	MemoryArena perFrameArena;
+	FixedArray<UI::UIWindowBatchCommands> uiWindowBatchCommands{};
 };
 
 struct GPUSceneData {
@@ -219,12 +227,14 @@ public:
 	void setup();
 	void setInitialState(VulkanRendererConfig* state);
 
+	void initMemory();
+
 	void loadTestScene();
 
 	void initDefaultData();
 
 	void buildDrawBatches(std::vector<Model*>& models);
-	void buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderCommands);
+	void buildUIDrawBatches(FixedArray<UI::UIWindowBatchCommands>& windowBatches);
 	std::vector<UI::UIElement> buildUIGeometry(FixedArray<UI::UIRenderCommand>& renderCommands, std::vector<UI::UIVertex>& vertices, std::vector<uint32_t>& indices);
 
 	// drawing
@@ -261,6 +271,9 @@ public:
 	VkDescriptorSet m_sceneDrawImageDescriptor;
 	VkDescriptorSetLayout m_sceneDrawImageDescriptorLayout;
 
+	AllocatedImage m_testWindowDrawImage;
+	AllocatedImage m_testWindowDepthImage;
+
 	VkDescriptorSetLayout viewportDescriptorLayout;
 	VkDescriptorSet viewportDescriptorSet;
 	VkPipelineLayout viewportPipelineLayout;
@@ -275,7 +288,7 @@ public:
 
 	void update(float deltaTime);
 
-	void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown);
+	void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown);
 
 	// Image testing
 	AllocatedImage whiteImage;

@@ -16,16 +16,19 @@ constexpr uint32_t maxElementCount = 8192;
 struct UIContext {
 	FixedArray<UIRenderCommand> renderCommands;
 
-	FixedArray<UILayoutElement> layoutElements;
-	FixedArray<UILayoutElementData> layoutElementsData;
 	FixedArray<uint32_t> layoutElementChildrenIndices;
-
 	FixedArray<uint32_t> openLayoutElements; // elements with an open Layout
 
 	// Interactions
 	PointerState pointerState;
 	InteractionState interactionState;
 	FixedArray<uint32_t> hoveredIds;
+
+	// window batches
+	FixedArray<UIWindowBatchCommands> windowCommands;
+
+	// associates window id with their layout elements.
+	FixedArray<FixedArray<UILayoutElement>> layoutElements;
 
 	// Fonts
 	FontAsset* fontAsset{};
@@ -37,9 +40,11 @@ struct UIContext {
 	PrimalWindow* window{};
 
 	MemoryArena* arena{};
-	MemoryArena tempArena{};
+	MemoryArena perFrameArena{};
+	MemoryArena perLayoutArena{};
 };
 
+static std::unordered_map<uint32_t, uint32_t> windowLayoutElementsIndices{};
 static UIContext* uiContext;
 
 void initRenderContext(MemoryArena* arena);
@@ -48,15 +53,18 @@ void cleanupRenderContext();
 UIContext* getUIContext();
 
 void onResizeCallback(float width, float height);
-void setPointerState(float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown);
+void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown);
 
-void clearContext();
+void clearPerFrameContext();
+void clearPerLayoutContext();
 
 PrimalWindow* createWindow(std::string_view name, int32_t width, int32_t height);
 void beginWindow(PrimalWindow* window);
 void endWindow();
-void beginLayout();
-FixedArray<UIRenderCommand> endLayout();
+void beginFrame();
+FixedArray<UIWindowBatchCommands> endFrame();
+
+void reset();
 
 void openElement();
 void closeElement();

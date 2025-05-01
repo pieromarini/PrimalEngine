@@ -36,7 +36,7 @@ PrimalEngine::PrimalEngine() {
 	mainWindow = createWindow("Primal Engine", static_cast<int32_t>(m_windowExtent.width), static_cast<int32_t>(m_windowExtent.height), windowFlags);
 
 	// test create secondary window:
-	createWindow("test window", 800, 600, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+	createWindow("test window", 400, 800, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
 	setWindowRelativeMouseMode(mainWindow, windowRelativeMouseMode);
 
@@ -86,14 +86,12 @@ void PrimalEngine::handleWindowEvent(SDL_Event& e) {
 
 			// Get new dimensions and repaint
 			case SDL_EVENT_WINDOW_RESIZED:
-				window.width = e.window.data1;
-				window.height = e.window.data2;
 				window.resizeRequested = true;
 				break;
 
 			// Repaint on expose
 			case SDL_EVENT_WINDOW_EXPOSED:
-				// TODO(piero): re-render window
+				// TODO(piero): re-render window? When do we need this?
 				break;
 
 			// Mouse enter
@@ -179,7 +177,7 @@ void PrimalEngine::run() {
 			m_mainCamera->processSDLEvent(e);
 
 			if (!windowRelativeMouseMode) {
-				m_renderer.setPointerState(e.motion.x, e.motion.y, e.motion.xrel, e.motion.yrel, e.motion.state & SDL_BUTTON_LMASK);
+				m_renderer.setPointerState(e.window.windowID, e.motion.x, e.motion.y, e.motion.xrel, e.motion.yrel, e.motion.state & SDL_BUTTON_LMASK);
 			}
 		}
 
@@ -190,9 +188,12 @@ void PrimalEngine::run() {
 			continue;
 		}
 
+		// Check if we need to resize any windows
 		for (auto& window : windows) {
 			if (window.resizeRequested) {
 				m_renderer.resizeSwapchain(&window);
+
+				// NOTE(piero): If we resize the main window, we also update our camera.
 				if (window.id == mainWindow->id) {
 					m_mainCamera->onWindowResize(window.width, window.height);
 				}

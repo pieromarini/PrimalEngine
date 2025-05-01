@@ -94,6 +94,11 @@ struct UIRenderCommand {
 	UIRenderCommandType commandType;
 };
 
+struct UIWindowBatchCommands {
+	PrimalWindow* window{};
+	FixedArray<UIRenderCommand> renderCommands;
+};
+
 enum PointerClickState {
 	PRESSED,
 	RELEASED,

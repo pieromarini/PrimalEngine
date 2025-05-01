@@ -1,4 +1,3 @@
-#include "SDL3/SDL_video.h"
 #include "platform/window.h"
 #include "primal.h"
 #include "ui/ui_manager.h"
@@ -51,6 +50,8 @@ void VulkanRenderer::init() {
 }
 
 void VulkanRenderer::setup() {
+	initMemory();
+
 	initRenderTargets();
 	initCommands();
 	initSyncStructures();
@@ -60,7 +61,14 @@ void VulkanRenderer::setup() {
 	initPipelines();
 	initQueryPools();
 
+
 	loadTestScene();
+}
+
+void VulkanRenderer::initMemory() {
+	for (auto& frame : m_frames) {
+		frame.perFrameArena = MemoryArena_create(MEGABYTE(256));
+	}
 }
 
 void VulkanRenderer::loadTestScene() {
@@ -109,17 +117,21 @@ void VulkanRenderer::resizeSwapchain(PrimalWindow* window) {
 
 	destroySwapchain(m_device, &window->swapchain);
 
-	int w{}, h{};
-	getWindowSize(window, &w, &h);
+	int newWidth{}, newHeight{};
+	getWindowSize(window, &newWidth, &newHeight);
 
 	int displayWidth{}, displayHeight{};
 	getWindowSizeInPixels(window, &displayWidth, &displayHeight);
 
-	m_renderScale = static_cast<float>(displayWidth) / static_cast<float>(w);
+	m_renderScale = static_cast<float>(displayWidth) / static_cast<float>(newWidth);
 
-	window->swapchain = createSwapchain(m_device, m_chosenGPU, window->surface, window->width, window->height, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
+	std::cout << std::format("Creating new swapchain: {}x{}\n", newWidth, newHeight);
+	window->swapchain = createSwapchain(m_device, m_chosenGPU, window->surface, newWidth, newHeight, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
 
 	UI::onResizeCallback(static_cast<float>(window->width), static_cast<float>(window->height));
+
+	window->width = newWidth;
+	window->height = newHeight;
 
 	window->resizeRequested = false;
 }
@@ -315,14 +327,14 @@ void VulkanRenderer::initVulkan() {
 }
 
 void VulkanRenderer::initRenderTargets() {
-	VkExtent3D drawImageExtent = {
+	VkExtent3D drawImageExtent {
 		static_cast<uint32_t>(m_rendererState->window->width),
 		static_cast<uint32_t>(m_rendererState->window->height),
 		1
 	};
 
 	// TODO(piero): what size should this be?
-	VkExtent3D sceneDrawImageExtent = {
+	VkExtent3D sceneDrawImageExtent {
 		1448,
 		700,
 		1
@@ -335,8 +347,16 @@ void VulkanRenderer::initRenderTargets() {
 	drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
 
+	auto testWindow = &PrimalEngine::get().windows[1];
+	VkExtent3D testWindowExtent {
+		static_cast<uint32_t>(testWindow->width),
+		static_cast<uint32_t>(testWindow->height),
+		1
+	};
+
 	m_drawImage = createImage("drawImage", drawImageExtent, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
 	m_sceneDrawImage = createImage("scene drawImage", sceneDrawImageExtent, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
+	m_testWindowDrawImage = createImage("scene window drawImage", testWindowExtent, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
 
 	// Depth image
 	VkImageUsageFlags depthImageUsages{};
@@ -344,6 +364,7 @@ void VulkanRenderer::initRenderTargets() {
 
 	m_depthImage = createImage("depthImage", drawImageExtent, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
 	m_sceneDepthImage = createImage("scene depthImage", sceneDrawImageExtent, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
+	m_testWindowDepthImage = createImage("scene window depthImage", testWindowExtent, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
 
 	m_mainDeletionQueue.push([&]() {
 		vkDestroyImageView(m_device, m_drawImage.imageView, nullptr);
@@ -357,6 +378,12 @@ void VulkanRenderer::initRenderTargets() {
 
 		vkDestroyImageView(m_device, m_sceneDepthImage.imageView, nullptr);
 		vmaDestroyImage(m_allocator, m_sceneDepthImage.image, m_sceneDepthImage.allocation);
+
+		vkDestroyImageView(m_device, m_testWindowDrawImage.imageView, nullptr);
+		vmaDestroyImage(m_allocator, m_testWindowDrawImage.image, m_testWindowDrawImage.allocation);
+
+		vkDestroyImageView(m_device, m_testWindowDepthImage.imageView, nullptr);
+		vmaDestroyImage(m_allocator, m_testWindowDepthImage.image, m_testWindowDepthImage.allocation);
 	});
 }
 
@@ -482,282 +509,296 @@ std::vector<UI::UIElement> VulkanRenderer::buildUIGeometry(FixedArray<UI::UIRend
 	return elements;
 }
 
-void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIRenderCommand>& renderCommands) {
+void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIWindowBatchCommands>& windowBatches) {
 	auto start = std::chrono::system_clock::now();
 
-	getCurrentFrame().uiDrawBatches.clear();
+	getCurrentFrame().uiWindowBatches.clear();
 
-	std::vector<UIDrawData> uiDrawData;
-	std::vector<glm::mat4> textTransformData;
-	std::vector<ViewportDrawData> viewportDrawData;
+	for (uint32_t i = 0; i < windowBatches.length; ++i) {
 
-	std::vector<UIIndirectCommand> uiDrawCommands;
-	std::vector<UIIndirectCommand> textDrawCommands;
-	std::vector<UIIndirectCommand> viewportDrawCommands;
+		auto batch = FixedArray_get(windowBatches, i);
+		auto& renderCommands = batch->renderCommands;
 
-	std::vector<uint32_t> viewportImageViewIds;
+		UIWindowBatch windowBatch{
+			.window = batch->window
+		};
+		windowBatch.drawBatches.reserve(renderCommands.length);
 
-	DrawBatch uiDrawBatch{ .type = DrawBatchType::UI_BATCH };
-	DrawBatch textDrawBatch{ .type = DrawBatchType::TEXT_BATCH };
-	DrawBatch viewportDrawBatch{ .type = DrawBatchType::VIEWPORT_BATCH };
+		std::vector<UIDrawData> uiDrawData;
+		std::vector<glm::mat4> textTransformData;
+		std::vector<ViewportDrawData> viewportDrawData;
 
-	std::vector<UI::UIVertex> vertices;
-	std::vector<uint32_t> indices;
-	auto elements = buildUIGeometry(renderCommands, vertices, indices);
+		std::vector<UIIndirectCommand> uiDrawCommands;
+		std::vector<UIIndirectCommand> textDrawCommands;
+		std::vector<UIIndirectCommand> viewportDrawCommands;
 
-	// We use one Vertex/index buffer for all UI geometry
-	auto uiGeometryBuffers = uploadMesh<UI::UIVertex>(indices, vertices, "uiMeshBuffers");
+		std::vector<uint32_t> viewportImageViewIds;
 
-	std::vector<UIMaterialData> uiMaterialData;
+		DrawBatch uiDrawBatch{ .type = DrawBatchType::UI_BATCH };
+		DrawBatch textDrawBatch{ .type = DrawBatchType::TEXT_BATCH };
+		DrawBatch viewportDrawBatch{ .type = DrawBatchType::VIEWPORT_BATCH };
 
-	uiDrawBatch.meshBuffers = uiGeometryBuffers;
-	uiDrawBatch.pipeline = uiPipeline;
-	uiDrawBatch.pipelineLayout = uiPipelineLayout;
+		std::vector<UI::UIVertex> vertices;
+		std::vector<uint32_t> indices;
 
-	textDrawBatch.meshBuffers = uiGeometryBuffers;
-	textDrawBatch.pipeline = fontPipeline;
-	textDrawBatch.pipelineLayout = fontPipelineLayout;
+		auto elements = buildUIGeometry(renderCommands, vertices, indices);
 
-	viewportDrawBatch.meshBuffers = uiGeometryBuffers;
-	viewportDrawBatch.pipeline = viewportPipeline;
-	viewportDrawBatch.pipelineLayout = viewportPipelineLayout;
+		// We use one Vertex/index buffer for all UI geometry in each window
+		auto uiGeometryBuffers = uploadMesh<UI::UIVertex>(indices, vertices, std::format("uiMeshBuffers-{}", batch->window->id));
 
-	uint32_t uiDrawIdCount{ 0 }, textDrawIdCount{ 0 }, viewportDrawIdCount{ 0 };
+		std::vector<UIMaterialData> uiMaterialData;
 
-	for (uint32_t i = 0; i < elements.size(); ++i) {
-		auto renderCommand = FixedArray_get(renderCommands, i);
-		auto& uiElement = elements.at(i);
+		uiDrawBatch.meshBuffers = uiGeometryBuffers;
+		uiDrawBatch.pipeline = uiPipeline;
+		uiDrawBatch.pipelineLayout = uiPipelineLayout;
+
+		textDrawBatch.meshBuffers = uiGeometryBuffers;
+		textDrawBatch.pipeline = fontPipeline;
+		textDrawBatch.pipelineLayout = fontPipelineLayout;
+
+		viewportDrawBatch.meshBuffers = uiGeometryBuffers;
+		viewportDrawBatch.pipeline = viewportPipeline;
+		viewportDrawBatch.pipelineLayout = viewportPipelineLayout;
+
+		uint32_t uiDrawIdCount{ 0 }, textDrawIdCount{ 0 }, viewportDrawIdCount{ 0 };
+
+		for (uint32_t i = 0; i < elements.size(); ++i) {
+			auto renderCommand = FixedArray_get(renderCommands, i);
+			auto& uiElement = elements.at(i);
 
 
-		auto& rect = renderCommand->boundingRect;
-		auto transform = glm::mat4{ 1.0f };
+			auto& rect = renderCommand->boundingRect;
+			auto transform = glm::mat4{ 1.0f };
 
-		switch (renderCommand->commandType) {
-		case UI::UIRenderCommandType::RECTANGLE: {
-			transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
-			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-			transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
-			uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
-				.command = {
-					.indexCount = uiElement.indexCount,
-					.instanceCount = 1,
-					.firstIndex = uiElement.firstIndex,
-					.vertexOffset = uiElement.vertexOffset,
-					.firstInstance = uiDrawIdCount } });
-			uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-			uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
-			uiDrawIdCount++;
-			break;
+			switch (renderCommand->commandType) {
+			case UI::UIRenderCommandType::RECTANGLE: {
+				transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
+				// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+				transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
+				uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
+					.command = {
+						.indexCount = uiElement.indexCount,
+						.instanceCount = 1,
+						.firstIndex = uiElement.firstIndex,
+						.vertexOffset = uiElement.vertexOffset,
+						.firstInstance = uiDrawIdCount } });
+				uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
+				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
+				uiDrawIdCount++;
+				break;
+			}
+			case UI::UIRenderCommandType::VIEWPORT: {
+				transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
+				// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+				transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
+				viewportDrawCommands.push_back({ .drawId = viewportDrawIdCount,
+					.command = {
+						.indexCount = uiElement.indexCount,
+						.instanceCount = 1,
+						.firstIndex = uiElement.firstIndex,
+						.vertexOffset = uiElement.vertexOffset,
+						.firstInstance = viewportDrawIdCount } });
+				viewportDrawData.push_back({ .transform = transform, .textureIndex = renderCommand->textureId });
+				viewportDrawIdCount++;
+				break;
+			}
+			case UI::UIRenderCommandType::PANEL: {
+				transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
+				// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+				transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
+				uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
+					.command = {
+						.indexCount = uiElement.indexCount,
+						.instanceCount = 1,
+						.firstIndex = uiElement.firstIndex,
+						.vertexOffset = uiElement.vertexOffset,
+						.firstInstance = uiDrawIdCount } });
+				uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
+				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
+				uiDrawIdCount++;
+				break;
+			}
+			case UI::UIRenderCommandType::TITLEBAR: {
+				transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
+				// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+				transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
+				uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
+					.command = {
+						.indexCount = uiElement.indexCount,
+						.instanceCount = 1,
+						.firstIndex = uiElement.firstIndex,
+						.vertexOffset = uiElement.vertexOffset,
+						.firstInstance = uiDrawIdCount } });
+				uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
+				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
+				uiDrawIdCount++;
+				break;
+			}
+			case UI::UIRenderCommandType::DOCKSPACE: {
+				transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
+				// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+				transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
+				uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
+					.command = {
+						.indexCount = uiElement.indexCount,
+						.instanceCount = 1,
+						.firstIndex = uiElement.firstIndex,
+						.vertexOffset = uiElement.vertexOffset,
+						.firstInstance = uiDrawIdCount } });
+				uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
+				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
+				uiDrawIdCount++;
+				break;
+			}
+			case UI::UIRenderCommandType::CIRCLE: {
+				transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
+				// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+				transform = glm::scale(transform, glm::vec3(1.0f, 1.0f, 1.0f));
+				uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
+					.command = {
+						.indexCount = uiElement.indexCount,
+						.instanceCount = 1,
+						.firstIndex = uiElement.firstIndex,
+						.vertexOffset = uiElement.vertexOffset,
+						.firstInstance = uiDrawIdCount } });
+				uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
+				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
+				uiDrawIdCount++;
+				break;
+			}
+			case UI::UIRenderCommandType::TEXT: {
+				transform = glm::translate(transform, glm::vec3(rect.x, rect.y, 0.0f));
+				// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+				transform = glm::scale(transform, glm::vec3(1.0f, 1.0f, 1.0f));
+				textDrawCommands.push_back({ .drawId = textDrawIdCount,
+					.command = {
+						.indexCount = uiElement.indexCount,
+						.instanceCount = 1,
+						.firstIndex = uiElement.firstIndex,
+						.vertexOffset = uiElement.vertexOffset,
+						.firstInstance = textDrawIdCount } });
+
+				textTransformData.push_back(transform);
+				textDrawIdCount++;
+				break;
+			}
+			default: {
+				std::cout << "Command type not implemented, skipping.\n";
+				break;
+			}
+			}
 		}
-		case UI::UIRenderCommandType::VIEWPORT: {
-			transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
-			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-			transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
-			viewportDrawCommands.push_back({ .drawId = viewportDrawIdCount,
-				.command = {
-					.indexCount = uiElement.indexCount,
-					.instanceCount = 1,
-					.firstIndex = uiElement.firstIndex,
-					.vertexOffset = uiElement.vertexOffset,
-					.firstInstance = viewportDrawIdCount } });
-			viewportDrawData.push_back({ .transform = transform, .textureIndex = renderCommand->textureId });
-			viewportDrawIdCount++;
-			break;
-		}
-		case UI::UIRenderCommandType::PANEL: {
-			transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
-			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-			transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
-			uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
-				.command = {
-					.indexCount = uiElement.indexCount,
-					.instanceCount = 1,
-					.firstIndex = uiElement.firstIndex,
-					.vertexOffset = uiElement.vertexOffset,
-					.firstInstance = uiDrawIdCount } });
-			uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-			uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
-			uiDrawIdCount++;
-			break;
-		}
-		case UI::UIRenderCommandType::TITLEBAR: {
-			transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
-			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-			transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
-			uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
-				.command = {
-					.indexCount = uiElement.indexCount,
-					.instanceCount = 1,
-					.firstIndex = uiElement.firstIndex,
-					.vertexOffset = uiElement.vertexOffset,
-					.firstInstance = uiDrawIdCount } });
-			uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-			uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
-			uiDrawIdCount++;
-			break;
-		}
-		case UI::UIRenderCommandType::DOCKSPACE: {
-			transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
-			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-			transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
-			uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
-				.command = {
-					.indexCount = uiElement.indexCount,
-					.instanceCount = 1,
-					.firstIndex = uiElement.firstIndex,
-					.vertexOffset = uiElement.vertexOffset,
-					.firstInstance = uiDrawIdCount } });
-			uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-			uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
-			uiDrawIdCount++;
-			break;
-		}
-		case UI::UIRenderCommandType::CIRCLE: {
-			transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
-			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-			transform = glm::scale(transform, glm::vec3(1.0f, 1.0f, 1.0f));
-			uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
-				.command = {
-					.indexCount = uiElement.indexCount,
-					.instanceCount = 1,
-					.firstIndex = uiElement.firstIndex,
-					.vertexOffset = uiElement.vertexOffset,
-					.firstInstance = uiDrawIdCount } });
-			uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-			uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
-			uiDrawIdCount++;
-			break;
-		}
-		case UI::UIRenderCommandType::TEXT: {
-			transform = glm::translate(transform, glm::vec3(rect.x, rect.y, 0.0f));
-			// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-			transform = glm::scale(transform, glm::vec3(1.0f, 1.0f, 1.0f));
-			textDrawCommands.push_back({ .drawId = textDrawIdCount,
-				.command = {
-					.indexCount = uiElement.indexCount,
-					.instanceCount = 1,
-					.firstIndex = uiElement.firstIndex,
-					.vertexOffset = uiElement.vertexOffset,
-					.firstInstance = textDrawIdCount } });
 
-			textTransformData.push_back(transform);
-			textDrawIdCount++;
-			break;
-		}
-		default: {
-			std::cout << "Command type not implemented, skipping.\n";
-			break;
-		}
-		}
-	}
+		auto uiDrawCommandsBuffer = createBuffer("uiIndirectCommandBuffer", sizeof(UIIndirectCommand) * uiDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		void* drawData = uiDrawCommandsBuffer.allocation->GetMappedData();
+		memcpy(drawData, uiDrawCommands.data(), sizeof(UIIndirectCommand) * uiDrawCommands.size());
 
-	auto uiDrawCommandsBuffer = createBuffer("uiIndirectCommandBuffer", sizeof(UIIndirectCommand) * uiDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-	void* drawData = uiDrawCommandsBuffer.allocation->GetMappedData();
-	memcpy(drawData, uiDrawCommands.data(), sizeof(UIIndirectCommand) * uiDrawCommands.size());
+		auto uiDrawDataBuffer = createBuffer("uiDrawDataBuffer", sizeof(UIDrawData) * uiDrawData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		void* td = uiDrawDataBuffer.allocation->GetMappedData();
+		memcpy(td, uiDrawData.data(), sizeof(UIDrawData) * uiDrawData.size());
 
-	auto uiDrawDataBuffer = createBuffer("uiDrawDataBuffer", sizeof(UIDrawData) * uiDrawData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-	void* td = uiDrawDataBuffer.allocation->GetMappedData();
-	memcpy(td, uiDrawData.data(), sizeof(UIDrawData) * uiDrawData.size());
+		auto uiMaterialDataBuffer = createBuffer("uiMaterialDataBuffer", sizeof(UIMaterialData) * uiMaterialData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		void* md = uiMaterialDataBuffer.allocation->GetMappedData();
+		memcpy(md, uiMaterialData.data(), sizeof(UIMaterialData) * uiMaterialData.size());
 
-	auto uiMaterialDataBuffer = createBuffer("uiMaterialDataBuffer", sizeof(UIMaterialData) * uiMaterialData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-	void* md = uiMaterialDataBuffer.allocation->GetMappedData();
-	memcpy(md, uiMaterialData.data(), sizeof(UIMaterialData) * uiMaterialData.size());
-
-	uiDrawBatch.commands = {
-		.buffer = uiDrawCommandsBuffer,
-		.offset = offsetof(UIIndirectCommand, command),
-		.size = static_cast<uint32_t>(uiDrawCommands.size()),
-		.stride = sizeof(UIIndirectCommand)
-	};
-
-	std::vector<DrawBatchDescriptor> descriptors;
-	descriptors.emplace_back(0, uiUniformBuffer, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-	descriptors.emplace_back(1, uiDrawCommandsBuffer, sizeof(UIIndirectCommand) * uiDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-	descriptors.emplace_back(2, uiDrawDataBuffer, sizeof(UIDrawData) * uiDrawData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-	descriptors.emplace_back(3, uiMaterialDataBuffer, sizeof(UIMaterialData) * uiMaterialData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-
-	uiDrawBatch.descriptors = descriptors;
-	uiDrawBatch.descriptorSetLayout = uiDescriptorLayout;
-
-	getCurrentFrame().uiDrawBatches.push_back(uiDrawBatch);
-
-	// text
-	if (textDrawCommands.size() > 0) {
-		auto textDrawCommandsBuffer = createBuffer("textIndirectCommandBuffer", sizeof(UIIndirectCommand) * textDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		void* tdd = textDrawCommandsBuffer.allocation->GetMappedData();
-		memcpy(tdd, textDrawCommands.data(), sizeof(UIIndirectCommand) * textDrawCommands.size());
-
-		auto textTransformDataBuffer = createBuffer("textTransformBuffer", sizeof(glm::mat4) * textTransformData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		void* ttd = textTransformDataBuffer.allocation->GetMappedData();
-		memcpy(ttd, textTransformData.data(), sizeof(glm::mat4) * textTransformData.size());
-
-		textDrawBatch.commands = {
-			.buffer = textDrawCommandsBuffer,
+		uiDrawBatch.commands = {
+			.buffer = uiDrawCommandsBuffer,
 			.offset = offsetof(UIIndirectCommand, command),
-			.size = static_cast<uint32_t>(textDrawCommands.size()),
+			.size = static_cast<uint32_t>(uiDrawCommands.size()),
 			.stride = sizeof(UIIndirectCommand)
 		};
 
-		std::vector<DrawBatchDescriptor> textDescriptors;
-		textDescriptors.emplace_back(0, fontUniformBuffer, sizeof(FontUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-		textDescriptors.emplace_back(2, textDrawCommandsBuffer, sizeof(UIIndirectCommand) * textDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		textDescriptors.emplace_back(3, textTransformDataBuffer, sizeof(glm::mat4) * textTransformData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		std::vector<DrawBatchDescriptor> descriptors;
+		descriptors.emplace_back(0, uiUniformBuffer, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+		descriptors.emplace_back(1, uiDrawCommandsBuffer, sizeof(UIIndirectCommand) * uiDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		descriptors.emplace_back(2, uiDrawDataBuffer, sizeof(UIDrawData) * uiDrawData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		descriptors.emplace_back(3, uiMaterialDataBuffer, sizeof(UIMaterialData) * uiMaterialData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
-		std::vector<DrawBatchImageDescriptor> textImageDescriptors;
-		textImageDescriptors.emplace_back(1, sourceCodeFontTexture.imageView, sourceCodeFontTexture.sampler, sourceCodeFontTexture.imageLayout, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		uiDrawBatch.descriptors = descriptors;
+		uiDrawBatch.descriptorSetLayout = uiDescriptorLayout;
 
-		textDrawBatch.descriptors = textDescriptors;
-		textDrawBatch.imageDescriptors = textImageDescriptors;
-		textDrawBatch.descriptorSetLayout = fontDescriptorLayout;
+		windowBatch.drawBatches.push_back(uiDrawBatch);
 
-		getCurrentFrame().uiDrawBatches.push_back(textDrawBatch);
+		// text
+		if (textDrawCommands.size() > 0) {
+			auto textDrawCommandsBuffer = createBuffer("textIndirectCommandBuffer", sizeof(UIIndirectCommand) * textDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			void* tdd = textDrawCommandsBuffer.allocation->GetMappedData();
+			memcpy(tdd, textDrawCommands.data(), sizeof(UIIndirectCommand) * textDrawCommands.size());
 
-		getCurrentFrame().m_deletionQueue.push([this, textDrawCommandsBuffer, textTransformDataBuffer]() {
-			destroyBuffer(textDrawCommandsBuffer);
-			destroyBuffer(textTransformDataBuffer);
+			auto textTransformDataBuffer = createBuffer("textTransformBuffer", sizeof(glm::mat4) * textTransformData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			void* ttd = textTransformDataBuffer.allocation->GetMappedData();
+			memcpy(ttd, textTransformData.data(), sizeof(glm::mat4) * textTransformData.size());
+
+			textDrawBatch.commands = {
+				.buffer = textDrawCommandsBuffer,
+				.offset = offsetof(UIIndirectCommand, command),
+				.size = static_cast<uint32_t>(textDrawCommands.size()),
+				.stride = sizeof(UIIndirectCommand)
+			};
+
+			std::vector<DrawBatchDescriptor> textDescriptors;
+			textDescriptors.emplace_back(0, fontUniformBuffer, sizeof(FontUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+			textDescriptors.emplace_back(2, textDrawCommandsBuffer, sizeof(UIIndirectCommand) * textDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+			textDescriptors.emplace_back(3, textTransformDataBuffer, sizeof(glm::mat4) * textTransformData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+
+			std::vector<DrawBatchImageDescriptor> textImageDescriptors;
+			textImageDescriptors.emplace_back(1, sourceCodeFontTexture.imageView, sourceCodeFontTexture.sampler, sourceCodeFontTexture.imageLayout, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+
+			textDrawBatch.descriptors = textDescriptors;
+			textDrawBatch.imageDescriptors = textImageDescriptors;
+			textDrawBatch.descriptorSetLayout = fontDescriptorLayout;
+
+			windowBatch.drawBatches.push_back(textDrawBatch);
+
+			getCurrentFrame().m_deletionQueue.push([this, textDrawCommandsBuffer, textTransformDataBuffer]() {
+				destroyBuffer(textDrawCommandsBuffer);
+				destroyBuffer(textTransformDataBuffer);
+			});
+		}
+
+		// viewport
+		if (viewportDrawCommands.size() > 0) {
+			auto viewportDrawCommandsBuffer = createBuffer("viewportIndirectCommandBuffer", sizeof(UIIndirectCommand) * viewportDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			void* tdd = viewportDrawCommandsBuffer.allocation->GetMappedData();
+			memcpy(tdd, viewportDrawCommands.data(), sizeof(UIIndirectCommand) * viewportDrawCommands.size());
+
+			auto viewportTransformDataBuffer = createBuffer("viewportTransformBuffer", sizeof(ViewportDrawData) * viewportDrawData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			void* ttd = viewportTransformDataBuffer.allocation->GetMappedData();
+			memcpy(ttd, viewportDrawData.data(), sizeof(ViewportDrawData) * viewportDrawData.size());
+
+			viewportDrawBatch.commands = {
+				.buffer = viewportDrawCommandsBuffer,
+				.offset = offsetof(UIIndirectCommand, command),
+				.size = static_cast<uint32_t>(viewportDrawCommands.size()),
+				.stride = sizeof(UIIndirectCommand)
+			};
+
+			std::vector<DrawBatchDescriptor> viewportDescriptors;
+			viewportDescriptors.emplace_back(0, uiUniformBuffer, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+			viewportDescriptors.emplace_back(1, viewportDrawCommandsBuffer, sizeof(UIIndirectCommand) * viewportDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+			viewportDescriptors.emplace_back(2, viewportTransformDataBuffer, sizeof(ViewportDrawData) * viewportDrawData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+
+			viewportDrawBatch.descriptors = viewportDescriptors;
+			viewportDrawBatch.descriptorSetLayout = viewportDescriptorLayout;
+
+			windowBatch.drawBatches.push_back(viewportDrawBatch);
+
+			getCurrentFrame().m_deletionQueue.push([this, viewportDrawCommandsBuffer, viewportTransformDataBuffer]() {
+				destroyBuffer(viewportDrawCommandsBuffer);
+				destroyBuffer(viewportTransformDataBuffer);
+			});
+		}
+
+		getCurrentFrame().m_deletionQueue.push([this, uiDrawCommandsBuffer, uiDrawDataBuffer, uiMaterialDataBuffer, uiGeometryBuffers]() {
+			destroyBuffer(uiDrawCommandsBuffer);
+			destroyBuffer(uiDrawDataBuffer);
+			destroyBuffer(uiMaterialDataBuffer);
+			destroyBuffer(uiGeometryBuffers.vertexBuffer);
+			destroyBuffer(uiGeometryBuffers.indexBuffer);
 		});
+
+		getCurrentFrame().uiWindowBatches.push_back(windowBatch);
 	}
-
-	// viewport
-	if (viewportDrawCommands.size() > 0) {
-		auto viewportDrawCommandsBuffer = createBuffer("viewportIndirectCommandBuffer", sizeof(UIIndirectCommand) * viewportDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		void* tdd = viewportDrawCommandsBuffer.allocation->GetMappedData();
-		memcpy(tdd, viewportDrawCommands.data(), sizeof(UIIndirectCommand) * viewportDrawCommands.size());
-
-		auto viewportTransformDataBuffer = createBuffer("viewportTransformBuffer", sizeof(ViewportDrawData) * viewportDrawData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		void* ttd = viewportTransformDataBuffer.allocation->GetMappedData();
-		memcpy(ttd, viewportDrawData.data(), sizeof(ViewportDrawData) * viewportDrawData.size());
-
-		viewportDrawBatch.commands = {
-			.buffer = viewportDrawCommandsBuffer,
-			.offset = offsetof(UIIndirectCommand, command),
-			.size = static_cast<uint32_t>(viewportDrawCommands.size()),
-			.stride = sizeof(UIIndirectCommand)
-		};
-
-		std::vector<DrawBatchDescriptor> viewportDescriptors;
-		viewportDescriptors.emplace_back(0, uiUniformBuffer, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-		viewportDescriptors.emplace_back(1, viewportDrawCommandsBuffer, sizeof(UIIndirectCommand) * viewportDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		viewportDescriptors.emplace_back(2, viewportTransformDataBuffer, sizeof(ViewportDrawData) * viewportDrawData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-
-		viewportDrawBatch.descriptors = viewportDescriptors;
-		viewportDrawBatch.descriptorSetLayout = viewportDescriptorLayout;
-
-		getCurrentFrame().uiDrawBatches.push_back(viewportDrawBatch);
-
-		getCurrentFrame().m_deletionQueue.push([this, viewportDrawCommandsBuffer, viewportTransformDataBuffer]() {
-			destroyBuffer(viewportDrawCommandsBuffer);
-			destroyBuffer(viewportTransformDataBuffer);
-		});
-	}
-
-	getCurrentFrame().m_deletionQueue.push([this, uiDrawCommandsBuffer, uiDrawDataBuffer, uiMaterialDataBuffer, uiGeometryBuffers]() {
-		destroyBuffer(uiDrawCommandsBuffer);
-		destroyBuffer(uiDrawDataBuffer);
-		destroyBuffer(uiMaterialDataBuffer);
-		destroyBuffer(uiGeometryBuffers.vertexBuffer);
-		destroyBuffer(uiGeometryBuffers.indexBuffer);
-	});
 
 	auto genTime = std::chrono::duration<double, std::micro>(std::chrono::system_clock::now() - start).count();
 
@@ -947,16 +988,7 @@ void VulkanRenderer::draw() {
 	getCurrentFrame().m_deletionQueue.flush();
 	getCurrentFrame().m_frameDescriptors.clearPools(m_device);
 
-	/*
-	uint32_t swapchainImageIndex{};
-	VkResult e = vkAcquireNextImageKHR(m_device, mainSwapchain.handle, 1000000000, getCurrentFrame().m_swapchainSemaphore, nullptr, &swapchainImageIndex);
-	if (e == VK_ERROR_OUT_OF_DATE_KHR) {
-		m_rendererState->resizeRequested = true;
-		return;
-	}
-	*/
-
-	// Get next swapchain image for each window we render to
+	// Get next swapchain image for each swapchain/window we render to
 	auto currentFrameIndex = getCurrentFrameIndex();
 	for (auto& window : PrimalEngine::get().windows) {
 		auto e = vkAcquireNextImageKHR(m_device, window.swapchain.handle, 1000000000, window.swapchain.swapchainSemaphores.at(currentFrameIndex), nullptr, &window.nextImageIndex);
@@ -972,7 +1004,7 @@ void VulkanRenderer::draw() {
 	std::vector<Model*> modelsToRender{};
 	modelsToRender.push_back(&loadedModels["testModel"]);
 	buildDrawBatches(modelsToRender);
-	buildUIDrawBatches(getCurrentFrame().uiRenderCommands);
+	buildUIDrawBatches(getCurrentFrame().uiWindowBatchCommands);
 
 	auto commandBuffer = getCurrentFrame().m_commandBuffer;
 
@@ -1003,6 +1035,10 @@ void VulkanRenderer::draw() {
 	transitionImage(commandBuffer, m_sceneDrawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	transitionImage(commandBuffer, m_sceneDepthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
+	// TODO(piero): This should be automatic when we set a render target for a window. Since we want to write to it, we need to transition the image correctly.
+	transitionImage(commandBuffer, m_testWindowDrawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	transitionImage(commandBuffer, m_testWindowDepthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+
 	vkCmdResetQueryPool(commandBuffer, pipelineStatisticsPool, 0, 1);
 	vkCmdBeginQuery(commandBuffer, pipelineStatisticsPool, 0, 0);
 
@@ -1015,7 +1051,9 @@ void VulkanRenderer::draw() {
 	vkCmdEndQuery(commandBuffer, pipelineStatisticsPool, 0);
 
 	// transition the draw image and the swapchain image into their correct transfer layouts
+	// TODO(piero): this should be automatic when setting a render target for a window. After writing to it, we should transition the image correctly for transfer src optimal if we are gonna copy from it.
 	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	transitionImage(commandBuffer, m_testWindowDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
 	// transitionImage(commandBuffer, mainSwapchain.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	// get all swapchains ready to be copied to
@@ -1026,9 +1064,8 @@ void VulkanRenderer::draw() {
 	// execute a copy from the draw image into the swapchain
 	// copyImageToImage(commandBuffer, m_drawImage.image, mainSwapchain.images[swapchainImageIndex], m_drawExtent, mainSwapchain.extent);
 	for (auto& window : PrimalEngine::get().windows) {
-		auto sourceImage = m_drawImage.image;
-		VkExtent2D sourceImageSize { .width = m_drawImage.imageExtent.width, .height = m_drawImage.imageExtent.height };
-		copyImageToImage(commandBuffer, sourceImage, window.swapchain.images[window.nextImageIndex], sourceImageSize, window.swapchain.extent);
+		VkExtent2D sourceImageSize { .width = window.renderTarget->imageExtent.width, .height = window.renderTarget->imageExtent.height };
+		copyImageToImage(commandBuffer, window.renderTarget->image, window.swapchain.images[window.nextImageIndex], sourceImageSize, window.swapchain.extent);
 	}
 
 	// set swapchain image layout to Present so we can show it on the screen
@@ -1127,62 +1164,70 @@ void VulkanRenderer::drawUI(VkCommandBuffer commandBuffer) {
 		.color = { 0.0, 0.0, 0.0, 1.0 }
 	};
 
-	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(m_drawImage.imageView, &clearColor, VK_IMAGE_LAYOUT_GENERAL);
-	VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(m_depthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+	for (auto& windowBatch: getCurrentFrame().uiWindowBatches) {
+		auto window = windowBatch.window;
+		VkRenderingAttachmentInfo colorAttachment = attachmentInfo(window->renderTarget->imageView, &clearColor, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(window->depthTarget->imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
-	VkRenderingInfo renderInfo = renderingInfo({ .extent = m_drawExtent }, &colorAttachment, &depthAttachment);
-	vkCmdBeginRendering(commandBuffer, &renderInfo);
+		VkExtent2D extent{
+			.width = (uint32_t)window->swapchain.extent.width,
+			.height = (uint32_t)window->swapchain.extent.height,
+		};
+		std::cout << std::format("Create render info: {}x{}\n", extent.width, extent.height);
+		VkRenderingInfo renderInfo = renderingInfo({ .extent = extent }, &colorAttachment, &depthAttachment);
+		vkCmdBeginRendering(commandBuffer, &renderInfo);
 
-	VkViewport viewport = {};
-	viewport.x = 0;
-	viewport.y = 0;
-	viewport.width = static_cast<float>(m_drawExtent.width);
-	viewport.height = static_cast<float>(m_drawExtent.height);
-	viewport.minDepth = 0.f;
-	viewport.maxDepth = 1.f;
-	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+		VkViewport viewport = {};
+		viewport.x = 0;
+		viewport.y = 0;
+		viewport.width = static_cast<float>(extent.width);
+		viewport.height = static_cast<float>(extent.height);
+		viewport.minDepth = 0.f;
+		viewport.maxDepth = 1.f;
+		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
-	VkRect2D scissor = {};
-	scissor.offset.x = 0;
-	scissor.offset.y = 0;
-	scissor.extent.width = m_drawExtent.width;
-	scissor.extent.height = m_drawExtent.height;
-	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+		VkRect2D scissor = {};
+		scissor.offset.x = 0;
+		scissor.offset.y = 0;
+		scissor.extent.width = extent.width;
+		scissor.extent.height = extent.height;
+		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-	for (auto& drawBatch : getCurrentFrame().uiDrawBatches) {
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipeline);
+		for (auto& drawBatch : windowBatch.drawBatches) {
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipeline);
 
-		VkDescriptorSet drawBatchDescriptor = getCurrentFrame().m_frameDescriptors.allocate(m_device, drawBatch.descriptorSetLayout);
-		DescriptorWriter drawBatchDescriptorWriter;
-		for (auto& descriptor : drawBatch.descriptors) {
-			drawBatchDescriptorWriter.writeBuffer(descriptor.binding, descriptor.buffer.buffer, descriptor.size, descriptor.offset, descriptor.type);
+			VkDescriptorSet drawBatchDescriptor = getCurrentFrame().m_frameDescriptors.allocate(m_device, drawBatch.descriptorSetLayout);
+			DescriptorWriter drawBatchDescriptorWriter;
+			for (auto& descriptor : drawBatch.descriptors) {
+				drawBatchDescriptorWriter.writeBuffer(descriptor.binding, descriptor.buffer.buffer, descriptor.size, descriptor.offset, descriptor.type);
+			}
+			for (auto& descriptor : drawBatch.imageDescriptors) {
+				drawBatchDescriptorWriter.writeImage(descriptor.binding, descriptor.imageView, descriptor.sampler, descriptor.imageLayout, descriptor.type);
+			}
+			drawBatchDescriptorWriter.updateSet(m_device, drawBatchDescriptor);
+
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 0, 1, &drawBatchDescriptor, 0, nullptr);
+
+			// Bind global viewport texture descriptor set
+			// TODO(piero): The batch should include information about the global descriptor sets
+			if (drawBatch.type == DrawBatchType::VIEWPORT_BATCH) {
+				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 1, 1, &viewportTextureDescriptorSet, 0, nullptr);
+			}
+
+			// TODO: Should be included as part of a Batch
+			UIPushConstants uiPushConstants{};
+			uiPushConstants.vertexBuffer = drawBatch.meshBuffers.vertexBufferAddress;
+
+			vkCmdBindIndexBuffer(commandBuffer, drawBatch.meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdPushConstants(commandBuffer, drawBatch.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
+			vkCmdDrawIndexedIndirect(commandBuffer, drawBatch.commands.buffer.buffer, drawBatch.commands.offset, drawBatch.commands.size, drawBatch.commands.stride);
 		}
-		for (auto& descriptor : drawBatch.imageDescriptors) {
-			drawBatchDescriptorWriter.writeImage(descriptor.binding, descriptor.imageView, descriptor.sampler, descriptor.imageLayout, descriptor.type);
-		}
-		drawBatchDescriptorWriter.updateSet(m_device, drawBatchDescriptor);
 
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 0, 1, &drawBatchDescriptor, 0, nullptr);
-
-		// Bind global viewport texture descriptor set
-		// TODO(piero): The batch should include information about the global descriptor sets
-		if (drawBatch.type == DrawBatchType::VIEWPORT_BATCH) {
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 1, 1, &viewportTextureDescriptorSet, 0, nullptr);
-		}
-
-		// TODO: Should be included as part of a Batch
-		UIPushConstants uiPushConstants{};
-		uiPushConstants.vertexBuffer = drawBatch.meshBuffers.vertexBufferAddress;
-
-		vkCmdBindIndexBuffer(commandBuffer, drawBatch.meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdPushConstants(commandBuffer, drawBatch.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
-		vkCmdDrawIndexedIndirect(commandBuffer, drawBatch.commands.buffer.buffer, drawBatch.commands.offset, drawBatch.commands.size, drawBatch.commands.stride);
+		vkCmdEndRendering(commandBuffer);
 	}
 
 	auto uiEnd = std::chrono::system_clock::now();
 	auto uiElapsed = std::chrono::duration_cast<std::chrono::microseconds>(uiEnd - uiStart);
-
-	vkCmdEndRendering(commandBuffer);
 
 	m_rendererState->rendererStats.uiFrametimeAvg = m_rendererState->rendererStats.uiFrametimeAvg * 0.95 + (static_cast<float>(uiElapsed.count()) / 1000.0f) * 0.05;
 }
@@ -1192,7 +1237,7 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 
 	auto start = std::chrono::system_clock::now();
 
-	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(m_sceneDrawImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
+	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(m_sceneDrawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(m_sceneDepthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
 	VkRenderingInfo renderInfo = renderingInfo({ .extent = { .width = m_sceneDrawImage.imageExtent.width, .height = m_sceneDrawImage.imageExtent.height } }, &colorAttachment, &depthAttachment);
@@ -2055,9 +2100,18 @@ void VulkanRenderer::updateUIData() {
 
 	auto start = std::chrono::high_resolution_clock::now();
 
-	UI::beginWindow(m_rendererState->window);
 
-	UI::beginLayout();
+	// TODO(piero): Refactor this
+	m_rendererState->window->renderTarget = &m_drawImage;
+	m_rendererState->window->depthTarget = &m_depthImage;
+
+	auto testWindow = &PrimalEngine::get().windows[1];
+	testWindow->renderTarget = &m_testWindowDrawImage;
+	testWindow->depthTarget = &m_testWindowDepthImage;
+
+	UI::beginFrame();
+
+	UI::beginWindow(m_rendererState->window);
 
 	// Title bar
 	UI::openElement();
@@ -2150,16 +2204,53 @@ void VulkanRenderer::updateUIData() {
 		UI::closeDockSpaceElement();
 	UI::closeElement();
 
-	getCurrentFrame().uiRenderCommands = UI::endLayout();
+	UI::endWindow();
+
+	UI::beginWindow(testWindow);
+
+	UI::openElement();
+		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+			.height = { .sizingMode = UI::UISizingMode::FIT },
+			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+			.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
+
+		UI::pushDockSpace({ .width = { .size = 400.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.height = { .size = 800.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.layoutDirection = UI::UILayoutDirection::VERTICAL,
+			.backgroundColor = { 0.41960784313f, 0.41960784313f, 0.41960784313f, 1.0f },
+			.padding = 10.0f,
+			.childGap = 10.0f });
+
+				UI::sliderFloat3(&m_rendererState->mainCamera->position);
+				UI::sliderFloat4(&m_sceneData.sunlightDirection, 0.0f, 1.0f);
+
+				UI::openElement();
+					UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+						.height = { .sizingMode = UI::UISizingMode::FIT },
+						.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+						.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
+						.padding = 10.0f,
+						.childGap = 20.0f });
+
+						UI::pushCircleFilled(50.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
+						UI::pushCircle(50.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
+				UI::closeElement();
+
+				UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);
+		UI::closeDockSpaceElement();
+	UI::closeElement();
 
 	UI::endWindow();
+
+	// NOTE(piero): We are not making a deep copy of this data. We are still referencing the arena memory.
+	getCurrentFrame().uiWindowBatchCommands = UI::endFrame();
 
 	auto uiLayoutTime = std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - start).count();
 	m_rendererState->rendererStats.uiLayoutTimeAvg = m_rendererState->rendererStats.uiLayoutTimeAvg * 0.95 + uiLayoutTime * 0.05;
 }
 
-void VulkanRenderer::setPointerState(float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown) {
-	UI::setPointerState(mouseX, mouseY, relMouseX, relMouseY, isPointerDown);
+void VulkanRenderer::setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown) {
+	UI::setPointerState(windowId, mouseX, mouseY, relMouseX, relMouseY, isPointerDown);
 }
 
 uint32_t VulkanRenderer::registerImage(AllocatedImage* image) {

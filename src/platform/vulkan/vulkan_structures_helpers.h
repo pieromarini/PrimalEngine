@@ -170,7 +170,7 @@ inline VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo() {
 	return createInfo;
 }
 
-inline VkRenderingAttachmentInfo attachmentInfo(VkImageView view, VkClearValue* clear, VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/) {
+inline VkRenderingAttachmentInfo attachmentInfo(VkImageView view, VkClearValue* clear, VkImageLayout layout) {
 	VkRenderingAttachmentInfo colorAttachment{};
 	colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
 	colorAttachment.pNext = nullptr;
@@ -186,7 +186,7 @@ inline VkRenderingAttachmentInfo attachmentInfo(VkImageView view, VkClearValue* 
 	return colorAttachment;
 }
 
-inline VkRenderingAttachmentInfo depthAttachmentInfo(VkImageView view, VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/) {
+inline VkRenderingAttachmentInfo depthAttachmentInfo(VkImageView view, VkImageLayout layout) {
 	VkRenderingAttachmentInfo depthAttachment{};
 	depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
 	depthAttachment.pNext = nullptr;
