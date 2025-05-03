@@ -91,11 +91,13 @@ void pushCircle(float radius, uint32_t segments, float thickness, glm::vec4 colo
 void pushCircleFilled(float radius, uint32_t segments, glm::vec4 color);
 
 void pushPanel(UIElementOptions options);
+
+// TitleBar is used by dockspace
 void pushTitleBar(UIElementOptions options);
 void pushDockSpace(UIElementOptions options);
 
 // Interactions
 bool isHovered();
-bool isInsideBoundingBox(float x, float y, BoundingRect bb);
+bool isInsideBoundingRect(float x, float y, BoundingRect bb);
 
 }// namespace pm::UI

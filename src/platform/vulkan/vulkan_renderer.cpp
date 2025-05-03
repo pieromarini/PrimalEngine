@@ -1023,7 +1023,6 @@ void VulkanRenderer::draw() {
 
 	// transition our main draw image into general layout so we can write into it
 	// we will overwrite it all so we dont care about what was the older layout
-	// transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	transitionImage(commandBuffer, m_sceneDrawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
 	drawBackground(commandBuffer);
@@ -1055,22 +1054,16 @@ void VulkanRenderer::draw() {
 	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 	transitionImage(commandBuffer, m_testWindowDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
-	// transitionImage(commandBuffer, mainSwapchain.images[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	// get all swapchains ready to be copied to
+	// Copy render target to swapchain image
 	for (auto& window : PrimalEngine::get().windows) {
+		// get all swapchains ready to be copied to
 		transitionImage(commandBuffer, window.swapchain.images[window.nextImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	}
 
-	// execute a copy from the draw image into the swapchain
-	// copyImageToImage(commandBuffer, m_drawImage.image, mainSwapchain.images[swapchainImageIndex], m_drawExtent, mainSwapchain.extent);
-	for (auto& window : PrimalEngine::get().windows) {
+		// execute a copy from the draw image into the swapchain
 		VkExtent2D sourceImageSize { .width = window.renderTarget->imageExtent.width, .height = window.renderTarget->imageExtent.height };
 		copyImageToImage(commandBuffer, window.renderTarget->image, window.swapchain.images[window.nextImageIndex], sourceImageSize, window.swapchain.extent);
-	}
 
-	// set swapchain image layout to Present so we can show it on the screen
-	// transitionImage(commandBuffer, mainSwapchain.images[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-	for (auto& window : PrimalEngine::get().windows) {
+		// set swapchain image layout to Present so we can show it on the screen
 		transitionImage(commandBuffer, window.swapchain.images[window.nextImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 	}
 

@@ -123,7 +123,7 @@ void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMou
 	for (int32_t i = (int)layoutElements.length - 1; i >= 0; --i) {
 		auto element = FixedArray_get(layoutElements, i);
 		auto bb = BoundingRect{ .x = element->x, .y = element->y, .width = element->width.size, .height = element->height.size };
-		if (isInsideBoundingBox(mouseX, mouseY, bb)) {
+		if (isInsideBoundingRect(mouseX, mouseY, bb)) {
 			// Don't process hover callbacks if we are dragging the mouse around.
 			// TODO(piero): Do we actually want this? Maybe make it an option.
 			if (element->onHoverCallback && !context->interactionState.isDragging) {
@@ -605,6 +605,7 @@ void pushBox(UIElementOptions options) {
 }
 
 void getTextDimensions(PrimalString& text, FontAsset* font, float& width, float& height) {
+	// TODO(piero): font size config
 	auto [w, h] = generateTextFromFont(text, 16.0f, font);
 	width = w;
 	height = h;
@@ -637,8 +638,8 @@ bool isHovered() {
 	return false;
 }
 
-bool isInsideBoundingBox(float x, float y, BoundingRect bb) {
-	return x >= bb.x && x <= bb.x + bb.width && y >= bb.y && y <= bb.y + bb.height;
+bool isInsideBoundingRect(float x, float y, BoundingRect rect) {
+	return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
 }
 
 void pushCircle(float radius, uint32_t segments, float thickness, glm::vec4 color) {
