@@ -85,15 +85,15 @@ inline VkCommandBufferSubmitInfo commandBufferSubmitInfo(VkCommandBuffer cmd) {
 	return info;
 }
 
-inline VkSubmitInfo2 submitInfo(VkCommandBufferSubmitInfo* cmd, VkSemaphoreSubmitInfo* signalSemaphoreInfo, std::vector<VkSemaphoreSubmitInfo>* waitSemaphoreInfos) {
+inline VkSubmitInfo2 submitInfo(VkCommandBufferSubmitInfo* cmd, std::vector<VkSemaphoreSubmitInfo>* signalSemaphoreInfo, std::vector<VkSemaphoreSubmitInfo>* waitSemaphoreInfos) {
 	VkSubmitInfo2 info = {};
 
 	info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
 	info.waitSemaphoreInfoCount = waitSemaphoreInfos ? waitSemaphoreInfos->size() : 0;
 	info.pWaitSemaphoreInfos = waitSemaphoreInfos ?  waitSemaphoreInfos->data() : nullptr;
 
-	info.signalSemaphoreInfoCount = signalSemaphoreInfo == nullptr ? 0 : 1;
-	info.pSignalSemaphoreInfos = signalSemaphoreInfo;
+	info.signalSemaphoreInfoCount = signalSemaphoreInfo ? signalSemaphoreInfo->size() : 0;
+	info.pSignalSemaphoreInfos = signalSemaphoreInfo ? signalSemaphoreInfo->data() : nullptr;
 
 	info.commandBufferInfoCount = 1;
 	info.pCommandBufferInfos = cmd;

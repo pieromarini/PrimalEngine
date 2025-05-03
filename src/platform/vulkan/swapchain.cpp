@@ -26,6 +26,9 @@ PrimalSwapchain createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice
 	for (auto& semaphore: newSwapchain.swapchainSemaphores) {
 		VK_CHECK(vkCreateSemaphore(device, &semaphoreCreate, nullptr, &semaphore));
 	}
+	for (auto& semaphore: newSwapchain.renderSemaphores) {
+		VK_CHECK(vkCreateSemaphore(device, &semaphoreCreate, nullptr, &semaphore));
+	}
 
 	return newSwapchain;
 }

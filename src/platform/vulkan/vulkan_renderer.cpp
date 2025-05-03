@@ -419,12 +419,8 @@ void VulkanRenderer::initSyncStructures() {
 	for (auto& frame : m_frames) {
 		VK_CHECK(vkCreateFence(m_device, &fenceCreate, nullptr, &frame.m_renderFence));
 
-		VK_CHECK(vkCreateSemaphore(m_device, &semaphoreCreate, nullptr, &frame.m_swapchainSemaphore));
-		VK_CHECK(vkCreateSemaphore(m_device, &semaphoreCreate, nullptr, &frame.m_renderSemaphore));
 		m_mainDeletionQueue.push([frame, this] {
 			vkDestroyFence(m_device, frame.m_renderFence, nullptr);
-			vkDestroySemaphore(m_device, frame.m_swapchainSemaphore, nullptr);
-			vkDestroySemaphore(m_device, frame.m_renderSemaphore, nullptr);
 		});
 	}
 }
@@ -1073,19 +1069,21 @@ void VulkanRenderer::draw() {
 
 	// prepare the submission to the queue.
 	// we want to wait on the m_presentSemaphore, as that semaphore is signaled when the swapchain is ready
-	// we will signal the m_renderSemaphore, to signal that rendering has finished
+	// we will signal the renderSemaphore, to signal that rendering has finished
 	auto cmdinfo = commandBufferSubmitInfo(commandBuffer);
-
-	auto signalInfo = semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, getCurrentFrame().m_renderSemaphore);
 
 	std::vector<VkSemaphoreSubmitInfo> waitInfos{};
 	waitInfos.reserve(PrimalEngine::get().windows.size());
 
+	std::vector<VkSemaphoreSubmitInfo> signalInfos{};
+	signalInfos.reserve(PrimalEngine::get().windows.size());
+
 	for (auto& window : PrimalEngine::get().windows) {
+		signalInfos.push_back(semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, window.swapchain.renderSemaphores.at(currentFrameIndex)));
 		waitInfos.push_back(semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, window.swapchain.swapchainSemaphores.at(currentFrameIndex)));
 	}
 
-	VkSubmitInfo2 submit = submitInfo(&cmdinfo, &signalInfo, &waitInfos);
+	VkSubmitInfo2 submit = submitInfo(&cmdinfo, &signalInfos, &waitInfos);
 
 	// submit command buffer to the queue and execute it.
 	// m_renderFence will now block until the graphic commands finish execution
@@ -1101,21 +1099,24 @@ void VulkanRenderer::draw() {
 
 	// prepare present
 	// this will put the image we just rendered to into the visible window.
-	// we want to wait on the _renderSemaphore for that,
+	// we want to wait on the renderSemaphore for that,
 	// as its necessary that drawing commands have finished before the image is displayed to the user
-	VkPresentInfoKHR presentInfo = {};
-	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	presentInfo.pSwapchains = swapchains.data();
-	presentInfo.swapchainCount = swapchains.size();
 
-	presentInfo.pWaitSemaphores = &getCurrentFrame().m_renderSemaphore;
-	presentInfo.waitSemaphoreCount = 1;
+	for (auto& window : PrimalEngine::get().windows) {
+		VkPresentInfoKHR presentInfo = {};
+		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+		presentInfo.pSwapchains = &window.swapchain.handle;
+		presentInfo.swapchainCount = 1;
 
-	presentInfo.pImageIndices = imageIndices.data();
+		presentInfo.pWaitSemaphores = &window.swapchain.renderSemaphores.at(currentFrameIndex);
+		presentInfo.waitSemaphoreCount = 1;
 
-	VkResult presentResult = vkQueuePresentKHR(m_graphicsQueue, &presentInfo);
-	if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
-		m_rendererState->window->resizeRequested = true;
+		presentInfo.pImageIndices = &window.nextImageIndex;
+
+		VkResult presentResult = vkQueuePresentKHR(m_graphicsQueue, &presentInfo);
+		if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
+			m_rendererState->window->resizeRequested = true;
+		}
 	}
 
 	// TODO: we are waiting on fences twice inside this function. Need to rework this logic.

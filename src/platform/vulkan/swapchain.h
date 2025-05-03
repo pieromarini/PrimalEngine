@@ -13,6 +13,7 @@ struct PrimalSwapchain {
 	std::vector<VkImageView> imageViews;
 
 	std::array<VkSemaphore, 2> swapchainSemaphores{};
+	std::array<VkSemaphore, 2> renderSemaphores{};
 };
 
 
