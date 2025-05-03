@@ -1068,7 +1068,7 @@ void VulkanRenderer::draw() {
 	VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
 	// prepare the submission to the queue.
-	// we want to wait on the m_presentSemaphore, as that semaphore is signaled when the swapchain is ready
+	// we want to wait on the swapchainSemaphore, as that semaphore is signaled when the swapchain is ready
 	// we will signal the renderSemaphore, to signal that rendering has finished
 	auto cmdinfo = commandBufferSubmitInfo(commandBuffer);
 
@@ -1079,8 +1079,8 @@ void VulkanRenderer::draw() {
 	signalInfos.reserve(PrimalEngine::get().windows.size());
 
 	for (auto& window : PrimalEngine::get().windows) {
-		signalInfos.push_back(semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, window.swapchain.renderSemaphores.at(currentFrameIndex)));
 		waitInfos.push_back(semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, window.swapchain.swapchainSemaphores.at(currentFrameIndex)));
+		signalInfos.push_back(semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, window.swapchain.renderSemaphores.at(currentFrameIndex)));
 	}
 
 	VkSubmitInfo2 submit = submitInfo(&cmdinfo, &signalInfos, &waitInfos);
@@ -1089,19 +1089,9 @@ void VulkanRenderer::draw() {
 	// m_renderFence will now block until the graphic commands finish execution
 	VK_CHECK(vkQueueSubmit2(m_graphicsQueue, 1, &submit, getCurrentFrame().m_renderFence));
 
-	// TODO(piero): remove this. temp.
-	std::vector<VkSwapchainKHR> swapchains;
-	std::vector<uint32_t> imageIndices;
-	for (auto& window : PrimalEngine::get().windows) {
-		swapchains.push_back(window.swapchain.handle);
-		imageIndices.push_back(window.nextImageIndex);
-	}
-
-	// prepare present
-	// this will put the image we just rendered to into the visible window.
+	// prepare presenting all visible windows
 	// we want to wait on the renderSemaphore for that,
 	// as its necessary that drawing commands have finished before the image is displayed to the user
-
 	for (auto& window : PrimalEngine::get().windows) {
 		VkPresentInfoKHR presentInfo = {};
 		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
