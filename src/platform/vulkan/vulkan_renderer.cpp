@@ -1105,7 +1105,7 @@ void VulkanRenderer::draw() {
 
 		VkResult presentResult = vkQueuePresentKHR(m_graphicsQueue, &presentInfo);
 		if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
-			m_rendererState->window->resizeRequested = true;
+			window.resizeRequested = true;
 		}
 	}
 

@@ -29,7 +29,7 @@ private:
 	VulkanRenderer m_renderer;
 	VulkanRendererConfig m_rendererState{};
 
-	bool windowRelativeMouseMode{ true };
+	bool windowRelativeMouseMode{ false };
 
 	PrimalWindow* mainWindow;
   std::shared_ptr<Camera> m_mainCamera;

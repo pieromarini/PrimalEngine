@@ -162,8 +162,6 @@ void PrimalEngine::run() {
 				handleWindowEvent(e);
 			}
 
-			m_stopRendering = mainWindow->isMinimized;
-
 			if (e.type == SDL_EVENT_KEY_UP) {
 				if (e.key.key == SDLK_ESCAPE) {
 					windowRelativeMouseMode = !windowRelativeMouseMode;
@@ -176,9 +174,12 @@ void PrimalEngine::run() {
 
 			m_mainCamera->processSDLEvent(e);
 
-			if (!windowRelativeMouseMode) {
-				m_renderer.setPointerState(e.window.windowID, e.motion.x, e.motion.y, e.motion.xrel, e.motion.yrel, e.motion.state & SDL_BUTTON_LMASK);
+			if (e.type == SDL_EVENT_MOUSE_MOTION && !windowRelativeMouseMode) {
+				m_renderer.setPointerState(e.motion.windowID, e.motion.x, e.motion.y, e.motion.xrel, e.motion.yrel, e.motion.state & SDL_BUTTON_LMASK);
 			}
+
+			m_stopRendering = mainWindow->isMinimized;
+
 		}
 
 		// do not draw if we are minimized
