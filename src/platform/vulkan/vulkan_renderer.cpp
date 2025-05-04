@@ -18,11 +18,9 @@
 #include "memory/data_structures/fixed_array.h"
 #include "swapchain.h"
 #include "ui/ui_types.h"
-#include "ui/viewport.h"
 #include "ui/widgets.h"
 #include <algorithm>
 #include <chrono>
-#include <iterator>
 #include <ratio>
 #include <vulkan/vulkan_core.h>
 
