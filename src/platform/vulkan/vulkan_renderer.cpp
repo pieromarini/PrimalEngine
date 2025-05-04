@@ -1,16 +1,11 @@
+#include "platform/vulkan/buffers.h"
 #include "platform/window.h"
 #include "primal.h"
 #include "ui/ui_manager.h"
-#define VMA_LEAK_LOG_FORMAT(format, ...) \
-	do {                                   \
-		printf((format), __VA_ARGS__);       \
-		printf("\n");                        \
-	} while (false)
-
-#define VMA_IMPLEMENTATION
-#include <vk_mem_alloc.h>
 
 #include "vk_types.h"
+
+#include <vk_mem_alloc.h>
 
 #include "assets/font_loader.h"
 #include "config.h"
@@ -43,77 +38,77 @@
 
 namespace pm {
 
-void VulkanRenderer::init() {
-	initVulkan();
+void rendererInit(VulkanRendererContext* context) {
+	initVulkan(context);
 }
 
-void VulkanRenderer::setup() {
-	initMemory();
+void rendererSetup(VulkanRendererContext* context) {
+	rendererInitMemory(context);
 
-	initRenderTargets();
-	initCommands();
-	initSyncStructures();
-	initDescriptors();
-	initBindlessTextureDescriptor(bindlessPool, bindlessTexturesSetLayout, bindlessTexturesDescriptorSet);
-	initBindlessTextureDescriptor(viewportDescriptorPool, viewportTextureSetLayout, viewportTextureDescriptorSet);
-	initPipelines();
-	initQueryPools();
+	initRenderTargets(context);
+	initCommands(context);
+	initSyncStructures(context);
+	initDescriptors(context);
+	initBindlessTextureDescriptor(context, context->bindlessPool, context->bindlessTexturesSetLayout, context->bindlessTexturesDescriptorSet);
+	initBindlessTextureDescriptor(context, context->viewportDescriptorPool, context->viewportTextureSetLayout, context->viewportTextureDescriptorSet);
+	initPipelines(context);
+	initQueryPools(context);
 
 
-	loadTestScene();
+	loadTestScene(context);
 }
 
-void VulkanRenderer::initMemory() {
-	for (auto& frame : m_frames) {
+void rendererInitMemory(VulkanRendererContext* context) {
+	for (auto& frame : context->frames) {
 		frame.perFrameArena = MemoryArena_create(MEGABYTE(256));
 	}
 }
 
-void VulkanRenderer::loadTestScene() {
-	initDefaultData();
-	initFontData();
-	initUI();
+void loadTestScene(VulkanRendererContext* context) {
+	rendererInitDefaultData(context);
+	initFontData(context);
+	initUI(context);
 
 	// const std::string modelPath = { "res/models/bistro/bistro_ktx2.glb" };
 	const std::string modelPath = { "res/models/structure.glb" };
 
 	auto start = std::chrono::system_clock::now();
-	auto loadedGLTF = loadGLTF(this, modelPath);
+	auto loadedGLTF = loadGLTF(context, modelPath);
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 	std::cout << std::format("Loaded in {:.4f} seconds\n", static_cast<float>(elapsed.count()) / 1000.0f);
 
 	// some default lighting parameters
-	m_sceneData.ambientColor = glm::vec4(.4f);
-	m_sceneData.sunlightColor = glm::vec4(1.f, 1.0, 1.0f, 1.0f);
-	m_sceneData.sunlightDirection = glm::vec4(0.2f, 1.0f, 0.5, 1.f);
+	context->sceneData.ambientColor = glm::vec4(.4f);
+	context->sceneData.sunlightColor = glm::vec4(1.f, 1.0, 1.0f, 1.0f);
+	context->sceneData.sunlightDirection = glm::vec4(0.2f, 1.0f, 0.5, 1.f);
 
 	assert(loadedGLTF.has_value());
 
-	loadedModels["testModel"] = loadedGLTF.value();
+	context->loadedModels["testModel"] = loadedGLTF.value();
 }
 
-void VulkanRenderer::setInitialState(VulkanRendererConfig* state) {
-	m_rendererState = state;
+void rendererSetInitialState(VulkanRendererContext* context, VulkanRendererConfig* state) {
+	context->rendererState = state;
 }
 
-void VulkanRenderer::initQueryPools() {
-	timestampPool = createQueryPool(m_device, 128, VK_QUERY_TYPE_TIMESTAMP);
-	assert(timestampPool);
+void initQueryPools(VulkanRendererContext* context) {
+	context->timestampPool = createQueryPool(context->device, 128, VK_QUERY_TYPE_TIMESTAMP);
+	assert(context->timestampPool);
 
-	pipelineStatisticsPool = createQueryPool(m_device, 1, VK_QUERY_TYPE_PIPELINE_STATISTICS);
-	assert(pipelineStatisticsPool);
+	context->pipelineStatisticsPool = createQueryPool(context->device, 1, VK_QUERY_TYPE_PIPELINE_STATISTICS);
+	assert(context->pipelineStatisticsPool);
 
-	m_mainDeletionQueue.push([&]() {
-		vkDestroyQueryPool(m_device, timestampPool, nullptr);
-		vkDestroyQueryPool(m_device, pipelineStatisticsPool, nullptr);
+	context->m_mainDeletionQueue.push([context] {
+		vkDestroyQueryPool(context->device, context->timestampPool, nullptr);
+		vkDestroyQueryPool(context->device, context->pipelineStatisticsPool, nullptr);
 	});
 }
 
-void VulkanRenderer::resizeSwapchain(PrimalWindow* window) {
-	vkDeviceWaitIdle(m_device);
+void resizeSwapchain(VulkanRendererContext* context, PrimalWindow* window) {
+	vkDeviceWaitIdle(context->device);
 
-	destroySwapchain(m_device, &window->swapchain);
+	destroySwapchain(context->device, &window->swapchain);
 
 	int newWidth{}, newHeight{};
 	getWindowSize(window, &newWidth, &newHeight);
@@ -121,9 +116,9 @@ void VulkanRenderer::resizeSwapchain(PrimalWindow* window) {
 	int displayWidth{}, displayHeight{};
 	getWindowSizeInPixels(window, &displayWidth, &displayHeight);
 
-	m_renderScale = static_cast<float>(displayWidth) / static_cast<float>(newWidth);
+	context->renderScale = static_cast<float>(displayWidth) / static_cast<float>(newWidth);
 
-	window->swapchain = createSwapchain(m_device, m_chosenGPU, window->surface, newWidth, newHeight, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
+	window->swapchain = createSwapchain(context->device, context->physicalDevice, window->surface, newWidth, newHeight, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
 
 	// recreate window render target
 	VkImageUsageFlags drawImageUsages{};
@@ -142,13 +137,16 @@ void VulkanRenderer::resizeSwapchain(PrimalWindow* window) {
 	};
 
 	// NOTE(piero): I just want to keep the same VMA allocation names for tracking purposes
-	auto nRT = window->renderTarget.allocation->GetName();
-	auto nDT = window->depthTarget.allocation->GetName();
+	VmaAllocationInfo info{};
+	vmaGetAllocationInfo(context->vmaAllocator, window->renderTarget.allocation, &info);
+	auto nRT = info.pName;
+	vmaGetAllocationInfo(context->vmaAllocator, window->depthTarget.allocation, &info);
+	auto nDT = info.pName;
 
-	destroyImage(window->renderTarget);
-	destroyImage(window->depthTarget);
-	window->renderTarget = createImage(nRT, newWindowExtent, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
-	window->depthTarget = createImage(nDT, newWindowExtent, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
+	destroyImage(context->device, context->vmaAllocator, window->renderTarget);
+	destroyImage(context->device, context->vmaAllocator, window->depthTarget);
+	window->renderTarget = createImage(nRT, newWindowExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
+	window->depthTarget = createImage(nDT, newWindowExtent, context->device, context->vmaAllocator, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
 
 	UI::onResizeCallback(static_cast<float>(window->width), static_cast<float>(window->height));
 
@@ -158,16 +156,16 @@ void VulkanRenderer::resizeSwapchain(PrimalWindow* window) {
 	window->resizeRequested = false;
 }
 
-void VulkanRenderer::initDefaultData() {
+void rendererInitDefaultData(VulkanRendererContext* context) {
 	// 3 default textures, white, grey, black. 1 pixel each
 	uint32_t white = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
-	whiteImage = createImage("whiteImage", (void*)&white, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	context->whiteImage = createImage("whiteImage", (void*)&white, VkExtent3D{ 1, 1, 1 }, context, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
 	uint32_t grey = glm::packUnorm4x8(glm::vec4(0.66f, 0.66f, 0.66f, 1));
-	greyImage = createImage("greyImage", (void*)&grey, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	context->greyImage = createImage("greyImage", (void*)&grey, VkExtent3D{ 1, 1, 1 }, context, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
 	uint32_t black = glm::packUnorm4x8(glm::vec4(0, 0, 0, 0));
-	blackImage = createImage("blackImage", (void*)&black, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	context->blackImage = createImage("blackImage", (void*)&black, VkExtent3D{ 1, 1, 1 }, context, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
 	// checkerboard image
 	uint32_t magenta = glm::packUnorm4x8(glm::vec4(1, 0, 1, 1));
@@ -177,51 +175,51 @@ void VulkanRenderer::initDefaultData() {
 			pixels.at(y * 16 + x) = ((x % 2) ^ (y % 2)) ? magenta : black;
 		}
 	}
-	errorCheckerboardImage = createImage("errorCheckedboardImage", pixels.data(), VkExtent3D{ 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	context->errorCheckerboardImage = createImage("errorCheckedboardImage", pixels.data(), VkExtent3D{ 16, 16, 1 }, context, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
 	VkSamplerCreateInfo sampl = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 
 	sampl.magFilter = VK_FILTER_NEAREST;
 	sampl.minFilter = VK_FILTER_NEAREST;
 
-	vkCreateSampler(m_device, &sampl, nullptr, &defaultSamplerNearest);
+	vkCreateSampler(context->device, &sampl, nullptr, &context->defaultSamplerNearest);
 
 	sampl.magFilter = VK_FILTER_LINEAR;
 	sampl.minFilter = VK_FILTER_LINEAR;
-	vkCreateSampler(m_device, &sampl, nullptr, &defaultSamplerLinear);
+	vkCreateSampler(context->device, &sampl, nullptr, &context->defaultSamplerLinear);
 
 	// Create global material data buffer
 	// TODO: Using fixed size for now.
-	globalMaterialDataBuffer = createBuffer("globalMaterialDataBuffer", sizeof(MaterialData) * 1001, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-	auto sceneMaterialData = static_cast<MaterialData*>(globalMaterialDataBuffer.info.pMappedData);
+	context->globalMaterialDataBuffer = createBuffer("globalMaterialDataBuffer", sizeof(MaterialData) * 1001, context->vmaAllocator, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	auto sceneMaterialData = static_cast<MaterialData*>(context->globalMaterialDataBuffer.info.pMappedData);
 
 	// Init default material
 	auto defaultMaterial = Material_getDefaultMaterial();
 	sceneMaterialData[0] = defaultMaterial.materialData;
 
 	// Write default texture to descriptor set and set Material pass and pipeline
-	writeBindlessTextureToGlobalDescriptor(bindlessTexturesDescriptorSet, 0, errorCheckerboardImage, defaultSamplerLinear, 0);
+	writeBindlessTextureToGlobalDescriptor(context, context->bindlessTexturesDescriptorSet, 0, context->errorCheckerboardImage, context->defaultSamplerLinear, 0);
 	defaultMaterial.passType = MaterialPass::MainColor;
-	defaultMaterial.pipeline = &opaquePipeline;
+	defaultMaterial.pipeline = &context->opaquePipeline;
 
 	// Write default material to cache
-	MaterialCache_add(m_materialCache, 0, defaultMaterial);
+	MaterialCache_add(context->materialCache, 0, defaultMaterial);
 
 	// Write default viewport texture
-	writeBindlessTextureToGlobalDescriptor(viewportTextureDescriptorSet, 0, errorCheckerboardImage, defaultSamplerLinear, 0);
+	writeBindlessTextureToGlobalDescriptor(context, context->viewportTextureDescriptorSet, 0, context->errorCheckerboardImage, context->defaultSamplerLinear, 0);
 
-	m_mainDeletionQueue.push([&]() {
-		vkDestroySampler(m_device, defaultSamplerNearest, nullptr);
-		vkDestroySampler(m_device, defaultSamplerLinear, nullptr);
+	context->m_mainDeletionQueue.push([context] {
+		vkDestroySampler(context->device, context->defaultSamplerNearest, nullptr);
+		vkDestroySampler(context->device, context->defaultSamplerLinear, nullptr);
 
-		destroyImage(whiteImage);
-		destroyImage(greyImage);
-		destroyImage(blackImage);
-		destroyImage(errorCheckerboardImage);
+		destroyImage(context->device, context->vmaAllocator, context->whiteImage);
+		destroyImage(context->device, context->vmaAllocator, context->greyImage);
+		destroyImage(context->device, context->vmaAllocator, context->blackImage);
+		destroyImage(context->device, context->vmaAllocator, context->errorCheckerboardImage);
 	});
 }
 
-void VulkanRenderer::initVulkan() {
+void initVulkan(VulkanRendererContext* context) {
 	vkb::InstanceBuilder builder;
 
 	// make the vulkan instance, with basic debug features
@@ -234,8 +232,8 @@ void VulkanRenderer::initVulkan() {
 	auto vkbInstance = inst.value();
 
 	// grab the instance
-	m_instance = vkbInstance.instance;
-	m_debug_messenger = vkbInstance.debug_messenger;
+	context->instance = vkbInstance.instance;
+	context->debugMessenger = vkbInstance.debug_messenger;
 
 	// vulkan 1.3 features
 	VkPhysicalDeviceVulkan13Features features13{};
@@ -287,15 +285,15 @@ void VulkanRenderer::initVulkan() {
 	vkb::Device vkbDevice = deviceBuilder.build().value();
 
 	// Get the VkDevice handle used in the rest of a vulkan application
-	m_device = vkbDevice.device;
-	m_chosenGPU = physicalDevice.physical_device;
+	context->device = vkbDevice.device;
+	context->physicalDevice = physicalDevice.physical_device;
 
 	// Make sure we can timestamp and get update period
 	assert(physicalDevice.properties.limits.timestampComputeAndGraphics);
-	physicalDeviceTimestampPeriod = physicalDevice.properties.limits.timestampPeriod;
+	context->physicalDeviceTimestampPeriod = physicalDevice.properties.limits.timestampPeriod;
 
-	anisotropyEnabled = physicalDevice.features.samplerAnisotropy;
-	maxSamplerAnisotropy = physicalDevice.properties.limits.maxSamplerAnisotropy;
+	context->anisotropyEnabled = physicalDevice.features.samplerAnisotropy;
+	context->maxSamplerAnisotropy = physicalDevice.properties.limits.maxSamplerAnisotropy;
 
 	// Check supported native GPU formats for KTX2
 	auto formatSupported = [&](VkFormat format) {
@@ -307,49 +305,49 @@ void VulkanRenderer::initVulkan() {
 	// Block compression
 	if (physicalDevice.features.textureCompressionBC) {
 		if (formatSupported(VK_FORMAT_BC7_SRGB_BLOCK)) {
-			availableTargetFormats.emplace_back(KTX_TTF_BC7_RGBA);
-			availableTargetFormatsNames.emplace_back("KTX_TTF_BC7_RGBA");
+			context->availableTargetFormats.emplace_back(KTX_TTF_BC7_RGBA);
+			context->availableTargetFormatsNames.emplace_back("KTX_TTF_BC7_RGBA");
 		}
 
 		if (formatSupported(VK_FORMAT_BC3_SRGB_BLOCK)) {
-			availableTargetFormats.emplace_back(KTX_TTF_BC3_RGBA);
-			availableTargetFormatsNames.emplace_back("KTX_TTF_BC3_RGBA");
+			context->availableTargetFormats.emplace_back(KTX_TTF_BC3_RGBA);
+			context->availableTargetFormatsNames.emplace_back("KTX_TTF_BC3_RGBA");
 		}
 	}
 
 	// Adaptive scalable texture compression
 	if (physicalDevice.features.textureCompressionASTC_LDR) {
 		if (formatSupported(VK_FORMAT_ASTC_4x4_SRGB_BLOCK)) {
-			availableTargetFormats.emplace_back(KTX_TTF_ASTC_4x4_RGBA);
-			availableTargetFormatsNames.emplace_back("KTX_TTF_ASTC_4x4_RGBA");
+			context->availableTargetFormats.emplace_back(KTX_TTF_ASTC_4x4_RGBA);
+			context->availableTargetFormatsNames.emplace_back("KTX_TTF_ASTC_4x4_RGBA");
 		}
 	}
 
 	// Ericsson texture compression
 	if (physicalDevice.features.textureCompressionETC2) {
 		if (formatSupported(VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK)) {
-			availableTargetFormats.emplace_back(KTX_TTF_ETC2_RGBA);
-			availableTargetFormatsNames.emplace_back("KTX_TTF_ETC2_RGBA");
+			context->availableTargetFormats.emplace_back(KTX_TTF_ETC2_RGBA);
+			context->availableTargetFormatsNames.emplace_back("KTX_TTF_ETC2_RGBA");
 		}
 	}
 
 	// Get graphics queue with VKBootstrap
-	m_graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
-	m_graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+	context->graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
+	context->graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
 
 	// Create allocator using VMA
 	VmaAllocatorCreateInfo allocatorInfo = {};
-	allocatorInfo.physicalDevice = m_chosenGPU;
-	allocatorInfo.device = m_device;
-	allocatorInfo.instance = m_instance;
+	allocatorInfo.physicalDevice = context->physicalDevice;
+	allocatorInfo.device = context->device;
+	allocatorInfo.instance = context->instance;
 	allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
-	vmaCreateAllocator(&allocatorInfo, &m_allocator);
+	vmaCreateAllocator(&allocatorInfo, &context->vmaAllocator);
 }
 
-void VulkanRenderer::initRenderTargets() {
+void initRenderTargets(VulkanRendererContext* context) {
 	VkExtent3D drawImageExtent {
-		static_cast<uint32_t>(m_rendererState->window->width),
-		static_cast<uint32_t>(m_rendererState->window->height),
+		static_cast<uint32_t>(context->rendererState->window->width),
+		static_cast<uint32_t>(context->rendererState->window->height),
 		1
 	};
 
@@ -376,98 +374,98 @@ void VulkanRenderer::initRenderTargets() {
 
 	// Create render targets
 	// TODO(piero): Refactor this. Create a system that does this automatically based on a config file?
-	m_rendererState->window->renderTarget = createImage("drawImage", drawImageExtent, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
-	testWindow->renderTarget = createImage("scene window drawImage", testWindowExtent, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
+	context->rendererState->window->renderTarget = createImage("drawImage", drawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
+	testWindow->renderTarget = createImage("scene window drawImage", testWindowExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
 
-	m_sceneDrawImage = createImage("scene drawImage", sceneDrawImageExtent, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
+	context->m_sceneDrawImage = createImage("scene drawImage", sceneDrawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
 
 	VkImageUsageFlags depthImageUsages{};
 	depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-	m_rendererState->window->depthTarget = createImage("depthImage", drawImageExtent, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
-	testWindow->depthTarget = createImage("scene window depthImage", testWindowExtent, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
+	context->rendererState->window->depthTarget = createImage("depthImage", drawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
+	testWindow->depthTarget = createImage("scene window depthImage", testWindowExtent, context->device, context->vmaAllocator, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
 
-	m_sceneDepthImage = createImage("scene depthImage", sceneDrawImageExtent, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
+	context->m_sceneDepthImage = createImage("scene depthImage", sceneDrawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
 
-	m_mainDeletionQueue.push([&]() {
-		vkDestroyImageView(m_device, m_sceneDrawImage.imageView, nullptr);
-		vmaDestroyImage(m_allocator, m_sceneDrawImage.image, m_sceneDrawImage.allocation);
+	context->m_mainDeletionQueue.push([context] {
+		vkDestroyImageView(context->device, context->m_sceneDrawImage.imageView, nullptr);
+		vmaDestroyImage(context->vmaAllocator, context->m_sceneDrawImage.image, context->m_sceneDrawImage.allocation);
 
-		vkDestroyImageView(m_device, m_sceneDepthImage.imageView, nullptr);
-		vmaDestroyImage(m_allocator, m_sceneDepthImage.image, m_sceneDepthImage.allocation);
+		vkDestroyImageView(context->device, context->m_sceneDepthImage.imageView, nullptr);
+		vmaDestroyImage(context->vmaAllocator, context->m_sceneDepthImage.image, context->m_sceneDepthImage.allocation);
 	});
 }
 
-void VulkanRenderer::initCommands() {
-	auto commandPoolInfo = commandPoolCreateInfo(m_graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+void initCommands(VulkanRendererContext* context) {
+	auto commandPoolInfo = commandPoolCreateInfo(context->graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
-	for (auto& frame : m_frames) {
-		VK_CHECK(vkCreateCommandPool(m_device, &commandPoolInfo, nullptr, &frame.m_commandPool));
+	for (auto& frame : context->frames) {
+		VK_CHECK(vkCreateCommandPool(context->device, &commandPoolInfo, nullptr, &frame.m_commandPool));
 		auto commandAllocateInfo = commandBufferAllocateInfo(frame.m_commandPool, 1);
-		VK_CHECK(vkAllocateCommandBuffers(m_device, &commandAllocateInfo, &frame.m_commandBuffer));
-		m_mainDeletionQueue.push([frame, this]() { vkDestroyCommandPool(m_device, frame.m_commandPool, nullptr); });
+		VK_CHECK(vkAllocateCommandBuffers(context->device, &commandAllocateInfo, &frame.m_commandBuffer));
+		context->m_mainDeletionQueue.push([frame, context]() { vkDestroyCommandPool(context->device, frame.m_commandPool, nullptr); });
 	}
 
 	// Create command buffer for immediate submits
-	VK_CHECK(vkCreateCommandPool(m_device, &commandPoolInfo, nullptr, &m_immCommandPool));
-	VkCommandBufferAllocateInfo cmdAllocInfo = commandBufferAllocateInfo(m_immCommandPool, 1);
-	VK_CHECK(vkAllocateCommandBuffers(m_device, &cmdAllocInfo, &m_immCommandBuffer));
-	m_mainDeletionQueue.push([this]() { vkDestroyCommandPool(m_device, m_immCommandPool, nullptr); });
+	VK_CHECK(vkCreateCommandPool(context->device, &commandPoolInfo, nullptr, &context->m_immCommandPool));
+	VkCommandBufferAllocateInfo cmdAllocInfo = commandBufferAllocateInfo(context->m_immCommandPool, 1);
+	VK_CHECK(vkAllocateCommandBuffers(context->device, &cmdAllocInfo, &context->m_immCommandBuffer));
+	context->m_mainDeletionQueue.push([context]() { vkDestroyCommandPool(context->device, context->m_immCommandPool, nullptr); });
 }
 
-void VulkanRenderer::initSyncStructures() {
+void initSyncStructures(VulkanRendererContext* context) {
 	auto fenceCreate = fenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
 
 
-	VK_CHECK(vkCreateFence(m_device, &fenceCreate, nullptr, &m_immFence));
-	m_mainDeletionQueue.push([this]() { vkDestroyFence(m_device, m_immFence, nullptr); });
+	VK_CHECK(vkCreateFence(context->device, &fenceCreate, nullptr, &context->m_immFence));
+	context->m_mainDeletionQueue.push([context]() { vkDestroyFence(context->device, context->m_immFence, nullptr); });
 
 	// one fence to control when the gpu has finished rendering the frame,
 	// we want the fence to start signaled so we can wait on it on the first frame
-	for (auto& frame : m_frames) {
-		VK_CHECK(vkCreateFence(m_device, &fenceCreate, nullptr, &frame.m_renderFence));
+	for (auto& frame : context->frames) {
+		VK_CHECK(vkCreateFence(context->device, &fenceCreate, nullptr, &frame.m_renderFence));
 
-		m_mainDeletionQueue.push([frame, this] {
-			vkDestroyFence(m_device, frame.m_renderFence, nullptr);
+		context->m_mainDeletionQueue.push([frame, context] {
+			vkDestroyFence(context->device, frame.m_renderFence, nullptr);
 		});
 	}
 }
 
-void VulkanRenderer::cleanup() {
-	vkDeviceWaitIdle(m_device);
+void rendererCleanup(VulkanRendererContext* context) {
+	vkDeviceWaitIdle(context->device);
 
-	for (auto& [name, model] : loadedModels) {
-		cleanupModel(this, model);
+	for (auto& [name, model] : context->loadedModels) {
+		cleanupModel(context, model);
 	}
 
-	loadedModels.clear();
+	context->loadedModels.clear();
 
-	for (auto& frame : m_frames) {
+	for (auto& frame : context->frames) {
 		frame.m_deletionQueue.flush();
 	}
 
-	destroyImage(sourceCodeFontTexture);
+	destroyImage(context->device, context->vmaAllocator, context->sourceCodeFontTexture);
 
-	destroyFontSDF(sourceCodeFont);
-	// destroyFontSDF(arialFont);
+	destroyFontSDF(context->sourceCodeFont);
+	// destroyFontSDF(context->arialFont);
 
-	vkDestroyPipelineCache(m_device, m_pipelineCache, nullptr);
+	vkDestroyPipelineCache(context->device, context->m_pipelineCache, nullptr);
 
-	m_mainDeletionQueue.flush();
+	context->m_mainDeletionQueue.flush();
 
 	UI::cleanupRenderContext();
 
 	for (auto& window : PrimalEngine::get().windows) {
-		destroyPrimalWindow(&window, m_allocator, m_device, m_instance, nullptr);
+		destroyPrimalWindow(&window, context->vmaAllocator, context->device, context->instance, nullptr);
 	}
 
-	vmaDestroyAllocator(m_allocator);
-	vkDestroyDevice(m_device, nullptr);
-	vkb::destroy_debug_utils_messenger(m_instance, m_debug_messenger);
-	vkDestroyInstance(m_instance, nullptr);
+	vmaDestroyAllocator(context->vmaAllocator);
+	vkDestroyDevice(context->device, nullptr);
+	vkb::destroy_debug_utils_messenger(context->instance, context->debugMessenger);
+	vkDestroyInstance(context->instance, nullptr);
 }
 
-std::vector<UI::UIElement> VulkanRenderer::buildUIGeometry(FixedArray<UI::UIRenderCommand>& renderCommands, std::vector<UI::UIVertex>& vertices, std::vector<uint32_t>& indices) {
+std::vector<UI::UIElement> buildUIGeometry(VulkanRendererContext* context, FixedArray<UI::UIRenderCommand>& renderCommands, std::vector<UI::UIVertex>& vertices, std::vector<uint32_t>& indices) {
 	std::vector<UI::UIElement> elements;
 
 	for (uint32_t i = 0; i < renderCommands.length; ++i) {
@@ -502,7 +500,7 @@ std::vector<UI::UIElement> VulkanRenderer::buildUIGeometry(FixedArray<UI::UIRend
 			break;
 		}
 		case pm::UI::UIRenderCommandType::TEXT: {
-			elements.push_back(UI::text(renderCommand->text, 16.0f, &sourceCodeFont, &vertices, &indices));
+			elements.push_back(UI::text(renderCommand->text, 16.0f, &context->sourceCodeFont, &vertices, &indices));
 			break;
 		}
 		}
@@ -511,10 +509,10 @@ std::vector<UI::UIElement> VulkanRenderer::buildUIGeometry(FixedArray<UI::UIRend
 	return elements;
 }
 
-void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIWindowBatchCommands>& windowBatches) {
+void buildUIDrawBatches(VulkanRendererContext* context, FixedArray<UI::UIWindowBatchCommands>& windowBatches) {
 	auto start = std::chrono::system_clock::now();
 
-	getCurrentFrame().uiWindowBatches.clear();
+	getCurrentFrame(context).uiWindowBatches.clear();
 
 	for (uint32_t i = 0; i < windowBatches.length; ++i) {
 
@@ -543,24 +541,24 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIWindowBatchCommands>& w
 		std::vector<UI::UIVertex> vertices;
 		std::vector<uint32_t> indices;
 
-		auto elements = buildUIGeometry(renderCommands, vertices, indices);
+		auto elements = buildUIGeometry(context, renderCommands, vertices, indices);
 
 		// We use one Vertex/index buffer for all UI geometry in each window
-		auto uiGeometryBuffers = uploadMesh<UI::UIVertex>(indices, vertices, std::format("uiMeshBuffers-{}", batch->window->id));
+		auto uiGeometryBuffers = uploadMesh(context, indices, vertices, std::format("uiMeshBuffers-{}", batch->window->id));
 
 		std::vector<UIMaterialData> uiMaterialData;
 
 		uiDrawBatch.meshBuffers = uiGeometryBuffers;
-		uiDrawBatch.pipeline = uiPipeline;
-		uiDrawBatch.pipelineLayout = uiPipelineLayout;
+		uiDrawBatch.pipeline = context->uiPipeline;
+		uiDrawBatch.pipelineLayout = context->uiPipelineLayout;
 
 		textDrawBatch.meshBuffers = uiGeometryBuffers;
-		textDrawBatch.pipeline = fontPipeline;
-		textDrawBatch.pipelineLayout = fontPipelineLayout;
+		textDrawBatch.pipeline = context->fontPipeline;
+		textDrawBatch.pipelineLayout = context->fontPipelineLayout;
 
 		viewportDrawBatch.meshBuffers = uiGeometryBuffers;
-		viewportDrawBatch.pipeline = viewportPipeline;
-		viewportDrawBatch.pipelineLayout = viewportPipelineLayout;
+		viewportDrawBatch.pipeline = context->viewportPipeline;
+		viewportDrawBatch.pipelineLayout = context->viewportPipelineLayout;
 
 		uint32_t uiDrawIdCount{ 0 }, textDrawIdCount{ 0 }, viewportDrawIdCount{ 0 };
 
@@ -690,17 +688,14 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIWindowBatchCommands>& w
 			}
 		}
 
-		auto uiDrawCommandsBuffer = createBuffer("uiIndirectCommandBuffer", sizeof(UIIndirectCommand) * uiDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		void* drawData = uiDrawCommandsBuffer.allocation->GetMappedData();
-		memcpy(drawData, uiDrawCommands.data(), sizeof(UIIndirectCommand) * uiDrawCommands.size());
+		auto uiDrawCommandsBuffer = createBuffer("uiIndirectCommandBuffer", sizeof(UIIndirectCommand) * uiDrawCommands.size(), context->vmaAllocator,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		memcpy(uiDrawCommandsBuffer.info.pMappedData, uiDrawCommands.data(), sizeof(UIIndirectCommand) * uiDrawCommands.size());
 
-		auto uiDrawDataBuffer = createBuffer("uiDrawDataBuffer", sizeof(UIDrawData) * uiDrawData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		void* td = uiDrawDataBuffer.allocation->GetMappedData();
-		memcpy(td, uiDrawData.data(), sizeof(UIDrawData) * uiDrawData.size());
+		auto uiDrawDataBuffer = createBuffer("uiDrawDataBuffer", sizeof(UIDrawData) * uiDrawData.size(), context->vmaAllocator,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		memcpy(uiDrawDataBuffer.info.pMappedData, uiDrawData.data(), sizeof(UIDrawData) * uiDrawData.size());
 
-		auto uiMaterialDataBuffer = createBuffer("uiMaterialDataBuffer", sizeof(UIMaterialData) * uiMaterialData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		void* md = uiMaterialDataBuffer.allocation->GetMappedData();
-		memcpy(md, uiMaterialData.data(), sizeof(UIMaterialData) * uiMaterialData.size());
+		auto uiMaterialDataBuffer = createBuffer("uiMaterialDataBuffer", sizeof(UIMaterialData) * uiMaterialData.size(), context->vmaAllocator,VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		memcpy(uiMaterialDataBuffer.info.pMappedData, uiMaterialData.data(), sizeof(UIMaterialData) * uiMaterialData.size());
 
 		uiDrawBatch.commands = {
 			.buffer = uiDrawCommandsBuffer,
@@ -716,19 +711,17 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIWindowBatchCommands>& w
 		descriptors.emplace_back(3, uiMaterialDataBuffer, sizeof(UIMaterialData) * uiMaterialData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
 		uiDrawBatch.descriptors = descriptors;
-		uiDrawBatch.descriptorSetLayout = uiDescriptorLayout;
+		uiDrawBatch.descriptorSetLayout = context->uiDescriptorLayout;
 
 		windowBatch.drawBatches.push_back(uiDrawBatch);
 
 		// text
 		if (textDrawCommands.size() > 0) {
-			auto textDrawCommandsBuffer = createBuffer("textIndirectCommandBuffer", sizeof(UIIndirectCommand) * textDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			void* tdd = textDrawCommandsBuffer.allocation->GetMappedData();
-			memcpy(tdd, textDrawCommands.data(), sizeof(UIIndirectCommand) * textDrawCommands.size());
+			auto textDrawCommandsBuffer = createBuffer("textIndirectCommandBuffer", sizeof(UIIndirectCommand) * textDrawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			memcpy(textDrawCommandsBuffer.info.pMappedData, textDrawCommands.data(), sizeof(UIIndirectCommand) * textDrawCommands.size());
 
-			auto textTransformDataBuffer = createBuffer("textTransformBuffer", sizeof(glm::mat4) * textTransformData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			void* ttd = textTransformDataBuffer.allocation->GetMappedData();
-			memcpy(ttd, textTransformData.data(), sizeof(glm::mat4) * textTransformData.size());
+			auto textTransformDataBuffer = createBuffer("textTransformBuffer", sizeof(glm::mat4) * textTransformData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			memcpy(textTransformDataBuffer.info.pMappedData, textTransformData.data(), sizeof(glm::mat4) * textTransformData.size());
 
 			textDrawBatch.commands = {
 				.buffer = textDrawCommandsBuffer,
@@ -743,29 +736,27 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIWindowBatchCommands>& w
 			textDescriptors.emplace_back(3, textTransformDataBuffer, sizeof(glm::mat4) * textTransformData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
 			std::vector<DrawBatchImageDescriptor> textImageDescriptors;
-			textImageDescriptors.emplace_back(1, sourceCodeFontTexture.imageView, sourceCodeFontTexture.sampler, sourceCodeFontTexture.imageLayout, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+			textImageDescriptors.emplace_back(1, context->sourceCodeFontTexture.imageView, context->sourceCodeFontTexture.sampler, context->sourceCodeFontTexture.imageLayout, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
 			textDrawBatch.descriptors = textDescriptors;
 			textDrawBatch.imageDescriptors = textImageDescriptors;
-			textDrawBatch.descriptorSetLayout = fontDescriptorLayout;
+			textDrawBatch.descriptorSetLayout = context->fontDescriptorLayout;
 
 			windowBatch.drawBatches.push_back(textDrawBatch);
 
-			getCurrentFrame().m_deletionQueue.push([this, textDrawCommandsBuffer, textTransformDataBuffer]() {
-				destroyBuffer(textDrawCommandsBuffer);
-				destroyBuffer(textTransformDataBuffer);
+			getCurrentFrame(context).m_deletionQueue.push([context, textDrawCommandsBuffer, textTransformDataBuffer]() {
+				destroyBuffer(context->vmaAllocator, textDrawCommandsBuffer);
+				destroyBuffer(context->vmaAllocator, textTransformDataBuffer);
 			});
 		}
 
 		// viewport
 		if (viewportDrawCommands.size() > 0) {
-			auto viewportDrawCommandsBuffer = createBuffer("viewportIndirectCommandBuffer", sizeof(UIIndirectCommand) * viewportDrawCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			void* tdd = viewportDrawCommandsBuffer.allocation->GetMappedData();
-			memcpy(tdd, viewportDrawCommands.data(), sizeof(UIIndirectCommand) * viewportDrawCommands.size());
+			auto viewportDrawCommandsBuffer = createBuffer("viewportIndirectCommandBuffer", sizeof(UIIndirectCommand) * viewportDrawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			memcpy(viewportDrawCommandsBuffer.info.pMappedData, viewportDrawCommands.data(), sizeof(UIIndirectCommand) * viewportDrawCommands.size());
 
-			auto viewportTransformDataBuffer = createBuffer("viewportTransformBuffer", sizeof(ViewportDrawData) * viewportDrawData.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			void* ttd = viewportTransformDataBuffer.allocation->GetMappedData();
-			memcpy(ttd, viewportDrawData.data(), sizeof(ViewportDrawData) * viewportDrawData.size());
+			auto viewportTransformDataBuffer = createBuffer("viewportTransformBuffer", sizeof(ViewportDrawData) * viewportDrawData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			memcpy(viewportTransformDataBuffer.info.pMappedData, viewportDrawData.data(), sizeof(ViewportDrawData) * viewportDrawData.size());
 
 			viewportDrawBatch.commands = {
 				.buffer = viewportDrawCommandsBuffer,
@@ -780,35 +771,34 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIWindowBatchCommands>& w
 			viewportDescriptors.emplace_back(2, viewportTransformDataBuffer, sizeof(ViewportDrawData) * viewportDrawData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
 			viewportDrawBatch.descriptors = viewportDescriptors;
-			viewportDrawBatch.descriptorSetLayout = viewportDescriptorLayout;
+			viewportDrawBatch.descriptorSetLayout = context->viewportDescriptorLayout;
 
 			windowBatch.drawBatches.push_back(viewportDrawBatch);
 
-			getCurrentFrame().m_deletionQueue.push([this, viewportDrawCommandsBuffer, viewportTransformDataBuffer]() {
-				destroyBuffer(viewportDrawCommandsBuffer);
-				destroyBuffer(viewportTransformDataBuffer);
+			getCurrentFrame(context).m_deletionQueue.push([context, viewportDrawCommandsBuffer, viewportTransformDataBuffer]() {
+				destroyBuffer(context->vmaAllocator, viewportDrawCommandsBuffer);
+				destroyBuffer(context->vmaAllocator, viewportTransformDataBuffer);
 			});
 		}
 
-		getCurrentFrame().m_deletionQueue.push([this, uiDrawCommandsBuffer, uiDrawDataBuffer, uiMaterialDataBuffer, uiGeometryBuffers]() {
-			destroyBuffer(uiDrawCommandsBuffer);
-			destroyBuffer(uiDrawDataBuffer);
-			destroyBuffer(uiMaterialDataBuffer);
-			destroyBuffer(uiGeometryBuffers.vertexBuffer);
-			destroyBuffer(uiGeometryBuffers.indexBuffer);
+		getCurrentFrame(context).m_deletionQueue.push([context, uiDrawCommandsBuffer, uiDrawDataBuffer, uiMaterialDataBuffer, uiGeometryBuffers]() {
+			destroyBuffer(context->vmaAllocator, uiDrawCommandsBuffer);
+			destroyBuffer(context->vmaAllocator, uiDrawDataBuffer);
+			destroyBuffer(context->vmaAllocator, uiMaterialDataBuffer);
+			destroyBuffer(context->vmaAllocator, uiGeometryBuffers.vertexBuffer);
+			destroyBuffer(context->vmaAllocator, uiGeometryBuffers.indexBuffer);
 		});
 
-		getCurrentFrame().uiWindowBatches.push_back(windowBatch);
+		getCurrentFrame(context).uiWindowBatches.push_back(windowBatch);
 	}
 
 	auto genTime = std::chrono::duration<double, std::micro>(std::chrono::system_clock::now() - start).count();
 
-	m_rendererState->rendererStats.uiDrawBatchGenerationTimeAvg = m_rendererState->rendererStats.uiDrawBatchGenerationTimeAvg * 0.95 + genTime * 0.05;
+	context->rendererState->rendererStats.uiDrawBatchGenerationTimeAvg = context->rendererState->rendererStats.uiDrawBatchGenerationTimeAvg * 0.95 + genTime * 0.05;
 }
 
-void VulkanRenderer::buildDrawBatches(std::vector<Model*>& models) {
-	getCurrentFrame().drawBatches.clear();
-
+void buildDrawBatches(VulkanRendererContext* context, std::vector<Model*>& models) {
+	getCurrentFrame(context).drawBatches.clear();
 
 	// TODO: Right now each model uses their own vertex and index buffers
 	// 			 This might not be efficient since we can, very likely,
@@ -825,18 +815,18 @@ void VulkanRenderer::buildDrawBatches(std::vector<Model*>& models) {
 		auto startGen = std::chrono::high_resolution_clock::now();
 		DrawBatch opaque{ .type = DrawBatchType::MESH_BATCH };
 		opaque.meshBuffers = model->modelBuffers;
-		opaque.pipeline = opaquePipeline.pipeline;
-		opaque.pipelineLayout = opaquePipeline.layout;
+		opaque.pipeline = context->opaquePipeline.pipeline;
+		opaque.pipelineLayout = context->opaquePipeline.layout;
 
 		DrawBatch transparent{ .type = DrawBatchType::MESH_BATCH };
 		transparent.meshBuffers = model->modelBuffers;
-		transparent.pipeline = transparentPipeline.pipeline;
-		transparent.pipelineLayout = transparentPipeline.layout;
+		transparent.pipeline = context->transparentPipeline.pipeline;
+		transparent.pipelineLayout = context->transparentPipeline.layout;
 
 		DrawBatch doubleSided{ .type = DrawBatchType::MESH_BATCH };
 		doubleSided.meshBuffers = model->modelBuffers;
-		doubleSided.pipeline = doubleSidedPipeline.pipeline;
-		doubleSided.pipelineLayout = doubleSidedPipeline.layout;
+		doubleSided.pipeline = context->doubleSidedPipeline.pipeline;
+		doubleSided.pipelineLayout = context->doubleSidedPipeline.layout;
 
 		auto opaqueCommands = std::vector<MeshIndirectCommand>();
 		auto doubleSidedCommands = std::vector<MeshIndirectCommand>();
@@ -885,29 +875,25 @@ void VulkanRenderer::buildDrawBatches(std::vector<Model*>& models) {
 			}
 		}
 
-		auto meshIndirectDoubleSidedCommandsBuffer = createBuffer("meshDrawCommandsBuffer DoubleSided", sizeof(MeshIndirectCommand) * doubleSidedCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		void* uiData1 = meshIndirectDoubleSidedCommandsBuffer.allocation->GetMappedData();
-		memcpy(uiData1, doubleSidedCommands.data(), sizeof(MeshIndirectCommand) * doubleSidedCommands.size());
+		auto meshIndirectDoubleSidedCommandsBuffer = createBuffer("meshDrawCommandsBuffer DoubleSided", sizeof(MeshIndirectCommand) * doubleSidedCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		memcpy(meshIndirectDoubleSidedCommandsBuffer.info.pMappedData, doubleSidedCommands.data(), sizeof(MeshIndirectCommand) * doubleSidedCommands.size());
 
-		auto meshIndirectTransparentCommandsBuffer = createBuffer("meshDrawCommandsBuffer Transparent", sizeof(MeshIndirectCommand) * transparentCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		void* uiData2 = meshIndirectTransparentCommandsBuffer.allocation->GetMappedData();
-		memcpy(uiData2, transparentCommands.data(), sizeof(MeshIndirectCommand) * transparentCommands.size());
+		auto meshIndirectTransparentCommandsBuffer = createBuffer("meshDrawCommandsBuffer Transparent", sizeof(MeshIndirectCommand) * transparentCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		memcpy(meshIndirectTransparentCommandsBuffer.info.pMappedData, transparentCommands.data(), sizeof(MeshIndirectCommand) * transparentCommands.size());
 
-		auto doubleSidedDrawsDataBuffer = createBuffer("meshTransformBuffer Opaque", sizeof(MeshDraw) * doubleSidedDraws.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		void* mtd1 = doubleSidedDrawsDataBuffer.allocation->GetMappedData();
-		memcpy(mtd1, doubleSidedDraws.data(), sizeof(MeshDraw) * doubleSidedDraws.size());
+		auto doubleSidedDrawsDataBuffer = createBuffer("meshTransformBuffer Opaque", sizeof(MeshDraw) * doubleSidedDraws.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		memcpy(doubleSidedDrawsDataBuffer.info.pMappedData, doubleSidedDraws.data(), sizeof(MeshDraw) * doubleSidedDraws.size());
 
-		auto transparentDrawsDataBuffer = createBuffer("meshTransformBuffer Transparent", sizeof(MeshDraw) * transparentDraws.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		void* mtd2 = transparentDrawsDataBuffer.allocation->GetMappedData();
-		memcpy(mtd2, transparentDraws.data(), sizeof(MeshDraw) * transparentDraws.size());
+		auto transparentDrawsDataBuffer = createBuffer("meshTransformBuffer Transparent", sizeof(MeshDraw) * transparentDraws.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		memcpy(transparentDrawsDataBuffer.info.pMappedData, transparentDraws.data(), sizeof(MeshDraw) * transparentDraws.size());
 
 		std::vector<DrawBatchDescriptor> doubleSidedDescriptors;
-		doubleSidedDescriptors.emplace_back(0, globalMaterialDataBuffer, sizeof(MaterialData) * MaterialCache_size(m_materialCache), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		doubleSidedDescriptors.emplace_back(0, context->globalMaterialDataBuffer, sizeof(MaterialData) * MaterialCache_size(context->materialCache), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 		doubleSidedDescriptors.emplace_back(1, meshIndirectDoubleSidedCommandsBuffer, sizeof(MeshIndirectCommand) * doubleSidedCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 		doubleSidedDescriptors.emplace_back(2, doubleSidedDrawsDataBuffer, sizeof(MeshDraw) * doubleSidedDraws.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
 		std::vector<DrawBatchDescriptor> transparentDescriptors;
-		transparentDescriptors.emplace_back(0, globalMaterialDataBuffer, sizeof(MaterialData) * MaterialCache_size(m_materialCache), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		transparentDescriptors.emplace_back(0, context->globalMaterialDataBuffer, sizeof(MaterialData) * MaterialCache_size(context->materialCache), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 		transparentDescriptors.emplace_back(1, meshIndirectTransparentCommandsBuffer, sizeof(MeshIndirectCommand) * transparentCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 		transparentDescriptors.emplace_back(2, transparentDrawsDataBuffer, sizeof(MeshDraw) * transparentDraws.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
@@ -918,7 +904,7 @@ void VulkanRenderer::buildDrawBatches(std::vector<Model*>& models) {
 			.stride = sizeof(MeshIndirectCommand)
 		};
 		transparent.descriptors = transparentDescriptors;
-		transparent.descriptorSetLayout = m_modelDrawDescriptorLayout;
+		transparent.descriptorSetLayout = context->m_modelDrawDescriptorLayout;
 
 		doubleSided.commands = {
 			.buffer = meshIndirectDoubleSidedCommandsBuffer,
@@ -927,19 +913,17 @@ void VulkanRenderer::buildDrawBatches(std::vector<Model*>& models) {
 			.stride = sizeof(MeshIndirectCommand)
 		};
 		doubleSided.descriptors = doubleSidedDescriptors;
-		doubleSided.descriptorSetLayout = m_modelDrawDescriptorLayout;
+		doubleSided.descriptorSetLayout = context->m_modelDrawDescriptorLayout;
 
 		if (opaqueCommands.size() > 0) {
-			auto meshIndirectOpaqueCommandsBuffer = createBuffer("meshDrawCommandsBuffer Opaque", sizeof(MeshIndirectCommand) * opaqueCommands.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			void* uiData = meshIndirectOpaqueCommandsBuffer.allocation->GetMappedData();
-			memcpy(uiData, opaqueCommands.data(), sizeof(MeshIndirectCommand) * opaqueCommands.size());
+			auto meshIndirectOpaqueCommandsBuffer = createBuffer("meshDrawCommandsBuffer Opaque", sizeof(MeshIndirectCommand) * opaqueCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			memcpy(meshIndirectOpaqueCommandsBuffer.info.pMappedData, opaqueCommands.data(), sizeof(MeshIndirectCommand) * opaqueCommands.size());
 
-			auto opaqueDrawsDataBuffer = createBuffer("meshTransformBuffer Opaque", sizeof(MeshDraw) * opaqueDraws.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			void* mtd = opaqueDrawsDataBuffer.allocation->GetMappedData();
-			memcpy(mtd, opaqueDraws.data(), sizeof(MeshDraw) * opaqueDraws.size());
+			auto opaqueDrawsDataBuffer = createBuffer("meshTransformBuffer Opaque", sizeof(MeshDraw) * opaqueDraws.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			memcpy(opaqueDrawsDataBuffer.info.pMappedData, opaqueDraws.data(), sizeof(MeshDraw) * opaqueDraws.size());
 
 			std::vector<DrawBatchDescriptor> opaqueDescriptors;
-			opaqueDescriptors.emplace_back(0, globalMaterialDataBuffer, sizeof(MaterialData) * MaterialCache_size(m_materialCache), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+			opaqueDescriptors.emplace_back(0, context->globalMaterialDataBuffer, sizeof(MaterialData) * MaterialCache_size(context->materialCache), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 			opaqueDescriptors.emplace_back(1, meshIndirectOpaqueCommandsBuffer, sizeof(MeshIndirectCommand) * opaqueCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 			opaqueDescriptors.emplace_back(2, opaqueDrawsDataBuffer, sizeof(MeshDraw) * opaqueDraws.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
@@ -950,64 +934,64 @@ void VulkanRenderer::buildDrawBatches(std::vector<Model*>& models) {
 				.stride = sizeof(MeshIndirectCommand)
 			};
 			opaque.descriptors = opaqueDescriptors;
-			opaque.descriptorSetLayout = m_modelDrawDescriptorLayout;
+			opaque.descriptorSetLayout = context->m_modelDrawDescriptorLayout;
 
-			getCurrentFrame().drawBatches.push_back(opaque);
+			getCurrentFrame(context).drawBatches.push_back(opaque);
 
-			getCurrentFrame().m_deletionQueue.push([this, opaqueDrawsDataBuffer, meshIndirectOpaqueCommandsBuffer]() {
-				destroyBuffer(opaqueDrawsDataBuffer);
-				destroyBuffer(meshIndirectOpaqueCommandsBuffer);
+			getCurrentFrame(context).m_deletionQueue.push([context, opaqueDrawsDataBuffer, meshIndirectOpaqueCommandsBuffer]() {
+				destroyBuffer(context->vmaAllocator, opaqueDrawsDataBuffer);
+				destroyBuffer(context->vmaAllocator, meshIndirectOpaqueCommandsBuffer);
 			});
 		}
 
-		getCurrentFrame().drawBatches.push_back(doubleSided);
-		getCurrentFrame().drawBatches.push_back(transparent);
+		getCurrentFrame(context).drawBatches.push_back(doubleSided);
+		getCurrentFrame(context).drawBatches.push_back(transparent);
 
-		getCurrentFrame().m_deletionQueue.push([this, doubleSidedDrawsDataBuffer, transparentDrawsDataBuffer, meshIndirectDoubleSidedCommandsBuffer, meshIndirectTransparentCommandsBuffer]() {
-			destroyBuffer(doubleSidedDrawsDataBuffer);
-			destroyBuffer(transparentDrawsDataBuffer);
-			destroyBuffer(meshIndirectDoubleSidedCommandsBuffer);
-			destroyBuffer(meshIndirectTransparentCommandsBuffer);
+		getCurrentFrame(context).m_deletionQueue.push([context, doubleSidedDrawsDataBuffer, transparentDrawsDataBuffer, meshIndirectDoubleSidedCommandsBuffer, meshIndirectTransparentCommandsBuffer]() {
+			destroyBuffer(context->vmaAllocator, doubleSidedDrawsDataBuffer);
+			destroyBuffer(context->vmaAllocator, transparentDrawsDataBuffer);
+			destroyBuffer(context->vmaAllocator, meshIndirectDoubleSidedCommandsBuffer);
+			destroyBuffer(context->vmaAllocator, meshIndirectTransparentCommandsBuffer);
 		});
 		genTime += std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - start).count();
 	}
 
-	m_rendererState->rendererStats.entityFlattenTimeAvg = m_rendererState->rendererStats.entityFlattenTimeAvg * 0.95 + flattenTime * 0.05;
-	m_rendererState->rendererStats.drawBatchGenerationTimeAvg = m_rendererState->rendererStats.drawBatchGenerationTimeAvg * 0.95 + genTime * 0.05;
+	context->rendererState->rendererStats.entityFlattenTimeAvg = context->rendererState->rendererStats.entityFlattenTimeAvg * 0.95 + flattenTime * 0.05;
+	context->rendererState->rendererStats.drawBatchGenerationTimeAvg = context->rendererState->rendererStats.drawBatchGenerationTimeAvg * 0.95 + genTime * 0.05;
 }
 
-void VulkanRenderer::update(float deltaTime) {
-	updateScene(deltaTime);
-	updateUIData();
-	updateFontData();
+void rendererUpdate(VulkanRendererContext* context, float deltaTime) {
+	updateScene(context, deltaTime);
+	updateUIData(context);
+	updateFontData(context);
 }
 
-void VulkanRenderer::draw() {
+void rendererDraw(VulkanRendererContext* context) {
 	// wait until the gpu has finished rendering the last frame. Timeout of 1 second
-	VK_CHECK(vkWaitForFences(m_device, 1, &getCurrentFrame().m_renderFence, true, 1000000000));
+	VK_CHECK(vkWaitForFences(context->device, 1, &getCurrentFrame(context).m_renderFence, true, 1000000000));
 
-	getCurrentFrame().m_deletionQueue.flush();
-	getCurrentFrame().m_frameDescriptors.clearPools(m_device);
+	getCurrentFrame(context).m_deletionQueue.flush();
+	getCurrentFrame(context).m_frameDescriptors.clearPools(context->device);
 
 	// Get next swapchain image for each swapchain/window we render to
-	auto currentFrameIndex = getCurrentFrameIndex();
+	auto currentFrameIndex = getCurrentFrameIndex(context);
 	for (auto& window : PrimalEngine::get().windows) {
-		auto e = vkAcquireNextImageKHR(m_device, window.swapchain.handle, 1000000000, window.swapchain.swapchainSemaphores.at(currentFrameIndex), nullptr, &window.nextImageIndex);
+		auto e = vkAcquireNextImageKHR(context->device, window.swapchain.handle, 1000000000, window.swapchain.swapchainSemaphores.at(currentFrameIndex), nullptr, &window.nextImageIndex);
 		if (e == VK_ERROR_OUT_OF_DATE_KHR) {
 			window.resizeRequested = true;
 			return;
 		}
 	}
 
-	VK_CHECK(vkResetFences(m_device, 1, &getCurrentFrame().m_renderFence));
+	VK_CHECK(vkResetFences(context->device, 1, &getCurrentFrame(context).m_renderFence));
 
 	// Build draw batches
 	std::vector<Model*> modelsToRender{};
-	modelsToRender.push_back(&loadedModels["testModel"]);
-	buildDrawBatches(modelsToRender);
-	buildUIDrawBatches(getCurrentFrame().uiWindowBatchCommands);
+	modelsToRender.push_back(&context->loadedModels["testModel"]);
+	buildDrawBatches(context, modelsToRender);
+	buildUIDrawBatches(context, getCurrentFrame(context).uiWindowBatchCommands);
 
-	auto commandBuffer = getCurrentFrame().m_commandBuffer;
+	auto commandBuffer = getCurrentFrame(context).m_commandBuffer;
 
 	VK_CHECK(vkResetCommandBuffer(commandBuffer, 0));
 
@@ -1015,14 +999,14 @@ void VulkanRenderer::draw() {
 
 	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &commandBeginInfo));
 
-	vkCmdResetQueryPool(commandBuffer, timestampPool, 0, 128);
-	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampPool, 0);
+	vkCmdResetQueryPool(commandBuffer, context->timestampPool, 0, 128);
+	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, context->timestampPool, 0);
 
 	// transition our main draw image into general layout so we can write into it
 	// we will overwrite it all so we dont care about what was the older layout
-	transitionImage(commandBuffer, m_sceneDrawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	transitionImage(commandBuffer, context->m_sceneDrawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
-	drawBackground(commandBuffer);
+	drawBackground(context, commandBuffer);
 
 	// transition render targets into correct layouts
 	for (auto& window : PrimalEngine::get().windows) {
@@ -1030,19 +1014,19 @@ void VulkanRenderer::draw() {
 		transitionImage(commandBuffer, window.depthTarget.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 	}
 
-	transitionImage(commandBuffer, m_sceneDrawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	transitionImage(commandBuffer, m_sceneDepthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+	transitionImage(commandBuffer, context->m_sceneDrawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	transitionImage(commandBuffer, context->m_sceneDepthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
-	vkCmdResetQueryPool(commandBuffer, pipelineStatisticsPool, 0, 1);
-	vkCmdBeginQuery(commandBuffer, pipelineStatisticsPool, 0, 0);
+	vkCmdResetQueryPool(commandBuffer, context->pipelineStatisticsPool, 0, 1);
+	vkCmdBeginQuery(commandBuffer, context->pipelineStatisticsPool, 0, 0);
 
-	drawGeometry(commandBuffer);
+	drawGeometry(context, commandBuffer);
 
-	transitionImage(commandBuffer, m_sceneDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	transitionImage(commandBuffer, context->m_sceneDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-	drawUI(commandBuffer);
+	drawUI(context, commandBuffer);
 
-	vkCmdEndQuery(commandBuffer, pipelineStatisticsPool, 0);
+	vkCmdEndQuery(commandBuffer, context->pipelineStatisticsPool, 0);
 
 	// transition the render targets into their correct transfer layouts
 	for (auto& window : PrimalEngine::get().windows) {
@@ -1062,7 +1046,7 @@ void VulkanRenderer::draw() {
 		transitionImage(commandBuffer, window.swapchain.images[window.nextImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 	}
 
-	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampPool, 1);
+	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, context->timestampPool, 1);
 
 	VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
@@ -1086,7 +1070,7 @@ void VulkanRenderer::draw() {
 
 	// submit command buffer to the queue and execute it.
 	// m_renderFence will now block until the graphic commands finish execution
-	VK_CHECK(vkQueueSubmit2(m_graphicsQueue, 1, &submit, getCurrentFrame().m_renderFence));
+	VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submit, getCurrentFrame(context).m_renderFence));
 
 	// prepare presenting all visible windows
 	// we want to wait on the renderSemaphore for that,
@@ -1102,7 +1086,7 @@ void VulkanRenderer::draw() {
 
 		presentInfo.pImageIndices = &window.nextImageIndex;
 
-		VkResult presentResult = vkQueuePresentKHR(m_graphicsQueue, &presentInfo);
+		VkResult presentResult = vkQueuePresentKHR(context->graphicsQueue, &presentInfo);
 		if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
 			window.resizeRequested = true;
 		}
@@ -1110,44 +1094,44 @@ void VulkanRenderer::draw() {
 
 	// TODO: we are waiting on fences twice inside this function. Need to rework this logic.
 	// This is just here so we can query timestamp results.
-	VK_CHECK(vkWaitForFences(m_device, 1, &getCurrentFrame().m_renderFence, VK_TRUE, ~0ull));
+	VK_CHECK(vkWaitForFences(context->device, 1, &getCurrentFrame(context).m_renderFence, VK_TRUE, ~0ull));
 
 	// Get timestamp results
 	std::array<uint64_t, 2> timestampResults{};
-	VK_CHECK(vkGetQueryPoolResults(m_device, timestampPool, 0, timestampResults.size(), timestampResults.size() * sizeof(uint64_t), timestampResults.data(), sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
+	VK_CHECK(vkGetQueryPoolResults(context->device, context->timestampPool, 0, timestampResults.size(), timestampResults.size() * sizeof(uint64_t), timestampResults.data(), sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
 
 	std::array<uint64_t, 1> pipelineStatisticsResults{};
-	VK_CHECK(vkGetQueryPoolResults(m_device, pipelineStatisticsPool, 0, pipelineStatisticsResults.size(), pipelineStatisticsResults.size() * sizeof(uint64_t), pipelineStatisticsResults.data(), sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
+	VK_CHECK(vkGetQueryPoolResults(context->device, context->pipelineStatisticsPool, 0, pipelineStatisticsResults.size(), pipelineStatisticsResults.size() * sizeof(uint64_t), pipelineStatisticsResults.data(), sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
 
-	double frameGpuBegin = double(timestampResults[0]) * physicalDeviceTimestampPeriod * 1e-6;
-	double frameGpuEnd = double(timestampResults[1]) * physicalDeviceTimestampPeriod * 1e-6;
-	m_rendererState->rendererStats.frameGpuTimeAvg = m_rendererState->rendererStats.frameGpuTimeAvg * 0.95 + (frameGpuEnd - frameGpuBegin) * 0.05;
-	m_rendererState->rendererStats.triangleCount = pipelineStatisticsResults[0];
+	double frameGpuBegin = double(timestampResults[0]) * context->physicalDeviceTimestampPeriod * 1e-6;
+	double frameGpuEnd = double(timestampResults[1]) * context->physicalDeviceTimestampPeriod * 1e-6;
+	context->rendererState->rendererStats.frameGpuTimeAvg = context->rendererState->rendererStats.frameGpuTimeAvg * 0.95 + (frameGpuEnd - frameGpuBegin) * 0.05;
+	context->rendererState->rendererStats.triangleCount = pipelineStatisticsResults[0];
 
 	// move to the next frame.
-	m_frameNumber++;
+	context->frameNumber++;
 }
 
-void VulkanRenderer::drawBackground(VkCommandBuffer commandBuffer) {
+void drawBackground(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
 	ComputePushConstants data = {
 		.data1 = { 0.1, 0.2, 0.4, 0.97 }
 	};
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_skyPipeline);
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_skyPipelineLayout, 0, 1, &m_drawImageDescriptors, 0, nullptr);
-	vkCmdPushConstants(commandBuffer, m_skyPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &data);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context->m_skyPipeline);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context->m_skyPipelineLayout, 0, 1, &context->m_drawImageDescriptors, 0, nullptr);
+	vkCmdPushConstants(commandBuffer, context->m_skyPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &data);
 	auto width = 1448;
 	auto height = 700;
 	vkCmdDispatch(commandBuffer, std::ceil(width / 16.0), std::ceil(height / 16.0), 1);
 }
 
-void VulkanRenderer::drawUI(VkCommandBuffer commandBuffer) {
+void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
 	auto uiStart = std::chrono::system_clock::now();
 
 	VkClearValue clearColor{
 		.color = { 0.0, 0.0, 0.0, 1.0 }
 	};
 
-	for (auto& windowBatch: getCurrentFrame().uiWindowBatches) {
+	for (auto& windowBatch: getCurrentFrame(context).uiWindowBatches) {
 		auto window = windowBatch.window;
 		VkRenderingAttachmentInfo colorAttachment = attachmentInfo(window->renderTarget.imageView, &clearColor, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 		VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(window->depthTarget.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
@@ -1178,7 +1162,7 @@ void VulkanRenderer::drawUI(VkCommandBuffer commandBuffer) {
 		for (auto& drawBatch : windowBatch.drawBatches) {
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipeline);
 
-			VkDescriptorSet drawBatchDescriptor = getCurrentFrame().m_frameDescriptors.allocate(m_device, drawBatch.descriptorSetLayout);
+			VkDescriptorSet drawBatchDescriptor = getCurrentFrame(context).m_frameDescriptors.allocate(context->device, drawBatch.descriptorSetLayout);
 			DescriptorWriter drawBatchDescriptorWriter;
 			for (auto& descriptor : drawBatch.descriptors) {
 				drawBatchDescriptorWriter.writeBuffer(descriptor.binding, descriptor.buffer.buffer, descriptor.size, descriptor.offset, descriptor.type);
@@ -1186,14 +1170,14 @@ void VulkanRenderer::drawUI(VkCommandBuffer commandBuffer) {
 			for (auto& descriptor : drawBatch.imageDescriptors) {
 				drawBatchDescriptorWriter.writeImage(descriptor.binding, descriptor.imageView, descriptor.sampler, descriptor.imageLayout, descriptor.type);
 			}
-			drawBatchDescriptorWriter.updateSet(m_device, drawBatchDescriptor);
+			drawBatchDescriptorWriter.updateSet(context->device, drawBatchDescriptor);
 
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 0, 1, &drawBatchDescriptor, 0, nullptr);
 
 			// Bind global viewport texture descriptor set
 			// TODO(piero): The batch should include information about the global descriptor sets
 			if (drawBatch.type == DrawBatchType::VIEWPORT_BATCH) {
-				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 1, 1, &viewportTextureDescriptorSet, 0, nullptr);
+				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 1, 1, &context->viewportTextureDescriptorSet, 0, nullptr);
 			}
 
 			// TODO: Should be included as part of a Batch
@@ -1211,25 +1195,25 @@ void VulkanRenderer::drawUI(VkCommandBuffer commandBuffer) {
 	auto uiEnd = std::chrono::system_clock::now();
 	auto uiElapsed = std::chrono::duration_cast<std::chrono::microseconds>(uiEnd - uiStart);
 
-	m_rendererState->rendererStats.uiFrametimeAvg = m_rendererState->rendererStats.uiFrametimeAvg * 0.95 + (static_cast<float>(uiElapsed.count()) / 1000.0f) * 0.05;
+	context->rendererState->rendererStats.uiFrametimeAvg = context->rendererState->rendererStats.uiFrametimeAvg * 0.95 + (static_cast<float>(uiElapsed.count()) / 1000.0f) * 0.05;
 }
 
-void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
-	m_rendererState->rendererStats.drawCallCount = 0;
+void drawGeometry(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
+	context->rendererState->rendererStats.drawCallCount = 0;
 
 	auto start = std::chrono::system_clock::now();
 
-	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(m_sceneDrawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(m_sceneDepthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(context->m_sceneDrawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(context->m_sceneDepthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
-	VkRenderingInfo renderInfo = renderingInfo({ .extent = { .width = m_sceneDrawImage.imageExtent.width, .height = m_sceneDrawImage.imageExtent.height } }, &colorAttachment, &depthAttachment);
+	VkRenderingInfo renderInfo = renderingInfo({ .extent = { .width = context->m_sceneDrawImage.imageExtent.width, .height = context->m_sceneDrawImage.imageExtent.height } }, &colorAttachment, &depthAttachment);
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
 
 	VkViewport viewport = {};
 	viewport.x = 0;
 	viewport.y = 0;
-	viewport.width = static_cast<float>(m_sceneDrawImage.imageExtent.width);
-	viewport.height = static_cast<float>(m_sceneDrawImage.imageExtent.height);
+	viewport.width = static_cast<float>(context->m_sceneDrawImage.imageExtent.width);
+	viewport.height = static_cast<float>(context->m_sceneDrawImage.imageExtent.height);
 	viewport.minDepth = 0.f;
 	viewport.maxDepth = 1.f;
 	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -1237,50 +1221,50 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 	VkRect2D scissor = {};
 	scissor.offset.x = 0;
 	scissor.offset.y = 0;
-	scissor.extent.width = m_sceneDrawImage.imageExtent.width;
-	scissor.extent.height = m_sceneDrawImage.imageExtent.height;
+	scissor.extent.width = context->m_sceneDrawImage.imageExtent.width;
+	scissor.extent.height = context->m_sceneDrawImage.imageExtent.height;
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 	// allocate a new uniform buffer for the scene data
 	// This should be deleted each frame.
-	AllocatedBuffer gpuSceneDataBuffer = createBuffer("gpuSceneDataBuffer", sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	AllocatedBuffer gpuSceneDataBuffer = createBuffer("gpuSceneDataBuffer", sizeof(GPUSceneData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
 	// write the buffer
-	auto* sceneUniformData = static_cast<GPUSceneData*>(gpuSceneDataBuffer.allocation->GetMappedData());
-	*sceneUniformData = m_sceneData;
+	void* sceneUniformData{};
+	memcpy(gpuSceneDataBuffer.info.pMappedData, &context->sceneData, sizeof(GPUSceneData));
 
 	// Create global sceneData descriptor
-	VkDescriptorSet globalDescriptor = getCurrentFrame().m_frameDescriptors.allocate(m_device, m_gpuSceneDataDescriptorLayout);
+	VkDescriptorSet globalDescriptor = getCurrentFrame(context).m_frameDescriptors.allocate(context->device, context->m_gpuSceneDataDescriptorLayout);
 
-	getCurrentFrame().m_deletionQueue.push([gpuSceneDataBuffer, this]() {
-		destroyBuffer(gpuSceneDataBuffer);
+	getCurrentFrame(context).m_deletionQueue.push([gpuSceneDataBuffer, context]() {
+		destroyBuffer(context->vmaAllocator, gpuSceneDataBuffer);
 	});
 
 	{
 		DescriptorWriter writer;
 		writer.writeBuffer(0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-		writer.updateSet(m_device, globalDescriptor);
+		writer.updateSet(context->device, globalDescriptor);
 	}
 
 	uint32_t drawCallCount{};
 
 	// Process this frames draw batches
-	for (auto& drawBatch : getCurrentFrame().drawBatches) {
+	for (auto& drawBatch : getCurrentFrame(context).drawBatches) {
 		drawCallCount += drawBatch.commands.size;
 
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipeline);
 
-		VkDescriptorSet drawBatchDescriptor = getCurrentFrame().m_frameDescriptors.allocate(m_device, drawBatch.descriptorSetLayout);
+		VkDescriptorSet drawBatchDescriptor = getCurrentFrame(context).m_frameDescriptors.allocate(context->device, drawBatch.descriptorSetLayout);
 		DescriptorWriter drawBatchDescriptorWriter;
 		for (auto& descriptor : drawBatch.descriptors) {
 			drawBatchDescriptorWriter.writeBuffer(descriptor.binding, descriptor.buffer.buffer, descriptor.size, descriptor.offset, descriptor.type);
 		}
-		drawBatchDescriptorWriter.updateSet(m_device, drawBatchDescriptor);
+		drawBatchDescriptorWriter.updateSet(context->device, drawBatchDescriptor);
 
 		// Global descriptor sets. Bindings 0 and 1 are reserved.
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 0, 1, &globalDescriptor, 0, nullptr);
 		// TODO: This might not need to be global.
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 1, 1, &bindlessTexturesDescriptorSet, 0, nullptr);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 1, 1, &context->bindlessTexturesDescriptorSet, 0, nullptr);
 
 		// Draw batch specific descriptor set
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 2, 1, &drawBatchDescriptor, 0, nullptr);
@@ -1288,53 +1272,53 @@ void VulkanRenderer::drawGeometry(VkCommandBuffer commandBuffer) {
 		// TODO: Should be included as part of a Batch
 		GPUDrawPushConstants pushConstants{};
 		pushConstants.vertexBuffer = drawBatch.meshBuffers.vertexBufferAddress;
-		pushConstants.viewPosition = glm::vec4(m_rendererState->mainCamera->position, 1.0f);
+		pushConstants.viewPosition = glm::vec4(context->rendererState->mainCamera->position, 1.0f);
 
 		vkCmdBindIndexBuffer(commandBuffer, drawBatch.meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdPushConstants(commandBuffer, drawBatch.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 		vkCmdDrawIndexedIndirect(commandBuffer, drawBatch.commands.buffer.buffer, drawBatch.commands.offset, drawBatch.commands.size, drawBatch.commands.stride);
 	}
 
-	m_rendererState->rendererStats.drawCallCount = static_cast<int32_t>(drawCallCount);
+	context->rendererState->rendererStats.drawCallCount = static_cast<int32_t>(drawCallCount);
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
 	vkCmdEndRendering(commandBuffer);
 
-	m_rendererState->rendererStats.meshDrawTimeAvg = m_rendererState->rendererStats.meshDrawTimeAvg * 0.95 + (static_cast<float>(elapsed.count()) / 1000.0f) * 0.05;
+	context->rendererState->rendererStats.meshDrawTimeAvg = context->rendererState->rendererStats.meshDrawTimeAvg * 0.95 + (static_cast<float>(elapsed.count()) / 1000.0f) * 0.05;
 }
 
-void VulkanRenderer::initDescriptors() {
+void initDescriptors(VulkanRendererContext* context) {
 	std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
 		{ .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 1 },
 	};
 
-	m_globalDescriptorAllocator.init(m_device, 10, sizes);
-	m_mainDeletionQueue.push([&]() {
-		m_globalDescriptorAllocator.destroyPools(m_device);
+	context->m_globalDescriptorAllocator.init(context->device, 10, sizes);
+	context->m_mainDeletionQueue.push([context]() {
+		context->m_globalDescriptorAllocator.destroyPools(context->device);
 	});
 
 	// Compute stage image descriptor
 	{
 		DescriptorLayoutBuilder builder;
 		builder.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		m_drawImageDescriptorLayout = builder.build(m_device, VK_SHADER_STAGE_COMPUTE_BIT);
+		context->m_drawImageDescriptorLayout = builder.build(context->device, VK_SHADER_STAGE_COMPUTE_BIT);
 	}
 
-	m_drawImageDescriptors = m_globalDescriptorAllocator.allocate(m_device, m_drawImageDescriptorLayout);
+	context->m_drawImageDescriptors = context->m_globalDescriptorAllocator.allocate(context->device, context->m_drawImageDescriptorLayout);
 
 	{
 		DescriptorWriter writer;
-		writer.writeImage(0, m_sceneDrawImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		writer.updateSet(m_device, m_drawImageDescriptors);
+		writer.writeImage(0, context->m_sceneDrawImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		writer.updateSet(context->device, context->m_drawImageDescriptors);
 	}
 
 	// Vertex/Fragment UBO
 	{
 		DescriptorLayoutBuilder builder;
 		builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-		m_gpuSceneDataDescriptorLayout = builder.build(m_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		context->m_gpuSceneDataDescriptorLayout = builder.build(context->device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 
 	// Model Draw SSBO
@@ -1343,16 +1327,16 @@ void VulkanRenderer::initDescriptors() {
 		builder.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		builder.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		builder.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		m_modelDrawDescriptorLayout = builder.build(m_device);
+		context->m_modelDrawDescriptorLayout = builder.build(context->device);
 	}
 
-	m_mainDeletionQueue.push([&]() {
-		vkDestroyDescriptorSetLayout(m_device, m_drawImageDescriptorLayout, nullptr);
-		vkDestroyDescriptorSetLayout(m_device, m_gpuSceneDataDescriptorLayout, nullptr);
-		vkDestroyDescriptorSetLayout(m_device, m_modelDrawDescriptorLayout, nullptr);
+	context->m_mainDeletionQueue.push([context]() {
+		vkDestroyDescriptorSetLayout(context->device, context->m_drawImageDescriptorLayout, nullptr);
+		vkDestroyDescriptorSetLayout(context->device, context->m_gpuSceneDataDescriptorLayout, nullptr);
+		vkDestroyDescriptorSetLayout(context->device, context->m_modelDrawDescriptorLayout, nullptr);
 	});
 
-	for (auto& frame : m_frames) {
+	for (auto& frame : context->frames) {
 		// create a descriptor pool
 		std::vector<DescriptorAllocator::PoolSizeRatio> frame_sizes = {
 			{ .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 3 },
@@ -1362,23 +1346,12 @@ void VulkanRenderer::initDescriptors() {
 		};
 
 		frame.m_frameDescriptors = {};
-		frame.m_frameDescriptors.init(m_device, 1000, frame_sizes);
+		frame.m_frameDescriptors.init(context->device, 1000, frame_sizes);
 
-		m_mainDeletionQueue.push([&]() {
-			frame.m_frameDescriptors.destroyPools(m_device);
+		context->m_mainDeletionQueue.push([context, &frame]() {
+			frame.m_frameDescriptors.destroyPools(context->device);
 		});
 	}
-
-	// Font descriptors
-	std::vector<DescriptorAllocator::PoolSizeRatio> fontPoolSizes = {
-		{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 4 },
-		{ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio = 2 },
-		{ .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .ratio = 2 }
-	};
-	fontDescriptorAllocator.init(m_device, 10, fontPoolSizes);
-	m_mainDeletionQueue.push([&]() {
-		fontDescriptorAllocator.destroyPools(m_device);
-	});
 
 	{
 		DescriptorLayoutBuilder builder;
@@ -1386,11 +1359,11 @@ void VulkanRenderer::initDescriptors() {
 		builder.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
 		builder.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
 		builder.addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-		fontDescriptorLayout = builder.build(m_device);
+		context->fontDescriptorLayout = builder.build(context->device);
 	}
 
-	m_mainDeletionQueue.push([&]() {
-		vkDestroyDescriptorSetLayout(m_device, fontDescriptorLayout, nullptr);
+	context->m_mainDeletionQueue.push([context]() {
+		vkDestroyDescriptorSetLayout(context->device, context->fontDescriptorLayout, nullptr);
 	});
 
 	// Viewport
@@ -1400,21 +1373,11 @@ void VulkanRenderer::initDescriptors() {
 		builder.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
 		builder.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		builder.addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-		viewportDescriptorLayout = builder.build(m_device);
+		context->viewportDescriptorLayout = builder.build(context->device);
 	}
 
-	m_mainDeletionQueue.push([&]() {
-		vkDestroyDescriptorSetLayout(m_device, viewportDescriptorLayout, nullptr);
-	});
-
-	// UI Descriptors
-	std::vector<DescriptorAllocator::PoolSizeRatio> uiPoolSizes = {
-		{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 2 },
-		{ .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .ratio = 2 }
-	};
-	uiDescriptorAllocator.init(m_device, 2, uiPoolSizes);
-	m_mainDeletionQueue.push([&]() {
-		uiDescriptorAllocator.destroyPools(m_device);
+	context->m_mainDeletionQueue.push([context]() {
+		vkDestroyDescriptorSetLayout(context->device, context->viewportDescriptorLayout, nullptr);
 	});
 
 	{
@@ -1423,30 +1386,30 @@ void VulkanRenderer::initDescriptors() {
 		builder.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
 		builder.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		builder.addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
-		uiDescriptorLayout = builder.build(m_device);
+		context->uiDescriptorLayout = builder.build(context->device);
 	}
 
-	m_mainDeletionQueue.push([&]() {
-		vkDestroyDescriptorSetLayout(m_device, uiDescriptorLayout, nullptr);
+	context->m_mainDeletionQueue.push([context]() {
+		vkDestroyDescriptorSetLayout(context->device, context->uiDescriptorLayout, nullptr);
 	});
 }
 
-void VulkanRenderer::initPipelines() {
+void initPipelines(VulkanRendererContext* context) {
 	VkPipelineCacheCreateInfo cacheCreateInfo{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO };
-	vkCreatePipelineCache(m_device, &cacheCreateInfo, nullptr, &m_pipelineCache);
+	vkCreatePipelineCache(context->device, &cacheCreateInfo, nullptr, &context->m_pipelineCache);
 
-	initBackgroundPipelines();
-	buildDefaultPipelines();
-	initUIPipeline();
-	initFontPipeline();
-	initViewportPipeline();
+	initBackgroundPipelines(context);
+	buildDefaultPipelines(context);
+	initUIPipeline(context);
+	initFontPipeline(context);
+	initViewportPipeline(context);
 }
 
-void VulkanRenderer::initBackgroundPipelines() {
+void initBackgroundPipelines(VulkanRendererContext* context) {
 	VkPipelineLayoutCreateInfo computeLayout{};
 	computeLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	computeLayout.pNext = nullptr;
-	computeLayout.pSetLayouts = &m_drawImageDescriptorLayout;
+	computeLayout.pSetLayouts = &context->m_drawImageDescriptorLayout;
 	computeLayout.setLayoutCount = 1;
 
 	VkPushConstantRange pushConstants{};
@@ -1457,10 +1420,10 @@ void VulkanRenderer::initBackgroundPipelines() {
 	computeLayout.pPushConstantRanges = &pushConstants;
 	computeLayout.pushConstantRangeCount = 1;
 
-	VK_CHECK(vkCreatePipelineLayout(m_device, &computeLayout, nullptr, &m_skyPipelineLayout));
+	VK_CHECK(vkCreatePipelineLayout(context->device, &computeLayout, nullptr, &context->m_skyPipelineLayout));
 
 	VkShaderModule computeDrawShader{};
-	if (!loadShaderModule("res/shaders/gradient.comp.spv", m_device, &computeDrawShader)) {
+	if (!loadShaderModule("res/shaders/gradient.comp.spv", context->device, &computeDrawShader)) {
 		std::cout << std::format("Error when building the compute shader \n");
 	}
 
@@ -1469,32 +1432,32 @@ void VulkanRenderer::initBackgroundPipelines() {
 	VkComputePipelineCreateInfo computePipelineCreateInfo{};
 	computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
 	computePipelineCreateInfo.pNext = nullptr;
-	computePipelineCreateInfo.layout = m_skyPipelineLayout;
+	computePipelineCreateInfo.layout = context->m_skyPipelineLayout;
 	computePipelineCreateInfo.stage = stageinfo;
 
-	VK_CHECK(vkCreateComputePipelines(m_device, m_pipelineCache, 1, &computePipelineCreateInfo, nullptr, &m_skyPipeline));
+	VK_CHECK(vkCreateComputePipelines(context->device, context->m_pipelineCache, 1, &computePipelineCreateInfo, nullptr, &context->m_skyPipeline));
 
-	vkDestroyShaderModule(m_device, computeDrawShader, nullptr);
+	vkDestroyShaderModule(context->device, computeDrawShader, nullptr);
 
-	m_mainDeletionQueue.push([this]() {
-		vkDestroyPipelineLayout(m_device, m_skyPipelineLayout, nullptr);
-		vkDestroyPipeline(m_device, m_skyPipeline, nullptr);
+	context->m_mainDeletionQueue.push([context]() {
+		vkDestroyPipelineLayout(context->device, context->m_skyPipelineLayout, nullptr);
+		vkDestroyPipeline(context->device, context->m_skyPipeline, nullptr);
 	});
 }
 
-void VulkanRenderer::initUIPipeline() {
+void initUIPipeline(VulkanRendererContext* context) {
 	VkShaderModule uiFragShader{};
-	if (!loadShaderModule("res/shaders/ui.frag.spv", m_device, &uiFragShader)) {
+	if (!loadShaderModule("res/shaders/ui.frag.spv", context->device, &uiFragShader)) {
 		std::cout << std::format("Error when building the UI fragment shader module\n");
 	}
 
 	VkShaderModule uiVertexShader{};
-	if (!loadShaderModule("res/shaders/ui.vert.spv", m_device, &uiVertexShader)) {
+	if (!loadShaderModule("res/shaders/ui.vert.spv", context->device, &uiVertexShader)) {
 		std::cout << std::format("Error when building the UI vertex shader module\n");
 	}
 
 	VkDescriptorSetLayout layouts[] = {
-		uiDescriptorLayout
+		context->uiDescriptorLayout
 	};
 
 	VkPushConstantRange pushConstantRange{};
@@ -1508,14 +1471,14 @@ void VulkanRenderer::initUIPipeline() {
 	uiLayoutInfo.setLayoutCount = 1;
 	uiLayoutInfo.pSetLayouts = layouts;
 
-	VK_CHECK(vkCreatePipelineLayout(m_device, &uiLayoutInfo, nullptr, &uiPipelineLayout));
+	VK_CHECK(vkCreatePipelineLayout(context->device, &uiLayoutInfo, nullptr, &context->uiPipelineLayout));
 
-	m_mainDeletionQueue.push([&]() {
-		vkDestroyPipelineLayout(m_device, uiPipelineLayout, nullptr);
+	context->m_mainDeletionQueue.push([context]() {
+		vkDestroyPipelineLayout(context->device, context->uiPipelineLayout, nullptr);
 	});
 
 	PipelineBuilder pipelineBuilder;
-	pipelineBuilder.setPipelineLayout(uiPipelineLayout);
+	pipelineBuilder.setPipelineLayout(context->uiPipelineLayout);
 	pipelineBuilder.setShaders(uiVertexShader, uiFragShader);
 	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
@@ -1524,33 +1487,33 @@ void VulkanRenderer::initUIPipeline() {
 	pipelineBuilder.enableBackgroundBlending();
 	pipelineBuilder.disableDepthTest();
 
-	pipelineBuilder.setColorAttachmentFormat(m_rendererState->window->renderTarget.imageFormat);
-	pipelineBuilder.setDepthFormat(m_rendererState->window->depthTarget.imageFormat);
+	pipelineBuilder.setColorAttachmentFormat(context->rendererState->window->renderTarget.imageFormat);
+	pipelineBuilder.setDepthFormat(context->rendererState->window->depthTarget.imageFormat);
 
-	uiPipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
+	context->uiPipeline = pipelineBuilder.buildPipeline(context->device, context->m_pipelineCache);
 
-	m_mainDeletionQueue.push([&]() {
-		vkDestroyPipeline(m_device, uiPipeline, nullptr);
+	context->m_mainDeletionQueue.push([context]() {
+		vkDestroyPipeline(context->device, context->uiPipeline, nullptr);
 	});
 
-	vkDestroyShaderModule(m_device, uiFragShader, nullptr);
-	vkDestroyShaderModule(m_device, uiVertexShader, nullptr);
+	vkDestroyShaderModule(context->device, uiFragShader, nullptr);
+	vkDestroyShaderModule(context->device, uiVertexShader, nullptr);
 }
 
-void VulkanRenderer::initViewportPipeline() {
+void initViewportPipeline(VulkanRendererContext* context) {
 	VkShaderModule viewportFragShader{};
-	if (!loadShaderModule("res/shaders/ui_texture.frag.spv", m_device, &viewportFragShader)) {
+	if (!loadShaderModule("res/shaders/ui_texture.frag.spv", context->device, &viewportFragShader)) {
 		std::cout << std::format("Error when building the viewport fragment shader module") << '\n';
 	}
 
 	VkShaderModule viewportVertexShader{};
-	if (!loadShaderModule("res/shaders/ui_texture.vert.spv", m_device, &viewportVertexShader)) {
+	if (!loadShaderModule("res/shaders/ui_texture.vert.spv", context->device, &viewportVertexShader)) {
 		std::cout << std::format("Error when building the viewport vertex shader module") << '\n';
 	}
 
 	VkDescriptorSetLayout layouts[] = {
-		viewportDescriptorLayout,
-		viewportTextureSetLayout
+		context->viewportDescriptorLayout,
+		context->viewportTextureSetLayout
 	};
 
 	VkPushConstantRange pushConstantRange{};
@@ -1564,14 +1527,14 @@ void VulkanRenderer::initViewportPipeline() {
 	viewportLayoutInfo.setLayoutCount = 2;
 	viewportLayoutInfo.pSetLayouts = layouts;
 
-	VK_CHECK(vkCreatePipelineLayout(m_device, &viewportLayoutInfo, nullptr, &viewportPipelineLayout));
+	VK_CHECK(vkCreatePipelineLayout(context->device, &viewportLayoutInfo, nullptr, &context->viewportPipelineLayout));
 
-	m_mainDeletionQueue.push([&]() {
-		vkDestroyPipelineLayout(m_device, viewportPipelineLayout, nullptr);
+	context->m_mainDeletionQueue.push([context]() {
+		vkDestroyPipelineLayout(context->device, context->viewportPipelineLayout, nullptr);
 	});
 
 	PipelineBuilder pipelineBuilder;
-	pipelineBuilder.setPipelineLayout(viewportPipelineLayout);
+	pipelineBuilder.setPipelineLayout(context->viewportPipelineLayout);
 	pipelineBuilder.setShaders(viewportVertexShader, viewportFragShader);
 	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
@@ -1583,32 +1546,32 @@ void VulkanRenderer::initViewportPipeline() {
 	// TODO(piero): This is wrong. This works right now because all viewports use the same formats for color and depth.
 	//              We should set this dynamically and create a pipeline for each color/depth combination.
 	//              I don't think we are going to use different formats for now but still good to keep this in mind.
-	pipelineBuilder.setColorAttachmentFormat(m_rendererState->window->renderTarget.imageFormat);
-	pipelineBuilder.setDepthFormat(m_rendererState->window->depthTarget.imageFormat);
+	pipelineBuilder.setColorAttachmentFormat(context->rendererState->window->renderTarget.imageFormat);
+	pipelineBuilder.setDepthFormat(context->rendererState->window->depthTarget.imageFormat);
 
-	viewportPipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
+	context->viewportPipeline = pipelineBuilder.buildPipeline(context->device, context->m_pipelineCache);
 
-	m_mainDeletionQueue.push([&]() {
-		vkDestroyPipeline(m_device, viewportPipeline, nullptr);
+	context->m_mainDeletionQueue.push([context]() {
+		vkDestroyPipeline(context->device, context->viewportPipeline, nullptr);
 	});
 
-	vkDestroyShaderModule(m_device, viewportFragShader, nullptr);
-	vkDestroyShaderModule(m_device, viewportVertexShader, nullptr);
+	vkDestroyShaderModule(context->device, viewportFragShader, nullptr);
+	vkDestroyShaderModule(context->device, viewportVertexShader, nullptr);
 }
 
-void VulkanRenderer::initFontPipeline() {
+void initFontPipeline(VulkanRendererContext* context) {
 	VkShaderModule fontFragShader{};
-	if (!loadShaderModule("res/shaders/sdf_text.frag.spv", m_device, &fontFragShader)) {
+	if (!loadShaderModule("res/shaders/sdf_text.frag.spv", context->device, &fontFragShader)) {
 		std::cout << std::format("Error when building the font fragment shader module") << '\n';
 	}
 
 	VkShaderModule fontVertexShader{};
-	if (!loadShaderModule("res/shaders/sdf_text.vert.spv", m_device, &fontVertexShader)) {
+	if (!loadShaderModule("res/shaders/sdf_text.vert.spv", context->device, &fontVertexShader)) {
 		std::cout << std::format("Error when building the font vertex shader module") << '\n';
 	}
 
 	VkDescriptorSetLayout layouts[] = {
-		fontDescriptorLayout
+		context->fontDescriptorLayout
 	};
 
 	VkPushConstantRange pushConstantRange{};
@@ -1622,14 +1585,14 @@ void VulkanRenderer::initFontPipeline() {
 	fontLayoutInfo.setLayoutCount = 1;
 	fontLayoutInfo.pSetLayouts = layouts;
 
-	VK_CHECK(vkCreatePipelineLayout(m_device, &fontLayoutInfo, nullptr, &fontPipelineLayout));
+	VK_CHECK(vkCreatePipelineLayout(context->device, &fontLayoutInfo, nullptr, &context->fontPipelineLayout));
 
-	m_mainDeletionQueue.push([&]() {
-		vkDestroyPipelineLayout(m_device, fontPipelineLayout, nullptr);
+	context->m_mainDeletionQueue.push([context]() {
+		vkDestroyPipelineLayout(context->device, context->fontPipelineLayout, nullptr);
 	});
 
 	PipelineBuilder pipelineBuilder;
-	pipelineBuilder.setPipelineLayout(fontPipelineLayout);
+	pipelineBuilder.setPipelineLayout(context->fontPipelineLayout);
 	pipelineBuilder.setShaders(fontVertexShader, fontFragShader);
 	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
@@ -1638,24 +1601,24 @@ void VulkanRenderer::initFontPipeline() {
 	pipelineBuilder.enableBlendingAlphablend();
 	pipelineBuilder.disableDepthTest();
 
-	pipelineBuilder.setColorAttachmentFormat(m_rendererState->window->renderTarget.imageFormat);
-	pipelineBuilder.setDepthFormat(m_rendererState->window->depthTarget.imageFormat);
+	pipelineBuilder.setColorAttachmentFormat(context->rendererState->window->renderTarget.imageFormat);
+	pipelineBuilder.setDepthFormat(context->rendererState->window->depthTarget.imageFormat);
 
-	fontPipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
+	context->fontPipeline = pipelineBuilder.buildPipeline(context->device, context->m_pipelineCache);
 
-	m_mainDeletionQueue.push([&]() {
-		vkDestroyPipeline(m_device, fontPipeline, nullptr);
+	context->m_mainDeletionQueue.push([context]() {
+		vkDestroyPipeline(context->device, context->fontPipeline, nullptr);
 	});
 
-	vkDestroyShaderModule(m_device, fontFragShader, nullptr);
-	vkDestroyShaderModule(m_device, fontVertexShader, nullptr);
+	vkDestroyShaderModule(context->device, fontFragShader, nullptr);
+	vkDestroyShaderModule(context->device, fontVertexShader, nullptr);
 }
 
-void VulkanRenderer::immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function) {
-	VK_CHECK(vkResetFences(m_device, 1, &m_immFence));
-	VK_CHECK(vkResetCommandBuffer(m_immCommandBuffer, 0));
+void immediateSubmit(VulkanRendererContext* context, std::function<void(VkCommandBuffer cmd)>&& function) {
+	VK_CHECK(vkResetFences(context->device, 1, &context->m_immFence));
+	VK_CHECK(vkResetCommandBuffer(context->m_immCommandBuffer, 0));
 
-	VkCommandBuffer cmd = m_immCommandBuffer;
+	VkCommandBuffer cmd = context->m_immCommandBuffer;
 
 	VkCommandBufferBeginInfo cmdBeginInfo = commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
@@ -1670,173 +1633,12 @@ void VulkanRenderer::immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& 
 
 	// submit command buffer to the queue and execute it.
 	//  _renderFence will now block until the graphic commands finish execution
-	VK_CHECK(vkQueueSubmit2(m_graphicsQueue, 1, &submit, m_immFence));
+	VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submit, context->m_immFence));
 
-	VK_CHECK(vkWaitForFences(m_device, 1, &m_immFence, true, 9999999999));
+	VK_CHECK(vkWaitForFences(context->device, 1, &context->m_immFence, true, 9999999999));
 }
 
-AllocatedBuffer VulkanRenderer::createBuffer(std::string name, size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) {
-	// allocate buffer
-	VkBufferCreateInfo bufferInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-	bufferInfo.pNext = nullptr;
-	bufferInfo.size = allocSize;
-
-	bufferInfo.usage = usage;
-
-	VmaAllocationCreateInfo vmaallocInfo = {};
-	vmaallocInfo.usage = memoryUsage;
-	vmaallocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
-	AllocatedBuffer newBuffer{};
-
-	// allocate the buffer
-	VK_CHECK(vmaCreateBuffer(m_allocator, &bufferInfo, &vmaallocInfo, &newBuffer.buffer, &newBuffer.allocation, &newBuffer.info));
-
-	vmaSetAllocationName(m_allocator, newBuffer.allocation, name.c_str());
-
-	return newBuffer;
-}
-
-void VulkanRenderer::destroyBuffer(const AllocatedBuffer& buffer) {
-	vmaDestroyBuffer(m_allocator, buffer.buffer, buffer.allocation);
-}
-
-/*
- * Create a staging buffer in CPU memory to hold the vertex + index buffer data.
- * Copy it to the GPU buffer.
- */
-template<typename VertexType>
-GPUMeshBuffers VulkanRenderer::uploadMesh(std::span<uint32_t> indices, std::span<VertexType> vertices, std::string name) {
-	const auto vertexBufferSize = vertices.size() * sizeof(VertexType);
-	const auto indexBufferSize = indices.size() * sizeof(uint32_t);
-
-	GPUMeshBuffers newSurface{};
-
-	// create vertex buffer
-	newSurface.vertexBuffer = createBuffer(name + " MeshVertexBuffer", vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
-
-	// find the adress of the vertex buffer
-	VkBufferDeviceAddressInfo deviceAdressInfo{
-		.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-		.buffer = newSurface.vertexBuffer.buffer
-	};
-	newSurface.vertexBufferAddress = vkGetBufferDeviceAddress(m_device, &deviceAdressInfo);
-
-	// create index buffer
-	newSurface.indexBuffer = createBuffer(name + " MeshIndexBuffer", indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
-
-	AllocatedBuffer staging = createBuffer(name + " Mesh staging", vertexBufferSize + indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-
-	// Get a pointer to which we can write to
-	void* data = staging.allocation->GetMappedData();
-
-	// copy vertex buffer
-	memcpy(data, vertices.data(), vertexBufferSize);
-	// copy index buffer
-	memcpy(static_cast<char*>(data) + vertexBufferSize, indices.data(), indexBufferSize);
-
-	immediateSubmit([&](VkCommandBuffer cmd) {
-		VkBufferCopy vertexCopy{ 0 };
-		vertexCopy.dstOffset = 0;
-		vertexCopy.srcOffset = 0;
-		vertexCopy.size = vertexBufferSize;
-
-		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.vertexBuffer.buffer, 1, &vertexCopy);
-
-		VkBufferCopy indexCopy{ 0 };
-		indexCopy.dstOffset = 0;
-		indexCopy.srcOffset = vertexBufferSize;
-		indexCopy.size = indexBufferSize;
-
-		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.indexBuffer.buffer, 1, &indexCopy);
-	});
-
-	destroyBuffer(staging);
-
-	return newSurface;
-}
-
-
-AllocatedImage VulkanRenderer::createImage(std::string name, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) {
-	AllocatedImage newImage{};
-	newImage.imageFormat = format;
-	newImage.imageExtent = size;
-
-	VkImageCreateInfo img_info = imageCreateInfo(format, usage, size);
-	if (mipmapped) {
-		img_info.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(size.width, size.height)))) + 1;
-	}
-
-	// always allocate images on dedicated GPU memory
-	VmaAllocationCreateInfo allocinfo = {};
-	allocinfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-	allocinfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-	// allocate and create the image
-	VK_CHECK(vmaCreateImage(m_allocator, &img_info, &allocinfo, &newImage.image, &newImage.allocation, nullptr));
-
-	vmaSetAllocationName(m_allocator, newImage.allocation, name.c_str());
-
-	// if the format is a depth format, we will need to have it use the correct
-	// aspect flag
-	VkImageAspectFlags aspectFlag = VK_IMAGE_ASPECT_COLOR_BIT;
-	if (format == VK_FORMAT_D32_SFLOAT) {
-		aspectFlag = VK_IMAGE_ASPECT_DEPTH_BIT;
-	}
-
-	// build a image-view for the image
-	VkImageViewCreateInfo view_info = imageViewCreateInfo(format, newImage.image, aspectFlag);
-	view_info.subresourceRange.levelCount = img_info.mipLevels;
-
-	VK_CHECK(vkCreateImageView(m_device, &view_info, nullptr, &newImage.imageView));
-
-	return newImage;
-}
-
-AllocatedImage VulkanRenderer::createImage(std::string name, void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) {
-	size_t data_size = size.depth * size.width * size.height * 4;
-	AllocatedBuffer uploadbuffer = createBuffer("createImage uploadBuffer", data_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-
-	memcpy(uploadbuffer.info.pMappedData, data, data_size);
-
-	AllocatedImage newImage = createImage(name, size, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipmapped);
-
-	immediateSubmit([&](VkCommandBuffer cmd) {
-		transitionImage(cmd, newImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-		VkBufferImageCopy copyRegion = {};
-		copyRegion.bufferOffset = 0;
-		copyRegion.bufferRowLength = 0;
-		copyRegion.bufferImageHeight = 0;
-
-		copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		copyRegion.imageSubresource.mipLevel = 0;
-		copyRegion.imageSubresource.baseArrayLayer = 0;
-		copyRegion.imageSubresource.layerCount = 1;
-		copyRegion.imageExtent = size;
-
-		// copy the buffer into the image
-		vkCmdCopyBufferToImage(cmd, uploadbuffer.buffer, newImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-		if (mipmapped) {
-			generateMipmaps(cmd, newImage.image, { newImage.imageExtent.width, newImage.imageExtent.height });
-		} else {
-			transitionImage(cmd, newImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		}
-	});
-
-	// TOOD: we always default to this layout
-	newImage.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-	destroyBuffer(uploadbuffer);
-
-	return newImage;
-}
-
-void VulkanRenderer::destroyImage(const AllocatedImage& img) {
-	vkDestroyImageView(m_device, img.imageView, nullptr);
-	vmaDestroyImage(m_allocator, img.image, img.allocation);
-}
-
-void VulkanRenderer::initBindlessTextureDescriptor(VkDescriptorPool& pool, VkDescriptorSetLayout& descriptorSetLayout, VkDescriptorSet& descriptorSet) {
+void initBindlessTextureDescriptor(VulkanRendererContext* context, VkDescriptorPool& pool, VkDescriptorSetLayout& descriptorSetLayout, VkDescriptorSet& descriptorSet) {
 	constexpr uint32_t maxBindlessTextureResources = 1000;
 
 	VkDescriptorPoolSize poolSizesBindless[] = {
@@ -1849,7 +1651,7 @@ void VulkanRenderer::initBindlessTextureDescriptor(VkDescriptorPool& pool, VkDes
 	poolInfo.poolSizeCount = 1;
 	poolInfo.pPoolSizes = poolSizesBindless;
 
-	VK_CHECK(vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &pool));
+	VK_CHECK(vkCreateDescriptorPool(context->device, &poolInfo, nullptr, &pool));
 
 	VkDescriptorBindingFlags bindlessFlags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
 
@@ -1871,7 +1673,7 @@ void VulkanRenderer::initBindlessTextureDescriptor(VkDescriptorPool& pool, VkDes
 
 	bindlessTextureLayoutInfo.pNext = &extended_info;
 
-	vkCreateDescriptorSetLayout(m_device, &bindlessTextureLayoutInfo, nullptr, &descriptorSetLayout);
+	vkCreateDescriptorSetLayout(context->device, &bindlessTextureLayoutInfo, nullptr, &descriptorSetLayout);
 
 	VkDescriptorSetVariableDescriptorCountAllocateInfo countInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO };
 	countInfo.descriptorSetCount = 1;
@@ -1884,22 +1686,22 @@ void VulkanRenderer::initBindlessTextureDescriptor(VkDescriptorPool& pool, VkDes
 
 	setAllocateInfo.pNext = &countInfo;
 
-	VK_CHECK(vkAllocateDescriptorSets(m_device, &setAllocateInfo, &descriptorSet));
+	VK_CHECK(vkAllocateDescriptorSets(context->device, &setAllocateInfo, &descriptorSet));
 
-	m_mainDeletionQueue.push([&]() {
-		vkDestroyDescriptorSetLayout(m_device, descriptorSetLayout, nullptr);
-		vkDestroyDescriptorPool(m_device, pool, nullptr);
+	context->m_mainDeletionQueue.push([context, descriptorSetLayout, pool]() {
+		vkDestroyDescriptorSetLayout(context->device, descriptorSetLayout, nullptr);
+		vkDestroyDescriptorPool(context->device, pool, nullptr);
 	});
 }
 
-void VulkanRenderer::buildDefaultPipelines() {
+void buildDefaultPipelines(VulkanRendererContext* context) {
 	VkShaderModule meshFragShader{};
-	if (!loadShaderModule("res/shaders/mesh.frag.spv", m_device, &meshFragShader)) {
+	if (!loadShaderModule("res/shaders/mesh.frag.spv", context->device, &meshFragShader)) {
 		std::cout << std::format("Error when building the mesh fragment shader module") << '\n';
 	}
 
 	VkShaderModule meshVertexShader{};
-	if (!loadShaderModule("res/shaders/mesh.vert.spv", m_device, &meshVertexShader)) {
+	if (!loadShaderModule("res/shaders/mesh.vert.spv", context->device, &meshVertexShader)) {
 		std::cout << std::format("Error when building the mesh vertex shader module") << '\n';
 	}
 
@@ -1909,9 +1711,9 @@ void VulkanRenderer::buildDefaultPipelines() {
 	meshPushConstants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
 	std::array<VkDescriptorSetLayout, 3> layouts = {
-		m_gpuSceneDataDescriptorLayout,
-		bindlessTexturesSetLayout,
-		m_modelDrawDescriptorLayout
+		context->m_gpuSceneDataDescriptorLayout,
+		context->bindlessTexturesSetLayout,
+		context->m_modelDrawDescriptorLayout
 	};
 
 	VkPipelineLayoutCreateInfo meshLayoutInfo = pipelineLayoutCreateInfo();
@@ -1921,14 +1723,14 @@ void VulkanRenderer::buildDefaultPipelines() {
 	meshLayoutInfo.pSetLayouts = layouts.data();
 
 	VkPipelineLayout newLayout{};
-	VK_CHECK(vkCreatePipelineLayout(m_device, &meshLayoutInfo, nullptr, &newLayout));
+	VK_CHECK(vkCreatePipelineLayout(context->device, &meshLayoutInfo, nullptr, &newLayout));
 
-	opaquePipeline.layout = newLayout;
-	transparentPipeline.layout = newLayout;
-	doubleSidedPipeline.layout = newLayout;
+	context->opaquePipeline.layout = newLayout;
+	context->transparentPipeline.layout = newLayout;
+	context->doubleSidedPipeline.layout = newLayout;
 
-	m_mainDeletionQueue.push([&, newLayout]() {
-		vkDestroyPipelineLayout(m_device, newLayout, nullptr);
+	context->m_mainDeletionQueue.push([context, newLayout]() {
+		vkDestroyPipelineLayout(context->device, newLayout, nullptr);
 	});
 
 	// build the stage-create-info for both vertex and fragment stages. This lets
@@ -1944,31 +1746,31 @@ void VulkanRenderer::buildDefaultPipelines() {
 	pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
 	// render format
-	pipelineBuilder.setColorAttachmentFormat(m_sceneDrawImage.imageFormat);
-	pipelineBuilder.setDepthFormat(m_sceneDepthImage.imageFormat);
+	pipelineBuilder.setColorAttachmentFormat(context->m_sceneDrawImage.imageFormat);
+	pipelineBuilder.setDepthFormat(context->m_sceneDepthImage.imageFormat);
 
 	// build opaque pipeline
-	opaquePipeline.pipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
+	context->opaquePipeline.pipeline = pipelineBuilder.buildPipeline(context->device, context->m_pipelineCache);
 
 	// create the double sided variant
 	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-	doubleSidedPipeline.pipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
+	context->doubleSidedPipeline.pipeline = pipelineBuilder.buildPipeline(context->device, context->m_pipelineCache);
 
 	// create the alpha blending variant
 	pipelineBuilder.enableBlendingAlphablend();
-	transparentPipeline.pipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
+	context->transparentPipeline.pipeline = pipelineBuilder.buildPipeline(context->device, context->m_pipelineCache);
 
-	m_mainDeletionQueue.push([&] {
-		vkDestroyPipeline(m_device, opaquePipeline.pipeline, nullptr);
-		vkDestroyPipeline(m_device, doubleSidedPipeline.pipeline, nullptr);
-		vkDestroyPipeline(m_device, transparentPipeline.pipeline, nullptr);
+	context->m_mainDeletionQueue.push([context] {
+		vkDestroyPipeline(context->device, context->opaquePipeline.pipeline, nullptr);
+		vkDestroyPipeline(context->device, context->doubleSidedPipeline.pipeline, nullptr);
+		vkDestroyPipeline(context->device, context->transparentPipeline.pipeline, nullptr);
 	});
 
-	vkDestroyShaderModule(m_device, meshFragShader, nullptr);
-	vkDestroyShaderModule(m_device, meshVertexShader, nullptr);
+	vkDestroyShaderModule(context->device, meshFragShader, nullptr);
+	vkDestroyShaderModule(context->device, meshVertexShader, nullptr);
 }
 
-void VulkanRenderer::writeBindlessTextureToGlobalDescriptor(VkDescriptorSet bindlessTextureSet, uint32_t binding, AllocatedImage& image, VkSampler sampler, uint32_t index) {
+void writeBindlessTextureToGlobalDescriptor(VulkanRendererContext* context, VkDescriptorSet bindlessTextureSet, uint32_t binding, AllocatedImage& image, VkSampler sampler, uint32_t index) {
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageView = image.imageView;
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1982,28 +1784,28 @@ void VulkanRenderer::writeBindlessTextureToGlobalDescriptor(VkDescriptorSet bind
 	write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	write.pImageInfo = &imageInfo;
 
-	vkUpdateDescriptorSets(m_device, 1, &write, 0, nullptr);
+	vkUpdateDescriptorSets(context->device, 1, &write, 0, nullptr);
 }
 
-void VulkanRenderer::updateScene(float deltaTime) {
+void updateScene(VulkanRendererContext* context, float deltaTime) {
 	auto start = std::chrono::system_clock::now();
 
-	m_rendererState->mainCamera->update(deltaTime);
+	context->rendererState->mainCamera->update(deltaTime);
 
-	m_sceneData.view = m_rendererState->mainCamera->getViewMatrix();
-	m_sceneData.proj = m_rendererState->mainCamera->getPerspectiveProjection();
+	context->sceneData.view = context->rendererState->mainCamera->getViewMatrix();
+	context->sceneData.proj = context->rendererState->mainCamera->getPerspectiveProjection();
 
 	// invert the Y direction on projection matrix so that we are more similar
 	// to opengl and gltf axis
-	m_sceneData.proj[1][1] *= -1;
-	m_sceneData.viewproj = m_sceneData.proj * m_sceneData.view;
+	context->sceneData.proj[1][1] *= -1;
+	context->sceneData.viewproj = context->sceneData.proj * context->sceneData.view;
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-	m_rendererState->rendererStats.sceneUpdateTimeAvg = m_rendererState->rendererStats.sceneUpdateTimeAvg * 0.95 + (static_cast<float>(elapsed.count()) / 1000.0f) * 0.05;
+	context->rendererState->rendererStats.sceneUpdateTimeAvg = context->rendererState->rendererStats.sceneUpdateTimeAvg * 0.95 + (static_cast<float>(elapsed.count()) / 1000.0f) * 0.05;
 }
 
-void VulkanRenderer::updateFontData() {
+void updateFontData(VulkanRendererContext* context) {
 	// Update uniform for each window
 	for (auto& window : PrimalEngine::get().windows) {
 		FontUniformData fontUniformData{};
@@ -2013,31 +1815,30 @@ void VulkanRenderer::updateFontData() {
 		auto h = static_cast<float>(window.height);
 		fontUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
 
-		void* data = window.fontData.allocation->GetMappedData();
-		memcpy(data, &fontUniformData, sizeof(FontUniformData));
+		memcpy(window.fontData.info.pMappedData, &fontUniformData, sizeof(FontUniformData));
 	}
 }
 
-void VulkanRenderer::initFontData() {
-	sourceCodeFont = loadFontSDF("SauceCodePro-Light", "res/fonts/SauceCodePro-Light.png", "res/fonts/SauceCodePro-Light.json");
+void initFontData(VulkanRendererContext* context) {
+	context->sourceCodeFont = loadFontSDF("SauceCodePro-Light", "res/fonts/SauceCodePro-Light.png", "res/fonts/SauceCodePro-Light.json");
 	// arialFont = loadFontSDF("Arial", "res/fonts/arial.png", "res/fonts/arial.json");
 
 	for (auto& window : PrimalEngine::get().windows) {
-		window.fontData = createBuffer(std::format("fontUniformBuffer-{}", window.id), sizeof(FontUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+		window.fontData = createBuffer(std::format("fontUniformBuffer-{}", window.id), sizeof(FontUniformData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 	}
 
 	auto extents = VkExtent3D{
-		sourceCodeFont.image.width,
-		sourceCodeFont.image.height,
+		context->sourceCodeFont.image.width,
+		context->sourceCodeFont.image.height,
 		1
 	};
-	sourceCodeFontTexture = createImage("SourceCodeFont-Image", sourceCodeFont.image.data, extents, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
-	sourceCodeFontTexture.sampler = defaultSamplerLinear;
+	context->sourceCodeFontTexture = createImage("SourceCodeFont-Image", context->sourceCodeFont.image.data, extents, context, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	context->sourceCodeFontTexture.sampler = context->defaultSamplerLinear;
 
-	updateFontData();
+	updateFontData(context);
 }
 
-void VulkanRenderer::updateUIData() {
+void updateUIData(VulkanRendererContext* context) {
 	// Update uniform for each window
 	for (auto& window : PrimalEngine::get().windows) {
 		UIUniformData uiUniformData{};
@@ -2046,43 +1847,45 @@ void VulkanRenderer::updateUIData() {
 		auto h = static_cast<float>(window.height);
 		uiUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
 
-		void* data = window.uiData.allocation->GetMappedData();
-		memcpy(data, &uiUniformData, sizeof(FontUniformData));
+		memcpy(window.uiData.info.pMappedData, &uiUniformData, sizeof(FontUniformData));
 	}
 
+	auto& rendererState = context->rendererState;
+	auto& sceneData = context->sceneData;
+
 	auto stats = std::format("Frametime: {:.2f}ms | GPU: {:.2f}ms | UI: {:.4f}ms | Triangles: {:.2f}M | DrawCall: {}",
-		m_rendererState->rendererStats.frametime,
-		m_rendererState->rendererStats.frameGpuTimeAvg,
-		m_rendererState->rendererStats.uiFrametimeAvg,
-		m_rendererState->rendererStats.triangleCount * 1e-6,
-		m_rendererState->rendererStats.drawCallCount);
+		rendererState->rendererStats.frametime,
+		rendererState->rendererStats.frameGpuTimeAvg,
+		rendererState->rendererStats.uiFrametimeAvg,
+		rendererState->rendererStats.triangleCount * 1e-6,
+		rendererState->rendererStats.drawCallCount);
 
 	auto otherStats = std::format("DrawBatchGen: {:.4f}us | UIDrawBatchGen: {:.4f}us | EntityFlatten: {:.4f}us | UILayout: {:.4f}us | SceneUpdate: {:.4f}us | MeshDraw: {:.4f}us",
-		m_rendererState->rendererStats.drawBatchGenerationTimeAvg,
-		m_rendererState->rendererStats.uiDrawBatchGenerationTimeAvg,
-		m_rendererState->rendererStats.entityFlattenTimeAvg,
-		m_rendererState->rendererStats.uiLayoutTimeAvg,
-		m_rendererState->rendererStats.sceneUpdateTimeAvg,
-		m_rendererState->rendererStats.meshDrawTimeAvg);
+		rendererState->rendererStats.drawBatchGenerationTimeAvg,
+		rendererState->rendererStats.uiDrawBatchGenerationTimeAvg,
+		rendererState->rendererStats.entityFlattenTimeAvg,
+		rendererState->rendererStats.uiLayoutTimeAvg,
+		rendererState->rendererStats.sceneUpdateTimeAvg,
+		rendererState->rendererStats.meshDrawTimeAvg);
 
 	auto cameraPosition = std::format("Camera Pos: {:.2f} {:.2f} {:.2f}",
-		m_rendererState->mainCamera->position.x,
-		m_rendererState->mainCamera->position.y,
-		m_rendererState->mainCamera->position.z);
+		rendererState->mainCamera->position.x,
+		rendererState->mainCamera->position.y,
+		rendererState->mainCamera->position.z);
 
 	auto sunDirection = std::format("Sun Direction: {:.2f} {:.2f} {:.2f} {:.2f}",
-		m_sceneData.sunlightDirection.x,
-		m_sceneData.sunlightDirection.y,
-		m_sceneData.sunlightDirection.z,
-		m_sceneData.sunlightDirection.w);
+		sceneData.sunlightDirection.x,
+		sceneData.sunlightDirection.y,
+		sceneData.sunlightDirection.z,
+		sceneData.sunlightDirection.w);
 
 	auto sunColor = std::format("Sun Color: {:.2f} {:.2f} {:.2f} {:.2f}",
-		m_sceneData.sunlightColor.x,
-		m_sceneData.sunlightColor.y,
-		m_sceneData.sunlightColor.z,
-		m_sceneData.sunlightColor.w);
+		sceneData.sunlightColor.x,
+		sceneData.sunlightColor.y,
+		sceneData.sunlightColor.z,
+		sceneData.sunlightColor.w);
 
-	UI::setFont(&sourceCodeFont);
+	UI::setFont(&context->sourceCodeFont);
 
 	auto start = std::chrono::high_resolution_clock::now();
 
@@ -2091,7 +1894,7 @@ void VulkanRenderer::updateUIData() {
 
 	UI::beginFrame();
 
-	UI::beginWindow(m_rendererState->window);
+	UI::beginWindow(rendererState->window);
 
 	// Title bar
 	UI::openElement();
@@ -2143,7 +1946,7 @@ void VulkanRenderer::updateUIData() {
 						.id = 1000,
 						.width = 1448.0f,
 						.height = 700.0f,
-						.textureId = sceneTextureId
+						.textureId = context->sceneTextureId
 				});
 
 			UI::closeDockSpaceElement();
@@ -2165,8 +1968,8 @@ void VulkanRenderer::updateUIData() {
 			.padding = 10.0f,
 			.childGap = 10.0f });
 
-				UI::sliderFloat3(&m_rendererState->mainCamera->position);
-				UI::sliderFloat4(&m_sceneData.sunlightDirection, 0.0f, 1.0f);
+				UI::sliderFloat3(&rendererState->mainCamera->position);
+				UI::sliderFloat4(&sceneData.sunlightDirection, 0.0f, 1.0f);
 
 				UI::openElement();
 					UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
@@ -2180,7 +1983,7 @@ void VulkanRenderer::updateUIData() {
 						UI::pushCircle(80.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
 				UI::closeElement();
 
-				UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);
+				UI::sliderFloat4(&sceneData.sunlightColor, 0.0f, 1.0f);
 		UI::closeDockSpaceElement();
 	UI::closeElement();
 
@@ -2201,8 +2004,8 @@ void VulkanRenderer::updateUIData() {
 			.padding = 10.0f,
 			.childGap = 10.0f });
 
-				UI::sliderFloat3(&m_rendererState->mainCamera->position);
-				UI::sliderFloat4(&m_sceneData.sunlightDirection, 0.0f, 1.0f);
+				UI::sliderFloat3(&rendererState->mainCamera->position);
+				UI::sliderFloat4(&sceneData.sunlightDirection, 0.0f, 1.0f);
 
 				UI::openElement();
 					UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
@@ -2216,7 +2019,7 @@ void VulkanRenderer::updateUIData() {
 						UI::pushCircle(50.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
 				UI::closeElement();
 
-				UI::sliderFloat4(&m_sceneData.sunlightColor, 0.0f, 1.0f);
+				UI::sliderFloat4(&sceneData.sunlightColor, 0.0f, 1.0f);
 		UI::closeDockSpaceElement();
 	UI::closeElement();
 
@@ -2224,42 +2027,135 @@ void VulkanRenderer::updateUIData() {
 	UI::endWindow();
 
 	// NOTE(piero): We are not making a deep copy of this data. We are still referencing the arena memory.
-	getCurrentFrame().uiWindowBatchCommands = UI::endFrame();
+	getCurrentFrame(context).uiWindowBatchCommands = UI::endFrame();
 
 	auto uiLayoutTime = std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - start).count();
-	m_rendererState->rendererStats.uiLayoutTimeAvg = m_rendererState->rendererStats.uiLayoutTimeAvg * 0.95 + uiLayoutTime * 0.05;
+	context->rendererState->rendererStats.uiLayoutTimeAvg = context->rendererState->rendererStats.uiLayoutTimeAvg * 0.95 + uiLayoutTime * 0.05;
 }
 
-void VulkanRenderer::initUI() {
-	uiMemoryArena = MemoryArena_create(MEGABYTE(20));
-	UI::initRenderContext(&uiMemoryArena);
+void initUI(VulkanRendererContext* context) {
+	context->uiMemoryArena = MemoryArena_create(MEGABYTE(20));
+	UI::initRenderContext(&context->uiMemoryArena);
 
 	// Register image to UI system
-	sceneTextureId = registerImage(&m_sceneDrawImage);
-	writeBindlessTextureToGlobalDescriptor(viewportTextureDescriptorSet, 0, m_sceneDrawImage, defaultSamplerLinear, sceneTextureId);
+	context->sceneTextureId = registerImage(context, &context->m_sceneDrawImage);
+	writeBindlessTextureToGlobalDescriptor(context, context->viewportTextureDescriptorSet, 0, context->m_sceneDrawImage, context->defaultSamplerLinear, context->sceneTextureId);
 
 	for (auto& window : PrimalEngine::get().windows) {
-		window.uiData = createBuffer(std::format("uiUniformBuffer-{}", window.id), sizeof(UIUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+		window.uiData = createBuffer(std::format("uiUniformBuffer-{}", window.id), sizeof(UIUniformData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 	}
 
-	updateUIData();
+	updateUIData(context);
 }
 
-void VulkanRenderer::setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown) {
+void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown) {
 	UI::setPointerState(windowId, mouseX, mouseY, relMouseX, relMouseY, isPointerDown);
 }
 
 // TODO(piero): Rework this. Right now we are just using this to keep track of the indices in which we upload to the global descriptor for textures.
-uint32_t VulkanRenderer::registerImage(AllocatedImage* image) {
+uint32_t registerImage(VulkanRendererContext* context, AllocatedImage* image) {
 	// Image are registered starting from 1. 0 is the fallback image.
-	auto index = registeredImages.size() + 1;
-	registeredImages.push_back(image);
+	auto index = context->registeredImages.size() + 1;
+	context->registeredImages.push_back(image);
 	return index;
 }
 
-// NOTE: I don't like this. Maybe just create 2 specialized functions.
-template GPUMeshBuffers VulkanRenderer::uploadMesh<UI::UIVertex>(std::span<uint32_t> indices, std::span<UI::UIVertex> vertices, std::string name);
-template GPUMeshBuffers VulkanRenderer::uploadMesh<Vertex>(std::span<uint32_t> indices, std::span<Vertex> vertices, std::string name);
+/*
+ * Create a staging buffer in CPU memory to hold the vertex + index buffer data.
+ * Copy it to the GPU buffer.
+ */
+GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<UI::UIVertex> vertices, std::string name) {
+	const auto vertexBufferSize = vertices.size() * sizeof(UI::UIVertex);
+	const auto indexBufferSize = indices.size() * sizeof(uint32_t);
 
+	GPUMeshBuffers newSurface{};
+
+	// create vertex buffer
+	newSurface.vertexBuffer = createBuffer(name + " MeshVertexBuffer", vertexBufferSize, context->vmaAllocator, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+	// find the adress of the vertex buffer
+	VkBufferDeviceAddressInfo deviceAdressInfo{
+		.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+		.buffer = newSurface.vertexBuffer.buffer
+	};
+	newSurface.vertexBufferAddress = vkGetBufferDeviceAddress(context->device, &deviceAdressInfo);
+
+	// create index buffer
+	newSurface.indexBuffer = createBuffer(name + " MeshIndexBuffer", indexBufferSize, context->vmaAllocator, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+	AllocatedBuffer staging = createBuffer(name + " Mesh staging", vertexBufferSize + indexBufferSize, context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+
+	// copy vertex buffer
+	memcpy(staging.info.pMappedData, vertices.data(), vertexBufferSize);
+	// copy index buffer
+	memcpy(static_cast<char*>(staging.info.pMappedData) + vertexBufferSize, indices.data(), indexBufferSize);
+
+	immediateSubmit(context, [&](VkCommandBuffer cmd) {
+		VkBufferCopy vertexCopy{ 0 };
+		vertexCopy.dstOffset = 0;
+		vertexCopy.srcOffset = 0;
+		vertexCopy.size = vertexBufferSize;
+
+		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.vertexBuffer.buffer, 1, &vertexCopy);
+
+		VkBufferCopy indexCopy{ 0 };
+		indexCopy.dstOffset = 0;
+		indexCopy.srcOffset = vertexBufferSize;
+		indexCopy.size = indexBufferSize;
+
+		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.indexBuffer.buffer, 1, &indexCopy);
+	});
+
+	destroyBuffer(context->vmaAllocator, staging);
+
+	return newSurface;
+}
+
+GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<Vertex> vertices, std::string name) {
+	const auto vertexBufferSize = vertices.size() * sizeof(Vertex);
+	const auto indexBufferSize = indices.size() * sizeof(uint32_t);
+
+	GPUMeshBuffers newSurface{};
+
+	// create vertex buffer
+	newSurface.vertexBuffer = createBuffer(name + " MeshVertexBuffer", vertexBufferSize, context->vmaAllocator, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+	// find the adress of the vertex buffer
+	VkBufferDeviceAddressInfo deviceAdressInfo{
+		.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+		.buffer = newSurface.vertexBuffer.buffer
+	};
+	newSurface.vertexBufferAddress = vkGetBufferDeviceAddress(context->device, &deviceAdressInfo);
+
+	// create index buffer
+	newSurface.indexBuffer = createBuffer(name + " MeshIndexBuffer", indexBufferSize, context->vmaAllocator, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+	AllocatedBuffer staging = createBuffer(name + " Mesh staging", vertexBufferSize + indexBufferSize, context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+
+	// copy vertex buffer
+	memcpy(staging.info.pMappedData, vertices.data(), vertexBufferSize);
+	// copy index buffer
+	memcpy(static_cast<char*>(staging.info.pMappedData) + vertexBufferSize, indices.data(), indexBufferSize);
+
+	immediateSubmit(context, [&](VkCommandBuffer cmd) {
+		VkBufferCopy vertexCopy{ 0 };
+		vertexCopy.dstOffset = 0;
+		vertexCopy.srcOffset = 0;
+		vertexCopy.size = vertexBufferSize;
+
+		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.vertexBuffer.buffer, 1, &vertexCopy);
+
+		VkBufferCopy indexCopy{ 0 };
+		indexCopy.dstOffset = 0;
+		indexCopy.srcOffset = vertexBufferSize;
+		indexCopy.size = indexBufferSize;
+
+		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.indexBuffer.buffer, 1, &indexCopy);
+	});
+
+	destroyBuffer(context->vmaAllocator, staging);
+
+	return newSurface;
+}
 
 }// namespace pm

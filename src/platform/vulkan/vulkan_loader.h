@@ -10,7 +10,7 @@
 namespace pm {
 
 struct AllocatedImage;
-class VulkanRenderer;
+struct VulkanRendererContext;
 
 struct Model {
 	GPUMeshBuffers modelBuffers;// TODO: this should be moved out.
@@ -21,10 +21,10 @@ struct Model {
 };
 
 
-std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePath);
-void cleanupModel(VulkanRenderer* renderer, Model& model);
+std::optional<Model> loadGLTF(VulkanRendererContext* context, std::string_view filePath);
+void cleanupModel(VulkanRendererContext* context, Model& model);
 void cleanupModelEntities(Entity* root);
 
-std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asset& asset, fastgltf::Image& image);
+std::optional<AllocatedImage> loadImage(VulkanRendererContext* renderer, fastgltf::Asset& asset, fastgltf::Image& image);
 
 }// namespace pm

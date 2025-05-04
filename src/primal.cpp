@@ -9,6 +9,7 @@
 
 #include "SDL3/SDL_keycode.h"
 #include "SDL3/SDL_video.h"
+#include "platform/vulkan/vulkan_renderer.h"
 #include "primal.h"
 
 
@@ -25,7 +26,11 @@ PrimalEngine::PrimalEngine() {
 	loadedEngine = this;
 
 	SDL_Init(SDL_INIT_VIDEO);
-	m_renderer.init();
+
+	rendererMemory = MemoryArena_create(GIGABYTE(2));
+	rendererContext = new VulkanRendererContext();
+
+	rendererInit(rendererContext);
 
 	auto windowFlags = static_cast<SDL_WindowFlags>(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
@@ -57,15 +62,16 @@ PrimalEngine::PrimalEngine() {
 	//              We want to cleanly initialize Vulkan (aka: get an instance, device and physical device)
 	//              Then we want to initialize our camera and setup all our initial "Windows".
 	//              Last we create all necessary resources for our renderer (sync stuff, commands, render targets, pipelines, etc)
-	m_renderer.setInitialState(&m_rendererState);
-	m_renderer.setup();
+	rendererSetInitialState(rendererContext, &m_rendererState);
+	rendererSetup(rendererContext);
 
 	m_isInitialized = true;
 }
 
 void PrimalEngine::cleanup() {
 	if (m_isInitialized) {
-		m_renderer.cleanup();
+		rendererCleanup(rendererContext);
+		delete rendererContext;
 	}
 	loadedEngine = nullptr;
 }
@@ -176,7 +182,7 @@ void PrimalEngine::run() {
 			m_mainCamera->processSDLEvent(e);
 
 			if (e.type == SDL_EVENT_MOUSE_MOTION && !windowRelativeMouseMode) {
-				m_renderer.setPointerState(e.motion.windowID, e.motion.x, e.motion.y, e.motion.xrel, e.motion.yrel, e.motion.state & SDL_BUTTON_LMASK);
+				setPointerState(e.motion.windowID, e.motion.x, e.motion.y, e.motion.xrel, e.motion.yrel, e.motion.state & SDL_BUTTON_LMASK);
 			}
 
 			m_stopRendering = mainWindow->isMinimized;
@@ -193,7 +199,7 @@ void PrimalEngine::run() {
 		// Check if we need to resize any windows
 		for (auto& window : windows) {
 			if (window.resizeRequested) {
-				m_renderer.resizeSwapchain(&window);
+				resizeSwapchain(rendererContext, &window);
 
 				// NOTE(piero): If we resize the main window, we also update our camera.
 				if (window.id == mainWindow->id) {
@@ -202,8 +208,8 @@ void PrimalEngine::run() {
 			}
 		}
 
-		m_renderer.update(deltaTime);
-		draw(deltaTime);
+		rendererUpdate(rendererContext, deltaTime);
+		rendererDraw(rendererContext);
 
 		auto end = std::chrono::system_clock::now();
 		auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
@@ -211,19 +217,11 @@ void PrimalEngine::run() {
 	}
 }
 
-void PrimalEngine::draw(float deltaTime) {
-	m_renderer.draw();
-}
-
-GPUMeshBuffers PrimalEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
-	return m_renderer.uploadMesh(indices, vertices, "PrimalEngine");
-}
-
 PrimalWindow* PrimalEngine::createWindow(std::string_view name, int32_t width, int32_t height, SDL_WindowFlags flags) {
 	windows.push_back(createPrimalWindow(name, width, height, flags));
 	auto& window = windows.back();
-	window.surface = createVulkanSurface(&window, m_renderer.m_instance, nullptr);
-	window.swapchain = createSwapchain(m_renderer.m_device, m_renderer.m_chosenGPU, window.surface, width, height, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
+	window.surface = createVulkanSurface(&window, rendererContext->instance, nullptr);
+	window.swapchain = createSwapchain(rendererContext->device, rendererContext->physicalDevice, window.surface, width, height, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
 	return &window;
 }
 

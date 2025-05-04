@@ -16,9 +16,9 @@ struct MemoryArena {
 // TODO(piero): This should be dynamic per arena
 constexpr uint32_t PAGES_PER_COMMIT = 2;
 
-#define KILOBYTE(value) ((value) * 1024)
-#define MEGABYTE(value) (KILOBYTE(value) * 1024)
-#define GIGABYTE(value) (MEGABYTE(value) * 1024)
+#define KILOBYTE(value) (uint64_t)((value) * 1024)
+#define MEGABYTE(value) (uint64_t)(KILOBYTE(value) * 1024)
+#define GIGABYTE(value) (uint64_t)(MEGABYTE(value) * 1024)
 
 #define MemoryArenaPush(T, count, arena) static_cast<T *>(MemoryArena_push(arena, sizeof(T) * count, alignof(T)))
 

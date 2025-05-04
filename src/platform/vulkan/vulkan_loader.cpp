@@ -7,6 +7,7 @@
 #include <vulkan/vulkan_core.h>
 #include "vulkan_loader.h"
 
+#include "platform/vulkan/buffers.h"
 #include "vk_types.h"
 #include "vulkan_renderer.h"
 #include <filesystem>
@@ -17,7 +18,7 @@
 
 namespace pm {
 
-std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asset& asset, fastgltf::Image& image) {
+std::optional<AllocatedImage> loadImage(VulkanRendererContext* context, fastgltf::Asset& asset, fastgltf::Image& image) {
 	AllocatedImage newImage{};
 
 	int width{}, height{}, nrChannels{};
@@ -41,7 +42,7 @@ std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asse
 						imagesize.height = imageAsset.height;
 						imagesize.depth = 1;
 
-						newImage = renderer->createImage(image.name.c_str(), imageAsset.data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+						newImage = createImage(image.name.c_str(), imageAsset.data, imagesize, context, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 					}
 					destroyImageAsset(imageAsset);
 				}
@@ -54,7 +55,7 @@ std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asse
 					imagesize.height = imageAsset.height;
 					imagesize.depth = 1;
 
-					newImage = renderer->createImage(image.name.c_str(), imageAsset.data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+					newImage = createImage(image.name.c_str(), imageAsset.data, imagesize, context, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 				}
 				destroyImageAsset(imageAsset);
 			},
@@ -66,7 +67,7 @@ std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asse
 										 [](auto& arg) {},
 										 [&](fastgltf::sources::Vector& vector) {
 											 if (view.mimeType == fastgltf::MimeType::KTX2) {
-												 auto texture = createKTX2Image(image.name.c_str(), renderer->m_device, renderer->getCurrentFrame().m_commandPool, renderer->m_graphicsQueue, renderer->m_allocator, vector.bytes.data() + bufferView.byteOffset, bufferView.byteLength, VK_FORMAT_BC7_SRGB_BLOCK, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+												 auto texture = createKTX2Image(image.name.c_str(), context->device, getCurrentFrame(context).m_commandPool, context->graphicsQueue, context->vmaAllocator, vector.bytes.data() + bufferView.byteOffset, bufferView.byteLength, VK_FORMAT_BC7_SRGB_BLOCK, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 												 if (texture.has_value()) {
 													 newImage = texture.value();
 												 }
@@ -78,7 +79,7 @@ std::optional<AllocatedImage> loadImage(VulkanRenderer* renderer, fastgltf::Asse
 													 imagesize.height = imageAsset.height;
 													 imagesize.depth = 1;
 
-													 newImage = renderer->createImage(image.name.c_str(), imageAsset.data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+													 newImage = createImage(image.name.c_str(), imageAsset.data, imagesize, context, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 												 }
 												 destroyImageAsset(imageAsset);
 											 }
@@ -127,7 +128,7 @@ VkSamplerMipmapMode extractMipmapMode(fastgltf::Filter filter) {
 	}
 }
 
-std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePath) {
+std::optional<Model> loadGLTF(VulkanRendererContext* context, std::string_view filePath) {
 	std::cout << std::format("Loading GLTF: {}", filePath) << '\n';
 	if (!std::filesystem::exists(filePath)) {
 		std::cout << std::format("Cannot load {}. File does not exist.\n", filePath);
@@ -183,11 +184,11 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 		samplerCreateInfo.minFilter = extractFilter(sampler.minFilter.value_or(fastgltf::Filter::Nearest));
 
 		samplerCreateInfo.mipmapMode = extractMipmapMode(sampler.minFilter.value_or(fastgltf::Filter::Nearest));
-		samplerCreateInfo.maxAnisotropy = renderer->maxSamplerAnisotropy;
-		samplerCreateInfo.anisotropyEnable = renderer->anisotropyEnabled;
+		samplerCreateInfo.maxAnisotropy = context->maxSamplerAnisotropy;
+		samplerCreateInfo.anisotropyEnable = context->anisotropyEnabled;
 
 		VkSampler newSampler{};
-		vkCreateSampler(renderer->m_device, &samplerCreateInfo, nullptr, &newSampler);
+		vkCreateSampler(context->device, &samplerCreateInfo, nullptr, &newSampler);
 
 		model.samplers.push_back(newSampler);
 	}
@@ -196,11 +197,11 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 	int defaultTextureCount = 0;
 	auto textureStartTime = std::chrono::system_clock::now();
 	for (fastgltf::Image& image : gltf.images) {
-		auto img = loadImage(renderer, gltf, image);
+		auto img = loadImage(context, gltf, image);
 		if (img.has_value()) {
 			model.images.push_back(*img);
 		} else {
-			model.images.push_back(renderer->errorCheckerboardImage);
+			model.images.push_back(context->errorCheckerboardImage);
 			defaultTextureCount++;
 			std::cout << "gltf failed to load texture " << image.name << '\n';
 		}
@@ -211,8 +212,8 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 
 	// Material processing
 
-	const auto materialOffset = MaterialCache_size(renderer->m_materialCache);
-	auto sceneMaterialData = static_cast<MaterialData*>(renderer->globalMaterialDataBuffer.info.pMappedData);
+	const auto materialOffset = MaterialCache_size(context->materialCache);
+	auto sceneMaterialData = static_cast<MaterialData*>(context->globalMaterialDataBuffer.info.pMappedData);
 
 	auto materialStartTime = std::chrono::system_clock::now();
 
@@ -263,7 +264,7 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 			auto imageSampler = model.images[img].sampler ? model.images[img].sampler : model.samplers[sampler];
 
 			// TODO: We are writing textures 1 by 1. We should batch these.
-			renderer->writeBindlessTextureToGlobalDescriptor(renderer->bindlessTexturesDescriptorSet, 0, model.images[img], imageSampler, bindlessTextureIndex);
+			writeBindlessTextureToGlobalDescriptor(context, context->bindlessTexturesDescriptorSet, 0, model.images[img], imageSampler, bindlessTextureIndex);
 			bindlessTextureIndex++;
 		}
 
@@ -274,18 +275,18 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 		newMat.passType = passType;
 
 		if (passType == MaterialPass::Transparent) {
-			newMat.pipeline = &renderer->transparentPipeline;
+			newMat.pipeline = &context->transparentPipeline;
 		} else if (passType == MaterialPass::DoubleSided) {
-			newMat.pipeline = &renderer->doubleSidedPipeline;
+			newMat.pipeline = &context->doubleSidedPipeline;
 		} else {
-			newMat.pipeline = &renderer->opaquePipeline;
+			newMat.pipeline = &context->opaquePipeline;
 		}
 
 		model.materials.push_back(newMat);
 
 		// Add new material to our global material cache. If we add it, increase index.
 		// TODO: handle indices for duplicate materials.
-		if (MaterialCache_add(renderer->m_materialCache, materialDataIndex, newMat)) {
+		if (MaterialCache_add(context->materialCache, materialDataIndex, newMat)) {
 			materialDataIndex++;
 		}
 	}
@@ -384,7 +385,7 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 				newPrimitive.materialIndex = 0;// set default material
 			}
 
-			auto mat = MaterialCache_get(renderer->m_materialCache, newPrimitive.materialIndex);
+			auto mat = MaterialCache_get(context->materialCache, newPrimitive.materialIndex);
 			newPrimitive.passType = mat.passType;
 
 			newmesh.primitives.push_back(newPrimitive);
@@ -395,7 +396,7 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 	auto geometryProcessingTime = std::chrono::duration<double>(std::chrono::system_clock::now() - geometryProcessingStart).count();
 
 	auto geometryUploadStart = std::chrono::system_clock::now();
-	model.modelBuffers = renderer->uploadMesh<Vertex>(indices, vertices, "modelBuffers");
+	model.modelBuffers = uploadMesh(context, indices, vertices, "modelBuffers");
 	auto geometryUploadTime = std::chrono::duration<double, std::milli>(std::chrono::system_clock::now() - geometryUploadStart).count();
 	std::cout << std::format("Loaded {} meshes in {:.4f}s. Uploaded buffers in {:.4f}ms\n", meshes.size(), geometryProcessingTime, geometryUploadTime);
 
@@ -476,28 +477,26 @@ std::optional<Model> loadGLTF(VulkanRenderer* renderer, std::string_view filePat
 	return model;
 }
 
-void cleanupModel(VulkanRenderer* renderer, Model& model) {
-	VkDevice dv = renderer->m_device;
-
-	renderer->destroyBuffer(model.modelBuffers.indexBuffer);
-	renderer->destroyBuffer(model.modelBuffers.vertexBuffer);
+void cleanupModel(VulkanRendererContext* context, Model& model) {
+	destroyBuffer(context->vmaAllocator, model.modelBuffers.indexBuffer);
+	destroyBuffer(context->vmaAllocator, model.modelBuffers.vertexBuffer);
 
 	cleanupModelEntities(model.root);
 
 	for (auto& image : model.images) {
-		if (image.image == renderer->errorCheckerboardImage.image) {
+		if (image.image == context->errorCheckerboardImage.image) {
 			// dont destroy the default images
 			continue;
 		}
-		renderer->destroyImage(image);
+		destroyImage(context->device, context->vmaAllocator, image);
 	}
 
 	for (auto& sampler : model.samplers) {
-		vkDestroySampler(dv, sampler, nullptr);
+		vkDestroySampler(context->device, sampler, nullptr);
 	}
 
 	// TODO: should be handled by the renderer
-	renderer->destroyBuffer(renderer->globalMaterialDataBuffer);
+	destroyBuffer(context->vmaAllocator, context->globalMaterialDataBuffer);
 }
 
 // Flatten the hierarchy and delete all entities

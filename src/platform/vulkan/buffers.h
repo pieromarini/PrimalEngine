@@ -4,29 +4,16 @@
 
 namespace pm {
 
-inline AllocatedBuffer createBuffer(std::string name, size_t allocSize, VmaAllocator allocator, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) {
-	// allocate buffer
-	VkBufferCreateInfo bufferInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-	bufferInfo.pNext = nullptr;
-	bufferInfo.size = allocSize;
+struct VulkanRendererContext;
 
-	bufferInfo.usage = usage;
+AllocatedBuffer createBuffer(std::string name, size_t allocSize, VmaAllocator allocator, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
 
-	VmaAllocationCreateInfo vmaallocInfo = {};
-	vmaallocInfo.usage = memoryUsage;
-	vmaallocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
-	AllocatedBuffer newBuffer{};
+void destroyBuffer(VmaAllocator allocator, const AllocatedBuffer& buffer);
 
-	// allocate the buffer
-	VK_CHECK(vmaCreateBuffer(allocator, &bufferInfo, &vmaallocInfo, &newBuffer.buffer, &newBuffer.allocation, &newBuffer.info));
+AllocatedImage createImage(std::string name, VkExtent3D size, VkDevice device, VmaAllocator allocator, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 
-	vmaSetAllocationName(allocator, newBuffer.allocation, name.c_str());
+AllocatedImage createImage(std::string name, void* data, VkExtent3D size, VulkanRendererContext* context, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 
-	return newBuffer;
-}
-
-inline void destroyBuffer(VmaAllocator allocator, const AllocatedBuffer& buffer) {
-	vmaDestroyBuffer(allocator, buffer.buffer, buffer.allocation);
-}
+void destroyImage(VkDevice device, VmaAllocator allocator, const AllocatedImage& img);
 
 }// namespace pm

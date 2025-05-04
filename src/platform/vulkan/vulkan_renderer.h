@@ -18,9 +18,10 @@
 #include "vulkan_descriptor.h"
 #include "vulkan_texture.h"
 
-#include "ui/ui_types.h"
-#include "ui/ui_manager.h"
 #include "platform/window.h"
+#include "ui/ui_manager.h"
+#include "ui/ui_types.h"
+
 
 namespace pm {
 
@@ -91,7 +92,7 @@ enum DrawBatchType {
 };
 
 struct DrawBatch {
-	DrawBatchType type; // TODO(piero): Remove this. This is only used to bind global descriptor sets for a batch but we should include global descriptor sets in the batch itself.
+	DrawBatchType type;// TODO(piero): Remove this. This is only used to bind global descriptor sets for a batch but we should include global descriptor sets in the batch itself.
 	DrawBatchCommands commands{};
 	std::vector<DrawBatchDescriptor> descriptors{};
 	std::vector<DrawBatchImageDescriptor> imageDescriptors{};
@@ -205,83 +206,48 @@ struct ModelDrawRender {
 	std::vector<RenderObject> renderObjects{};
 };
 
-class VulkanRenderer {
-public:
-	void init();
-	void setup();
-	void setInitialState(VulkanRendererConfig* state);
+struct VulkanRendererContext {
+	VkDevice device;
+	VkPhysicalDevice physicalDevice;
+	VkInstance instance;
+	VkSurfaceKHR m_surface;
 
-	void initMemory();
+	VkQueue graphicsQueue{};
+	VkDebugUtilsMessengerEXT debugMessenger;
 
-	void loadTestScene();
+	// KTX2 formats
+	std::vector<ktx_transcode_fmt_e> availableTargetFormats{};
+	std::vector<std::string> availableTargetFormatsNames{};
 
-	void initDefaultData();
+	// VMA
+	VmaAllocator vmaAllocator;
 
-	void buildDrawBatches(std::vector<Model*>& models);
-	void buildUIDrawBatches(FixedArray<UI::UIWindowBatchCommands>& windowBatches);
-	std::vector<UI::UIElement> buildUIGeometry(FixedArray<UI::UIRenderCommand>& renderCommands, std::vector<UI::UIVertex>& vertices, std::vector<uint32_t>& indices);
-
-	// drawing
-	void draw();
-	void drawBackground(VkCommandBuffer commandBuffer);
-	void drawGeometry(VkCommandBuffer commandBuffer);
-	void drawUI(VkCommandBuffer commandBuffer);
-
-	void cleanup();
-
-	// Buffers
-	AllocatedBuffer createBuffer(std::string name, size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
-	void destroyBuffer(const AllocatedBuffer& buffer);
-
-	// Images
-	AllocatedImage createImage(std::string name, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
-	AllocatedImage createImage(std::string name, void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
-	void destroyImage(const AllocatedImage& img);
-
-	template<typename VertexType>
-	GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<VertexType> vertices, std::string name);
-
-	void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
-	void resizeSwapchain(PrimalWindow* window);
-
-	VkDescriptorSetLayout m_gpuSceneDataDescriptorLayout;
-	VkDescriptorSetLayout m_modelDrawDescriptorLayout;
-
-	// NOTE(piero): Testing viewport rendering
-	AllocatedImage m_sceneDrawImage;
-	AllocatedImage m_sceneDepthImage;
-	VkDescriptorSet m_sceneDrawImageDescriptor;
-	VkDescriptorSetLayout m_sceneDrawImageDescriptorLayout;
-
-	VkDescriptorSetLayout viewportDescriptorLayout;
-	VkDescriptorSet viewportDescriptorSet;
-	VkPipelineLayout viewportPipelineLayout;
-	VkPipeline viewportPipeline;
-
-	DeletionQueue m_mainDeletionQueue;
-
-	// Font Rendering
-	void updateScene(float deltaTime);
-	void updateFontData();
-	void updateUIData();
-
-	void update(float deltaTime);
-
-	void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown);
-
-	// Image testing
-	AllocatedImage whiteImage;
-	AllocatedImage blackImage;
-	AllocatedImage greyImage;
-	AllocatedImage errorCheckerboardImage;
-
-	VkSampler defaultSamplerLinear;
-	VkSampler defaultSamplerNearest;
-
+	// scene
 	std::unordered_map<std::string, Model> loadedModels;
 
-	// Bindless Global texture arrays
+	// Per-frame data
+	FrameData frames[FRAME_OVERLAP]{};
+	uint32_t frameNumber{};
+	uint32_t graphicsQueueFamily{};
 
+	// Deletion queues
+	DeletionQueue m_mainDeletionQueue;
+
+	// Descriptor allocators
+	DescriptorAllocator m_globalDescriptorAllocator;
+
+	// Descriptor set Layouts
+	VkDescriptorSetLayout m_gpuSceneDataDescriptorLayout;
+	VkDescriptorSetLayout m_modelDrawDescriptorLayout;
+	VkDescriptorSetLayout m_drawImageDescriptorLayout;
+	VkDescriptorSetLayout viewportDescriptorLayout;
+	VkDescriptorSetLayout fontDescriptorLayout;
+	VkDescriptorSetLayout uiDescriptorLayout;
+
+	// Descriptor sets
+	VkDescriptorSet m_drawImageDescriptors;
+
+	// BINDLESS DESCRIPTORS
 	// Mesh textures
 	VkDescriptorPool bindlessPool;
 	VkDescriptorSetLayout bindlessTexturesSetLayout;
@@ -292,129 +258,143 @@ public:
 	VkDescriptorSetLayout viewportTextureSetLayout;
 	VkDescriptorSet viewportTextureDescriptorSet;
 
-	// store registered texture id from UI system to render into viewport
+	// Viewport rendering
+	VkPipelineLayout viewportPipelineLayout;
+	VkPipeline viewportPipeline;
+
+	// Pipelines
+	VkPipeline m_skyPipeline;
+	VkPipelineLayout m_skyPipelineLayout;
+	VkPipeline fontPipeline;
+	VkPipelineLayout fontPipelineLayout;
+	VkPipeline uiPipeline;
+	VkPipelineLayout uiPipelineLayout;
+
+	VkPipelineCache m_pipelineCache;
+
+	// Images
+	AllocatedImage m_sceneDrawImage;// viewport
+	AllocatedImage m_sceneDepthImage;// viewport
 	uint32_t sceneTextureId;
 
-	// Global materials
-	VkDescriptorSet materialsDescriptor;
+	// Buffers
 	AllocatedBuffer globalMaterialDataBuffer;
-
-	VkDevice m_device;
-	VkPhysicalDevice m_chosenGPU;
-	VkInstance m_instance;
-
-
-	uint32_t getCurrentFrameIndex() { return m_frameNumber % FRAME_OVERLAP; }
-	FrameData& getCurrentFrame() { return m_frames[m_frameNumber % FRAME_OVERLAP]; };
-	VkQueue m_graphicsQueue{};
-
-	// KTX2 formats
-	std::vector<ktx_transcode_fmt_e> availableTargetFormats{};
-	std::vector<std::string> availableTargetFormatsNames{};
-
-	// Allocator
-	VmaAllocator m_allocator;
-
-	bool anisotropyEnabled;
-	float maxSamplerAnisotropy;
-
-	void writeBindlessTextureToGlobalDescriptor(VkDescriptorSet bindlessTextureSet, uint32_t binding, AllocatedImage& image, VkSampler sampler, uint32_t index);
-
-	// Default pipelines
-	void buildDefaultPipelines();
-	MaterialPipeline opaquePipeline;
-	MaterialPipeline transparentPipeline;
-	MaterialPipeline doubleSidedPipeline;
-
-	MaterialCache m_materialCache;
-
-	// image registering for viewport rendering
-	uint32_t registerImage(AllocatedImage* image);
-	std::vector<AllocatedImage*> registeredImages;
-
-private:
-	void initVulkan();
-	void initRenderTargets();
-	void initCommands();
-	void initSyncStructures();
-	void initDescriptors();
-	void initPipelines();
-	void initFontData();
-	void initUI();
-	void initBindlessTextureDescriptor(VkDescriptorPool& pool, VkDescriptorSetLayout& descriptorSetLayout, VkDescriptorSet& descriptotSet);
-	void initQueryPools();
-
-	// specific pipelines
-	void initBackgroundPipelines();
-	void initFontPipeline();
-	void initViewportPipeline();
-	void initUIPipeline();
-
-	VulkanRendererConfig* m_rendererState;
-	float m_renderScale{ 1.0f };
 
 	// Structures for immediateSubmit
 	VkFence m_immFence;
 	VkCommandBuffer m_immCommandBuffer;
 	VkCommandPool m_immCommandPool;
 
-	// Vulkan init stuff
-	VkDebugUtilsMessengerEXT m_debug_messenger;
-	VkSurfaceKHR m_surface;
-
-	// Swapchain
-	PrimalSwapchain mainSwapchain;
-
-	// Commands
-	FrameData m_frames[FRAME_OVERLAP]{};
-	uint32_t m_frameNumber{};
-	uint32_t m_graphicsQueueFamily{};
-
-	// Draw resources
-	VkExtent2D m_drawExtent;
-
-	// Descriptors
-	DescriptorAllocator m_globalDescriptorAllocator;
-	VkDescriptorSet m_drawImageDescriptors;
-	VkDescriptorSetLayout m_drawImageDescriptorLayout;
+	// Default data
+	AllocatedImage whiteImage;
+	AllocatedImage blackImage;
+	AllocatedImage greyImage;
+	AllocatedImage errorCheckerboardImage;
+	VkSampler defaultSamplerLinear;
+	VkSampler defaultSamplerNearest;
 
 	// Global scene data for all meshes
-	GPUSceneData m_sceneData;
-	
-	// Compute pipeline
-	VkPipeline m_skyPipeline;
-	VkPipelineLayout m_skyPipelineLayout;
-
-	// Text rendering
-	VkCommandBuffer fontCommandBuffer;
-	DescriptorAllocator fontDescriptorAllocator;
-	VkDescriptorSetLayout fontDescriptorLayout;
-	VkDescriptorSet fontDescriptorSet;
-	uint32_t fontIndexCount{ 0 };
-	VkPipelineLayout fontPipelineLayout;
-	VkPipeline fontPipeline;
-
-	// UI Rendering
-	DescriptorAllocator uiDescriptorAllocator;
-	VkDescriptorSetLayout uiDescriptorLayout;
-	VkDescriptorSet uiDescriptorSet;
-	VkPipelineLayout uiPipelineLayout;
-	VkPipeline uiPipeline;
-
-	VkPipelineCache m_pipelineCache;
-
-	// Timestamp
-	float physicalDeviceTimestampPeriod{};
-	VkQueryPool timestampPool;
-	VkQueryPool pipelineStatisticsPool;
+	GPUSceneData sceneData;
 
 	// Testing fonts
 	FontAsset arialFont;
 	FontAsset sourceCodeFont;
 	AllocatedImage sourceCodeFontTexture;
 
-	// Memory Arenas
+	// Default 3d pipelines
+	MaterialPipeline opaquePipeline;
+	MaterialPipeline transparentPipeline;
+	MaterialPipeline doubleSidedPipeline;
+
+	// Storage
+	MaterialCache materialCache;
+	std::vector<AllocatedImage*> registeredImages;
+
+	// config
+	bool anisotropyEnabled;
+	float maxSamplerAnisotropy;
+
+	VulkanRendererConfig* rendererState;
+	float renderScale{ 1.0f };
+
+	// Timestamp
+	float physicalDeviceTimestampPeriod{};
+	VkQueryPool timestampPool;
+	VkQueryPool pipelineStatisticsPool;
+
+
+	// Memory
 	MemoryArena uiMemoryArena;
 };
+
+inline uint32_t getCurrentFrameIndex(VulkanRendererContext* context) {
+	return context->frameNumber % FRAME_OVERLAP;
+}
+
+inline FrameData& getCurrentFrame(VulkanRendererContext* context) {
+	return context->frames[context->frameNumber % FRAME_OVERLAP];
+};
+
+void rendererInit(VulkanRendererContext* context);
+void rendererSetup(VulkanRendererContext* context);
+void rendererSetInitialState(VulkanRendererContext* context, VulkanRendererConfig* state);
+
+void rendererInitMemory(VulkanRendererContext* context);
+
+void loadTestScene(VulkanRendererContext* context);
+
+void rendererInitDefaultData(VulkanRendererContext* context);
+
+void initVulkan(VulkanRendererContext* context);
+void initRenderTargets(VulkanRendererContext* context);
+void initCommands(VulkanRendererContext* context);
+void initSyncStructures(VulkanRendererContext* context);
+void initDescriptors(VulkanRendererContext* context);
+void initPipelines(VulkanRendererContext* context);
+void initQueryPools(VulkanRendererContext* context);
+
+void initFontData(VulkanRendererContext* context);
+void initUI(VulkanRendererContext* context);
+void initBindlessTextureDescriptor(VulkanRendererContext* context, VkDescriptorPool& pool, VkDescriptorSetLayout& descriptorSetLayout, VkDescriptorSet& descriptotSet);
+
+void resizeSwapchain(VulkanRendererContext* context, PrimalWindow* window);
+
+// specific pipelines
+// TODO(piero): Init pipelines from config file
+void initBackgroundPipelines(VulkanRendererContext* context);
+void initFontPipeline(VulkanRendererContext* context);
+void initViewportPipeline(VulkanRendererContext* context);
+void initUIPipeline(VulkanRendererContext* context);
+void buildDefaultPipelines(VulkanRendererContext* context);
+
+void writeBindlessTextureToGlobalDescriptor(VulkanRendererContext* context, VkDescriptorSet bindlessTextureSet, uint32_t binding, AllocatedImage& image, VkSampler sampler, uint32_t index);
+
+GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<UI::UIVertex> vertices, std::string name);
+GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<Vertex> vertices, std::string name);
+
+// Batching
+void buildDrawBatches(VulkanRendererContext* context, std::vector<Model*>& models);
+void buildUIDrawBatches(VulkanRendererContext* context, FixedArray<UI::UIWindowBatchCommands>& windowBatches);
+std::vector<UI::UIElement> buildUIGeometry(VulkanRendererContext* context, FixedArray<UI::UIRenderCommand>& renderCommands, std::vector<UI::UIVertex>& vertices, std::vector<uint32_t>& indices);
+
+// Updating
+void rendererUpdate(VulkanRendererContext* context, float deltaTime);
+void updateScene(VulkanRendererContext* context, float deltaTime);
+void updateFontData(VulkanRendererContext* context);
+void updateUIData(VulkanRendererContext* context);
+
+// drawing
+void rendererDraw(VulkanRendererContext* context);
+void drawBackground(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
+void drawGeometry(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
+void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
+
+void rendererCleanup(VulkanRendererContext* context);
+
+void immediateSubmit(VulkanRendererContext* context, std::function<void(VkCommandBuffer cmd)>&& function);
+
+uint32_t registerImage(VulkanRendererContext* context, AllocatedImage* image);
+
+void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown);
 
 }// namespace pm
