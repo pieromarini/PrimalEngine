@@ -24,8 +24,8 @@ struct PrimalWindow {
 
 	uint32_t nextImageIndex{};
 
-	AllocatedImage* renderTarget{};
-	AllocatedImage* depthTarget{};
+	AllocatedImage renderTarget{};
+	AllocatedImage depthTarget{};
 
 	// Vulkan-specific
 	VkSurfaceKHR surface{ nullptr };
@@ -34,7 +34,7 @@ struct PrimalWindow {
 
 PrimalWindow createPrimalWindow(std::string_view title, int32_t width, int32_t height, SDL_WindowFlags flags);
 
-void destroyPrimalWindow(PrimalWindow* window, VkDevice device = nullptr, VkInstance instance = nullptr, VkAllocationCallbacks* callbacks = nullptr);
+void destroyPrimalWindow(PrimalWindow* window, VmaAllocator& allocator, VkDevice device, VkInstance instance, VkAllocationCallbacks* callbacks);
 
 void getWindowSize(PrimalWindow* window, int* width, int* height);
 void getWindowSizeInPixels(PrimalWindow* window, int* width, int* height);

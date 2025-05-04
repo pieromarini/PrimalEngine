@@ -262,17 +262,12 @@ public:
 
 	VkDescriptorSetLayout m_gpuSceneDataDescriptorLayout;
 	VkDescriptorSetLayout m_modelDrawDescriptorLayout;
-	AllocatedImage m_drawImage;
-	AllocatedImage m_depthImage;
 
 	// NOTE(piero): Testing viewport rendering
 	AllocatedImage m_sceneDrawImage;
 	AllocatedImage m_sceneDepthImage;
 	VkDescriptorSet m_sceneDrawImageDescriptor;
 	VkDescriptorSetLayout m_sceneDrawImageDescriptorLayout;
-
-	AllocatedImage m_testWindowDrawImage;
-	AllocatedImage m_testWindowDepthImage;
 
 	VkDescriptorSetLayout viewportDescriptorLayout;
 	VkDescriptorSet viewportDescriptorSet;

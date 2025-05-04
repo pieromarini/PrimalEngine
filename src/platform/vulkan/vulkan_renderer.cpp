@@ -125,8 +125,32 @@ void VulkanRenderer::resizeSwapchain(PrimalWindow* window) {
 
 	m_renderScale = static_cast<float>(displayWidth) / static_cast<float>(newWidth);
 
-	std::cout << std::format("Creating new swapchain: {}x{}\n", newWidth, newHeight);
 	window->swapchain = createSwapchain(m_device, m_chosenGPU, window->surface, newWidth, newHeight, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
+
+	// recreate window render target
+	VkImageUsageFlags drawImageUsages{};
+	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
+	drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+	VkImageUsageFlags depthImageUsages{};
+	depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+	VkExtent3D newWindowExtent {
+		static_cast<uint32_t>(newWidth),
+		static_cast<uint32_t>(newHeight),
+		1
+	};
+
+	// NOTE(piero): I just want to keep the same VMA allocation names for tracking purposes
+	auto nRT = window->renderTarget.allocation->GetName();
+	auto nDT = window->depthTarget.allocation->GetName();
+
+	destroyImage(window->renderTarget);
+	destroyImage(window->depthTarget);
+	window->renderTarget = createImage(nRT, newWindowExtent, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
+	window->depthTarget = createImage(nDT, newWindowExtent, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
 
 	UI::onResizeCallback(static_cast<float>(window->width), static_cast<float>(window->height));
 
@@ -354,36 +378,27 @@ void VulkanRenderer::initRenderTargets() {
 		1
 	};
 
-	m_drawImage = createImage("drawImage", drawImageExtent, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
-	m_sceneDrawImage = createImage("scene drawImage", sceneDrawImageExtent, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
-	m_testWindowDrawImage = createImage("scene window drawImage", testWindowExtent, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
+	// Create render targets
+	// TODO(piero): Refactor this. Create a system that does this automatically based on a config file?
+	m_rendererState->window->renderTarget = createImage("drawImage", drawImageExtent, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
+	testWindow->renderTarget = createImage("scene window drawImage", testWindowExtent, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
 
-	// Depth image
+	m_sceneDrawImage = createImage("scene drawImage", sceneDrawImageExtent, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
+
 	VkImageUsageFlags depthImageUsages{};
 	depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-	m_depthImage = createImage("depthImage", drawImageExtent, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
+	m_rendererState->window->depthTarget = createImage("depthImage", drawImageExtent, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
+	testWindow->depthTarget = createImage("scene window depthImage", testWindowExtent, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
+
 	m_sceneDepthImage = createImage("scene depthImage", sceneDrawImageExtent, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
-	m_testWindowDepthImage = createImage("scene window depthImage", testWindowExtent, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
 
 	m_mainDeletionQueue.push([&]() {
-		vkDestroyImageView(m_device, m_drawImage.imageView, nullptr);
-		vmaDestroyImage(m_allocator, m_drawImage.image, m_drawImage.allocation);
-
-		vkDestroyImageView(m_device, m_depthImage.imageView, nullptr);
-		vmaDestroyImage(m_allocator, m_depthImage.image, m_depthImage.allocation);
-
 		vkDestroyImageView(m_device, m_sceneDrawImage.imageView, nullptr);
 		vmaDestroyImage(m_allocator, m_sceneDrawImage.image, m_sceneDrawImage.allocation);
 
 		vkDestroyImageView(m_device, m_sceneDepthImage.imageView, nullptr);
 		vmaDestroyImage(m_allocator, m_sceneDepthImage.image, m_sceneDepthImage.allocation);
-
-		vkDestroyImageView(m_device, m_testWindowDrawImage.imageView, nullptr);
-		vmaDestroyImage(m_allocator, m_testWindowDrawImage.image, m_testWindowDrawImage.allocation);
-
-		vkDestroyImageView(m_device, m_testWindowDepthImage.imageView, nullptr);
-		vmaDestroyImage(m_allocator, m_testWindowDepthImage.image, m_testWindowDepthImage.allocation);
 	});
 }
 
@@ -450,9 +465,7 @@ void VulkanRenderer::cleanup() {
 	UI::cleanupRenderContext();
 
 	for (auto& window : PrimalEngine::get().windows) {
-		destroySwapchain(m_device, &window.swapchain);
-		destroyVulkanSurface(m_instance, window.surface, nullptr);
-		destroyPrimalWindow(&window);
+		destroyPrimalWindow(&window, m_allocator, m_device, m_instance, nullptr);
 	}
 
 	vmaDestroyAllocator(m_allocator);
@@ -1008,10 +1021,6 @@ void VulkanRenderer::draw() {
 
 	auto commandBeginInfo = commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-	// TODO(piero): remove this.
-	m_drawExtent.width = std::min(m_rendererState->window->swapchain.extent.width, m_drawImage.imageExtent.width) * m_renderScale;
-	m_drawExtent.height = std::min(m_rendererState->window->swapchain.extent.height, m_drawImage.imageExtent.height) * m_renderScale;
-
 	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &commandBeginInfo));
 
 	vkCmdResetQueryPool(commandBuffer, timestampPool, 0, 128);
@@ -1023,16 +1032,14 @@ void VulkanRenderer::draw() {
 
 	drawBackground(commandBuffer);
 
-	// transition the draw image and the depth image into their correct attachment layouts
-	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	transitionImage(commandBuffer, m_depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+	// transition render targets into correct layouts
+	for (auto& window : PrimalEngine::get().windows) {
+		transitionImage(commandBuffer, window.renderTarget.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		transitionImage(commandBuffer, window.depthTarget.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+	}
 
 	transitionImage(commandBuffer, m_sceneDrawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	transitionImage(commandBuffer, m_sceneDepthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-
-	// TODO(piero): This should be automatic when we set a render target for a window. Since we want to write to it, we need to transition the image correctly.
-	transitionImage(commandBuffer, m_testWindowDrawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	transitionImage(commandBuffer, m_testWindowDepthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
 	vkCmdResetQueryPool(commandBuffer, pipelineStatisticsPool, 0, 1);
 	vkCmdBeginQuery(commandBuffer, pipelineStatisticsPool, 0, 0);
@@ -1045,10 +1052,10 @@ void VulkanRenderer::draw() {
 
 	vkCmdEndQuery(commandBuffer, pipelineStatisticsPool, 0);
 
-	// transition the draw image and the swapchain image into their correct transfer layouts
-	// TODO(piero): this should be automatic when setting a render target for a window. After writing to it, we should transition the image correctly for transfer src optimal if we are gonna copy from it.
-	transitionImage(commandBuffer, m_drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-	transitionImage(commandBuffer, m_testWindowDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	// transition the render targets into their correct transfer layouts
+	for (auto& window : PrimalEngine::get().windows) {
+		transitionImage(commandBuffer, window.renderTarget.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	}
 
 	// Copy render target to swapchain image
 	for (auto& window : PrimalEngine::get().windows) {
@@ -1056,8 +1063,8 @@ void VulkanRenderer::draw() {
 		transitionImage(commandBuffer, window.swapchain.images[window.nextImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 		// execute a copy from the draw image into the swapchain
-		VkExtent2D sourceImageSize { .width = window.renderTarget->imageExtent.width, .height = window.renderTarget->imageExtent.height };
-		copyImageToImage(commandBuffer, window.renderTarget->image, window.swapchain.images[window.nextImageIndex], sourceImageSize, window.swapchain.extent);
+		VkExtent2D sourceImageSize { .width = window.renderTarget.imageExtent.width, .height = window.renderTarget.imageExtent.height };
+		copyImageToImage(commandBuffer, window.renderTarget.image, window.swapchain.images[window.nextImageIndex], sourceImageSize, window.swapchain.extent);
 
 		// set swapchain image layout to Present so we can show it on the screen
 		transitionImage(commandBuffer, window.swapchain.images[window.nextImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
@@ -1150,14 +1157,13 @@ void VulkanRenderer::drawUI(VkCommandBuffer commandBuffer) {
 
 	for (auto& windowBatch: getCurrentFrame().uiWindowBatches) {
 		auto window = windowBatch.window;
-		VkRenderingAttachmentInfo colorAttachment = attachmentInfo(window->renderTarget->imageView, &clearColor, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-		VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(window->depthTarget->imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+		VkRenderingAttachmentInfo colorAttachment = attachmentInfo(window->renderTarget.imageView, &clearColor, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(window->depthTarget.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
 		VkExtent2D extent{
 			.width = (uint32_t)window->swapchain.extent.width,
 			.height = (uint32_t)window->swapchain.extent.height,
 		};
-		std::cout << std::format("Create render info: {}x{}\n", extent.width, extent.height);
 		VkRenderingInfo renderInfo = renderingInfo({ .extent = extent }, &colorAttachment, &depthAttachment);
 		vkCmdBeginRendering(commandBuffer, &renderInfo);
 
@@ -1526,8 +1532,8 @@ void VulkanRenderer::initUIPipeline() {
 	pipelineBuilder.enableBackgroundBlending();
 	pipelineBuilder.disableDepthTest();
 
-	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
-	pipelineBuilder.setDepthFormat(m_depthImage.imageFormat);
+	pipelineBuilder.setColorAttachmentFormat(m_rendererState->window->renderTarget.imageFormat);
+	pipelineBuilder.setDepthFormat(m_rendererState->window->depthTarget.imageFormat);
 
 	uiPipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
 
@@ -1582,8 +1588,11 @@ void VulkanRenderer::initViewportPipeline() {
 	pipelineBuilder.disableBlending();
 	pipelineBuilder.disableDepthTest();
 
-	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
-	pipelineBuilder.setDepthFormat(m_depthImage.imageFormat);
+	// TODO(piero): This is wrong. This works right now because all viewports use the same formats for color and depth.
+	//              We should set this dynamically and create a pipeline for each color/depth combination.
+	//              I don't think we are going to use different formats for now but still good to keep this in mind.
+	pipelineBuilder.setColorAttachmentFormat(m_rendererState->window->renderTarget.imageFormat);
+	pipelineBuilder.setDepthFormat(m_rendererState->window->depthTarget.imageFormat);
 
 	viewportPipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
 
@@ -1637,8 +1646,8 @@ void VulkanRenderer::initFontPipeline() {
 	pipelineBuilder.enableBlendingAlphablend();
 	pipelineBuilder.disableDepthTest();
 
-	pipelineBuilder.setColorAttachmentFormat(m_drawImage.imageFormat);
-	pipelineBuilder.setDepthFormat(m_depthImage.imageFormat);
+	pipelineBuilder.setColorAttachmentFormat(m_rendererState->window->renderTarget.imageFormat);
+	pipelineBuilder.setDepthFormat(m_rendererState->window->depthTarget.imageFormat);
 
 	fontPipeline = pipelineBuilder.buildPipeline(m_device, m_pipelineCache);
 
@@ -2086,12 +2095,7 @@ void VulkanRenderer::updateUIData() {
 
 
 	// TODO(piero): Refactor this
-	m_rendererState->window->renderTarget = &m_drawImage;
-	m_rendererState->window->depthTarget = &m_depthImage;
-
 	auto testWindow = &PrimalEngine::get().windows[1];
-	testWindow->renderTarget = &m_testWindowDrawImage;
-	testWindow->depthTarget = &m_testWindowDepthImage;
 
 	UI::beginFrame();
 

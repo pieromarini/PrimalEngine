@@ -24,11 +24,21 @@ PrimalWindow createPrimalWindow(std::string_view title, int32_t width, int32_t h
 }
 
 
-void destroyPrimalWindow(PrimalWindow* window, VkDevice device, VkInstance instance, VkAllocationCallbacks* callbacks) {
-	if (device && instance) {
-		destroyVulkanSurface(instance, window->surface, callbacks);
-		destroySwapchain(device, &window->swapchain);
+void destroyPrimalWindow(PrimalWindow* window, VmaAllocator& allocator, VkDevice device, VkInstance instance, VkAllocationCallbacks* callbacks) {
+	// TODO(piero): Maybe we shouldn't destroy render targets here?
+	if (window->renderTarget.imageView) {
+		vkDestroyImageView(device, window->renderTarget.imageView, nullptr);
+		vmaDestroyImage(allocator, window->renderTarget.image, window->renderTarget.allocation);
 	}
+
+	if (window->depthTarget.imageView) {
+		vkDestroyImageView(device, window->depthTarget.imageView, nullptr);
+		vmaDestroyImage(allocator, window->depthTarget.image, window->depthTarget.allocation);
+	}
+
+	destroySwapchain(device, &window->swapchain);
+	destroyVulkanSurface(instance, window->surface, callbacks);
+
 	SDL_DestroyWindow(window->handle);
 }
 
