@@ -24,17 +24,6 @@
 
 namespace pm {
 
-struct FontUniformData {
-	// Scene matrices
-	glm::mat4 projection;
-	glm::mat4 view;
-
-	// Font display options
-	glm::vec4 outlineColor{ 1.0f, 0.0f, 0.0f, 0.0f };
-	float outlineWidth{ 0.6f };
-	float outline{ true };
-};
-
 struct UIPushConstants {
 	VkDeviceAddress vertexBuffer;
 };
@@ -116,11 +105,6 @@ struct DrawBatch {
 struct UIWindowBatch {
 	PrimalWindow* window;
 	std::vector<DrawBatch> drawBatches;
-};
-
-struct UIUniformData {
-	glm::mat4 projection;
-	glm::mat4 view;
 };
 
 class DeletionQueue {
@@ -403,8 +387,6 @@ private:
 
 	// Text rendering
 	VkCommandBuffer fontCommandBuffer;
-	FontUniformData fontUniformData{};
-	AllocatedBuffer fontUniformBuffer;
 	DescriptorAllocator fontDescriptorAllocator;
 	VkDescriptorSetLayout fontDescriptorLayout;
 	VkDescriptorSet fontDescriptorSet;
@@ -413,8 +395,6 @@ private:
 	VkPipeline fontPipeline;
 
 	// UI Rendering
-	UIUniformData uiUniformData{};
-	AllocatedBuffer uiUniformBuffer;
 	DescriptorAllocator uiDescriptorAllocator;
 	VkDescriptorSetLayout uiDescriptorLayout;
 	VkDescriptorSet uiDescriptorSet;

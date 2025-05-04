@@ -162,6 +162,7 @@ void PrimalEngine::run() {
 				handleWindowEvent(e);
 			}
 
+			// TODO(piero): fix window relative mouse mode. Should be tracked by window.
 			if (e.type == SDL_EVENT_KEY_UP) {
 				if (e.key.key == SDLK_ESCAPE) {
 					windowRelativeMouseMode = !windowRelativeMouseMode;

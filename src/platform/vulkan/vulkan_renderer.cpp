@@ -239,8 +239,6 @@ void VulkanRenderer::initVulkan() {
 	m_instance = vkbInstance.instance;
 	m_debug_messenger = vkbInstance.debug_messenger;
 
-	// m_rendererState->window->surface = createVulkanSurface(m_rendererState->window, m_instance, nullptr);
-
 	// vulkan 1.3 features
 	VkPhysicalDeviceVulkan13Features features13{};
 	features13.dynamicRendering = VK_TRUE;
@@ -279,7 +277,7 @@ void VulkanRenderer::initVulkan() {
 																				 .set_required_features_13(features13)
 																				 .set_required_features_12(features12)
 																				 // .set_surface(m_rendererState->window->surface)
-																				 .defer_surface_initialization()
+																				 .defer_surface_initialization() // NOTE(piero): should we create a "dummy" surface?
 																				 .add_required_extension("VK_EXT_scalar_block_layout")
 																				 .select()
 																				 .value();
@@ -420,17 +418,14 @@ void VulkanRenderer::initCommands() {
 }
 
 void VulkanRenderer::initSyncStructures() {
-	// create syncronization structures
-	// one fence to control when the gpu has finished rendering the frame,
-	// and 2 semaphores to syncronize rendering with swapchain
-	// we want the fence to start signaled so we can wait on it on the first frame
 	auto fenceCreate = fenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
-	auto semaphoreCreate = semaphoreCreateInfo();
 
 
 	VK_CHECK(vkCreateFence(m_device, &fenceCreate, nullptr, &m_immFence));
 	m_mainDeletionQueue.push([this]() { vkDestroyFence(m_device, m_immFence, nullptr); });
 
+	// one fence to control when the gpu has finished rendering the frame,
+	// we want the fence to start signaled so we can wait on it on the first frame
 	for (auto& frame : m_frames) {
 		VK_CHECK(vkCreateFence(m_device, &fenceCreate, nullptr, &frame.m_renderFence));
 
@@ -575,7 +570,6 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIWindowBatchCommands>& w
 			auto renderCommand = FixedArray_get(renderCommands, i);
 			auto& uiElement = elements.at(i);
 
-
 			auto& rect = renderCommand->boundingRect;
 			auto transform = glm::mat4{ 1.0f };
 
@@ -718,7 +712,7 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIWindowBatchCommands>& w
 		};
 
 		std::vector<DrawBatchDescriptor> descriptors;
-		descriptors.emplace_back(0, uiUniformBuffer, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+		descriptors.emplace_back(0, batch->window->uiData, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 		descriptors.emplace_back(1, uiDrawCommandsBuffer, sizeof(UIIndirectCommand) * uiDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 		descriptors.emplace_back(2, uiDrawDataBuffer, sizeof(UIDrawData) * uiDrawData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 		descriptors.emplace_back(3, uiMaterialDataBuffer, sizeof(UIMaterialData) * uiMaterialData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
@@ -746,7 +740,7 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIWindowBatchCommands>& w
 			};
 
 			std::vector<DrawBatchDescriptor> textDescriptors;
-			textDescriptors.emplace_back(0, fontUniformBuffer, sizeof(FontUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+			textDescriptors.emplace_back(0, batch->window->fontData, sizeof(FontUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 			textDescriptors.emplace_back(2, textDrawCommandsBuffer, sizeof(UIIndirectCommand) * textDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 			textDescriptors.emplace_back(3, textTransformDataBuffer, sizeof(glm::mat4) * textTransformData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
@@ -783,7 +777,7 @@ void VulkanRenderer::buildUIDrawBatches(FixedArray<UI::UIWindowBatchCommands>& w
 			};
 
 			std::vector<DrawBatchDescriptor> viewportDescriptors;
-			viewportDescriptors.emplace_back(0, uiUniformBuffer, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+			viewportDescriptors.emplace_back(0, batch->window->uiData, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 			viewportDescriptors.emplace_back(1, viewportDrawCommandsBuffer, sizeof(UIIndirectCommand) * viewportDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 			viewportDescriptors.emplace_back(2, viewportTransformDataBuffer, sizeof(ViewportDrawData) * viewportDrawData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
@@ -2012,22 +2006,27 @@ void VulkanRenderer::updateScene(float deltaTime) {
 }
 
 void VulkanRenderer::updateFontData() {
-	fontUniformData.outline = 0.0f;
+	// Update uniform for each window
+	for (auto& window : PrimalEngine::get().windows) {
+		FontUniformData fontUniformData{};
+		fontUniformData.outline = 0.0f;
+		fontUniformData.view = glm::mat4(1.0f);
+		auto w = static_cast<float>(window.width);
+		auto h = static_cast<float>(window.height);
+		fontUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
 
-	fontUniformData.view = glm::mat4(1.0f);
-
-	auto w = static_cast<float>(m_rendererState->window->width);
-	auto h = static_cast<float>(m_rendererState->window->height);
-	fontUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
-
-	// copy data into buffer
-	void* data = fontUniformBuffer.allocation->GetMappedData();
-	memcpy(data, &fontUniformData, sizeof(FontUniformData));
+		void* data = window.fontData.allocation->GetMappedData();
+		memcpy(data, &fontUniformData, sizeof(FontUniformData));
+	}
 }
 
 void VulkanRenderer::initFontData() {
 	sourceCodeFont = loadFontSDF("SauceCodePro-Light", "res/fonts/SauceCodePro-Light.png", "res/fonts/SauceCodePro-Light.json");
 	// arialFont = loadFontSDF("Arial", "res/fonts/arial.png", "res/fonts/arial.json");
+
+	for (auto& window : PrimalEngine::get().windows) {
+		window.fontData = createBuffer(std::format("fontUniformBuffer-{}", window.id), sizeof(FontUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	}
 
 	auto extents = VkExtent3D{
 		sourceCodeFont.image.width,
@@ -2037,25 +2036,21 @@ void VulkanRenderer::initFontData() {
 	sourceCodeFontTexture = createImage("SourceCodeFont-Image", sourceCodeFont.image.data, extents, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 	sourceCodeFontTexture.sampler = defaultSamplerLinear;
 
-	// Create uniform buffer
-	fontUniformBuffer = createBuffer("fontUniformBuffer", sizeof(FontUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-
 	updateFontData();
-
-	m_mainDeletionQueue.push([&]() {
-		destroyBuffer(fontUniformBuffer);
-	});
 }
 
 void VulkanRenderer::updateUIData() {
-	uiUniformData.view = glm::mat4(1.0f);
+	// Update uniform for each window
+	for (auto& window : PrimalEngine::get().windows) {
+		UIUniformData uiUniformData{};
+		uiUniformData.view = glm::mat4(1.0f);
+		auto w = static_cast<float>(window.width);
+		auto h = static_cast<float>(window.height);
+		uiUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
 
-	auto w = static_cast<float>(m_rendererState->window->width);
-	auto h = static_cast<float>(m_rendererState->window->height);
-	uiUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
-
-	void* data = uiUniformBuffer.allocation->GetMappedData();
-	memcpy(data, &uiUniformData, sizeof(UIUniformData));
+		void* data = window.uiData.allocation->GetMappedData();
+		memcpy(data, &uiUniformData, sizeof(FontUniformData));
+	}
 
 	auto stats = std::format("Frametime: {:.2f}ms | GPU: {:.2f}ms | UI: {:.4f}ms | Triangles: {:.2f}M | DrawCall: {}",
 		m_rendererState->rendererStats.frametime,
@@ -2092,7 +2087,6 @@ void VulkanRenderer::updateUIData() {
 	UI::setFont(&sourceCodeFont);
 
 	auto start = std::chrono::high_resolution_clock::now();
-
 
 	// TODO(piero): Refactor this
 	auto testWindow = &PrimalEngine::get().windows[1];
@@ -2228,6 +2222,7 @@ void VulkanRenderer::updateUIData() {
 		UI::closeDockSpaceElement();
 	UI::closeElement();
 
+
 	UI::endWindow();
 
 	// NOTE(piero): We are not making a deep copy of this data. We are still referencing the arena memory.
@@ -2235,17 +2230,6 @@ void VulkanRenderer::updateUIData() {
 
 	auto uiLayoutTime = std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - start).count();
 	m_rendererState->rendererStats.uiLayoutTimeAvg = m_rendererState->rendererStats.uiLayoutTimeAvg * 0.95 + uiLayoutTime * 0.05;
-}
-
-void VulkanRenderer::setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown) {
-	UI::setPointerState(windowId, mouseX, mouseY, relMouseX, relMouseY, isPointerDown);
-}
-
-uint32_t VulkanRenderer::registerImage(AllocatedImage* image) {
-	// Image are registered starting from 1. 0 is the fallback image.
-	auto index = registeredImages.size() + 1;
-	registeredImages.push_back(image);
-	return index;
 }
 
 void VulkanRenderer::initUI() {
@@ -2256,13 +2240,23 @@ void VulkanRenderer::initUI() {
 	sceneTextureId = registerImage(&m_sceneDrawImage);
 	writeBindlessTextureToGlobalDescriptor(viewportTextureDescriptorSet, 0, m_sceneDrawImage, defaultSamplerLinear, sceneTextureId);
 
-	uiUniformBuffer = createBuffer("uiUniformBuffer", sizeof(UIUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-
-	m_mainDeletionQueue.push([&]() {
-		destroyBuffer(uiUniformBuffer);
-	});
+	for (auto& window : PrimalEngine::get().windows) {
+		window.uiData = createBuffer(std::format("uiUniformBuffer-{}", window.id), sizeof(UIUniformData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	}
 
 	updateUIData();
+}
+
+void VulkanRenderer::setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown) {
+	UI::setPointerState(windowId, mouseX, mouseY, relMouseX, relMouseY, isPointerDown);
+}
+
+// TODO(piero): Rework this. Right now we are just using this to keep track of the indices in which we upload to the global descriptor for textures.
+uint32_t VulkanRenderer::registerImage(AllocatedImage* image) {
+	// Image are registered starting from 1. 0 is the fallback image.
+	auto index = registeredImages.size() + 1;
+	registeredImages.push_back(image);
+	return index;
 }
 
 // NOTE: I don't like this. Maybe just create 2 specialized functions.

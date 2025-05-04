@@ -27,6 +27,10 @@ struct PrimalWindow {
 	AllocatedImage renderTarget{};
 	AllocatedImage depthTarget{};
 
+	// TODO(piero): Temporary. This data shouldn't be here.
+	AllocatedBuffer uiData{};
+	AllocatedBuffer fontData{};
+
 	// Vulkan-specific
 	VkSurfaceKHR surface{ nullptr };
 	PrimalSwapchain swapchain{};

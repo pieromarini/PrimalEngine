@@ -738,7 +738,6 @@ void pushDockSpace(UIElementOptions options) {
 	{
 		auto layoutElement = FixedArray_back(layoutElements);
 		layoutElement->width = options.width;
-		// Dockspace height needs to account for titlebar
 		layoutElement->height = options.height;
 		layoutElement->layoutDirection = UILayoutDirection::VERTICAL;
 		layoutElement->backgroundColor = { 0.0f, 0.0f, 0.0f, 0.0f };

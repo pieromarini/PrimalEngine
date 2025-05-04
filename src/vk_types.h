@@ -66,6 +66,23 @@ struct alignas(16) GPUDrawPushConstants {
 	VkDeviceAddress vertexBuffer;
 };
 
+struct FontUniformData {
+	// Scene matrices
+	glm::mat4 projection;
+	glm::mat4 view;
+
+	// Font display options
+	glm::vec4 outlineColor{ 1.0f, 0.0f, 0.0f, 0.0f };
+	float outlineWidth{ 0.6f };
+	float outline{ true };
+};
+
+struct UIUniformData {
+	glm::mat4 projection;
+	glm::mat4 view;
+};
+
+
 #define VK_CHECK(x)                                                                  \
 	do {                                                                               \
 		VkResult err = x;                                                                \

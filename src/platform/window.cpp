@@ -2,6 +2,8 @@
 #include "SDL3/SDL_mouse.h"
 #include "SDL3/SDL_vulkan.h"
 
+#include "vulkan/buffers.h"
+
 namespace pm {
 
 PrimalWindow createPrimalWindow(std::string_view title, int32_t width, int32_t height, SDL_WindowFlags flags) {
@@ -35,6 +37,10 @@ void destroyPrimalWindow(PrimalWindow* window, VmaAllocator& allocator, VkDevice
 		vkDestroyImageView(device, window->depthTarget.imageView, nullptr);
 		vmaDestroyImage(allocator, window->depthTarget.image, window->depthTarget.allocation);
 	}
+
+	// TODO(piero): Don't destroy buffers here?
+	destroyBuffer(allocator, window->uiData);
+	destroyBuffer(allocator, window->fontData);
 
 	destroySwapchain(device, &window->swapchain);
 	destroyVulkanSurface(instance, window->surface, callbacks);

@@ -1,6 +1,7 @@
 #include "vulkan_texture.h"
 #include "platform/vulkan/vulkan_images.h"
 #include "platform/vulkan/vulkan_structures_helpers.h"
+#include "buffers.h"
 
 #include <cassert>
 #include <cstdint>
@@ -27,31 +28,6 @@ void getValidFilters(VkPhysicalDevice physicalDevice, VkFormat format, VkFilter*
 			*mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
 		}
 	}
-}
-
-AllocatedBuffer createBuffer(std::string name, size_t allocSize, VmaAllocator allocator, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) {
-	// allocate buffer
-	VkBufferCreateInfo bufferInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-	bufferInfo.pNext = nullptr;
-	bufferInfo.size = allocSize;
-
-	bufferInfo.usage = usage;
-
-	VmaAllocationCreateInfo vmaallocInfo = {};
-	vmaallocInfo.usage = memoryUsage;
-	vmaallocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
-	AllocatedBuffer newBuffer{};
-
-	// allocate the buffer
-	VK_CHECK(vmaCreateBuffer(allocator, &bufferInfo, &vmaallocInfo, &newBuffer.buffer, &newBuffer.allocation, &newBuffer.info));
-
-	vmaSetAllocationName(allocator, newBuffer.allocation, name.c_str());
-
-	return newBuffer;
-}
-
-void destroyBuffer(VmaAllocator allocator, const AllocatedBuffer& buffer) {
-	vmaDestroyBuffer(allocator, buffer.buffer, buffer.allocation);
 }
 
 std::optional<AllocatedImage> createKTX2Image(std::string_view imageName, VkDevice device, VkCommandPool commandPool, VkQueue copyQueue, VmaAllocator allocator, void* imageData, uint32_t imageDataSize, VkFormat format, VkImageUsageFlags imageUsageFlags, VkImageLayout imageLayout) {
