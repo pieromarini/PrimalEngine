@@ -39,6 +39,11 @@ void destroySwapchain(VkDevice device, PrimalSwapchain* swapchain) {
 			vkDestroySemaphore(device, semaphore, nullptr);
 		}
 	}
+	for (auto semaphore: swapchain->renderSemaphores) {
+		if (semaphore) {
+			vkDestroySemaphore(device, semaphore, nullptr);
+		}
+	}
 
 	vkDestroySwapchainKHR(device, swapchain->handle, nullptr);
 
