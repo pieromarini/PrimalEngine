@@ -150,28 +150,25 @@ struct RendererStats {
 
 struct VulkanRendererConfig {
 	PrimalWindow* window;
-	std::shared_ptr<Camera> mainCamera;
+	Camera* mainCamera;
 	bool resizeRequested;
 	RendererStats rendererStats;
 };
 
 struct FrameData {
-	VkCommandPool m_commandPool;
-	VkCommandBuffer m_commandBuffer;
+	VkCommandPool commandPool;
+	VkCommandBuffer commandBuffer;
 
-	VkSemaphore m_swapchainSemaphore;
-	VkSemaphore m_renderSemaphore;
+	VkFence renderFence;
 
-	VkFence m_renderFence;
+	DeletionQueue deletionQueue;
 
-	DeletionQueue m_deletionQueue;
-
-	DescriptorAllocator m_frameDescriptors;
+	DescriptorAllocator frameDescriptors;
 
 	std::vector<DrawBatch> drawBatches{};
 	std::vector<UIWindowBatch> uiWindowBatches{};
 
-	MemoryArena perFrameArena;
+	MemoryArena perFrameArena; // TODO(piero): use arena for per-frame allocations
 	FixedArray<UI::UIWindowBatchCommands> uiWindowBatchCommands{};
 };
 
@@ -210,10 +207,10 @@ struct VulkanRendererContext {
 	VkDevice device;
 	VkPhysicalDevice physicalDevice;
 	VkInstance instance;
-	VkSurfaceKHR m_surface;
+	VkSurfaceKHR surface;
 
 	VkQueue graphicsQueue{};
-	VkDebugUtilsMessengerEXT debugMessenger;
+	VkDebugUtilsMessengerEXT debugMessenger{};
 
 	// KTX2 formats
 	std::vector<ktx_transcode_fmt_e> availableTargetFormats{};
@@ -223,7 +220,7 @@ struct VulkanRendererContext {
 	VmaAllocator vmaAllocator;
 
 	// scene
-	std::unordered_map<std::string, Model> loadedModels;
+	std::vector<Model> loadedModels;
 
 	// Per-frame data
 	FrameData frames[FRAME_OVERLAP]{};
@@ -231,96 +228,96 @@ struct VulkanRendererContext {
 	uint32_t graphicsQueueFamily{};
 
 	// Deletion queues
-	DeletionQueue m_mainDeletionQueue;
+	DeletionQueue mainDeletionQueue{};
 
 	// Descriptor allocators
-	DescriptorAllocator m_globalDescriptorAllocator;
+	DescriptorAllocator globalDescriptorAllocator{};
 
 	// Descriptor set Layouts
-	VkDescriptorSetLayout m_gpuSceneDataDescriptorLayout;
-	VkDescriptorSetLayout m_modelDrawDescriptorLayout;
-	VkDescriptorSetLayout m_drawImageDescriptorLayout;
-	VkDescriptorSetLayout viewportDescriptorLayout;
-	VkDescriptorSetLayout fontDescriptorLayout;
-	VkDescriptorSetLayout uiDescriptorLayout;
+	VkDescriptorSetLayout gpuSceneDataDescriptorLayout{};
+	VkDescriptorSetLayout modelDrawDescriptorLayout{};
+	VkDescriptorSetLayout drawImageDescriptorLayout{};
+	VkDescriptorSetLayout viewportDescriptorLayout{};
+	VkDescriptorSetLayout fontDescriptorLayout{};
+	VkDescriptorSetLayout uiDescriptorLayout{};
 
 	// Descriptor sets
-	VkDescriptorSet m_drawImageDescriptors;
+	VkDescriptorSet drawImageDescriptors{};
 
 	// BINDLESS DESCRIPTORS
 	// Mesh textures
 	VkDescriptorPool bindlessPool;
-	VkDescriptorSetLayout bindlessTexturesSetLayout;
-	VkDescriptorSet bindlessTexturesDescriptorSet;
+	VkDescriptorSetLayout bindlessTexturesSetLayout{};
+	VkDescriptorSet bindlessTexturesDescriptorSet{};
 
 	// Viewport textures
-	VkDescriptorPool viewportDescriptorPool;
-	VkDescriptorSetLayout viewportTextureSetLayout;
-	VkDescriptorSet viewportTextureDescriptorSet;
+	VkDescriptorPool viewportDescriptorPool{};
+	VkDescriptorSetLayout viewportTextureSetLayout{};
+	VkDescriptorSet viewportTextureDescriptorSet{};
 
 	// Viewport rendering
-	VkPipelineLayout viewportPipelineLayout;
-	VkPipeline viewportPipeline;
+	VkPipelineLayout viewportPipelineLayout{};
+	VkPipeline viewportPipeline{};
 
 	// Pipelines
-	VkPipeline m_skyPipeline;
-	VkPipelineLayout m_skyPipelineLayout;
-	VkPipeline fontPipeline;
-	VkPipelineLayout fontPipelineLayout;
-	VkPipeline uiPipeline;
-	VkPipelineLayout uiPipelineLayout;
+	VkPipeline skyPipeline{};
+	VkPipelineLayout skyPipelineLayout{};
+	VkPipeline fontPipeline{};
+	VkPipelineLayout fontPipelineLayout{};
+	VkPipeline uiPipeline{};
+	VkPipelineLayout uiPipelineLayout{};
 
-	VkPipelineCache m_pipelineCache;
+	VkPipelineCache pipelineCache{};
 
 	// Images
-	AllocatedImage m_sceneDrawImage;// viewport
-	AllocatedImage m_sceneDepthImage;// viewport
-	uint32_t sceneTextureId;
+	AllocatedImage sceneDrawImage{};// viewport
+	AllocatedImage sceneDepthImage{};// viewport
+	uint32_t sceneTextureId{};
 
 	// Buffers
-	AllocatedBuffer globalMaterialDataBuffer;
+	AllocatedBuffer globalMaterialDataBuffer{};
 
 	// Structures for immediateSubmit
-	VkFence m_immFence;
-	VkCommandBuffer m_immCommandBuffer;
-	VkCommandPool m_immCommandPool;
+	VkFence immFence{};
+	VkCommandBuffer immCommandBuffer{};
+	VkCommandPool immCommandPool{};
 
 	// Default data
-	AllocatedImage whiteImage;
-	AllocatedImage blackImage;
-	AllocatedImage greyImage;
-	AllocatedImage errorCheckerboardImage;
-	VkSampler defaultSamplerLinear;
-	VkSampler defaultSamplerNearest;
+	AllocatedImage whiteImage{};
+	AllocatedImage blackImage{};
+	AllocatedImage greyImage{};
+	AllocatedImage errorCheckerboardImage{};
+	VkSampler defaultSamplerLinear{};
+	VkSampler defaultSamplerNearest{};
 
 	// Global scene data for all meshes
-	GPUSceneData sceneData;
+	GPUSceneData sceneData{};
 
 	// Testing fonts
-	FontAsset arialFont;
-	FontAsset sourceCodeFont;
-	AllocatedImage sourceCodeFontTexture;
+	FontAsset arialFont{};
+	FontAsset sourceCodeFont{};
+	AllocatedImage sourceCodeFontTexture{};
 
 	// Default 3d pipelines
-	MaterialPipeline opaquePipeline;
-	MaterialPipeline transparentPipeline;
-	MaterialPipeline doubleSidedPipeline;
+	MaterialPipeline opaquePipeline{};
+	MaterialPipeline transparentPipeline{};
+	MaterialPipeline doubleSidedPipeline{};
 
 	// Storage
-	MaterialCache materialCache;
-	std::vector<AllocatedImage*> registeredImages;
+	MaterialCache materialCache{};
+	std::vector<AllocatedImage*> registeredImages{};
 
 	// config
-	bool anisotropyEnabled;
-	float maxSamplerAnisotropy;
+	bool anisotropyEnabled{};
+	float maxSamplerAnisotropy{};
 
-	VulkanRendererConfig* rendererState;
+	VulkanRendererConfig* rendererState{};
 	float renderScale{ 1.0f };
 
 	// Timestamp
 	float physicalDeviceTimestampPeriod{};
-	VkQueryPool timestampPool;
-	VkQueryPool pipelineStatisticsPool;
+	VkQueryPool timestampPool{};
+	VkQueryPool pipelineStatisticsPool{};
 
 
 	// Memory
@@ -373,7 +370,7 @@ GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> in
 GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<Vertex> vertices, std::string name);
 
 // Batching
-void buildDrawBatches(VulkanRendererContext* context, std::vector<Model*>& models);
+void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models);
 void buildUIDrawBatches(VulkanRendererContext* context, FixedArray<UI::UIWindowBatchCommands>& windowBatches);
 std::vector<UI::UIElement> buildUIGeometry(VulkanRendererContext* context, FixedArray<UI::UIRenderCommand>& renderCommands, std::vector<UI::UIVertex>& vertices, std::vector<uint32_t>& indices);
 

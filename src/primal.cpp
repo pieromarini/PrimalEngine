@@ -27,10 +27,7 @@ PrimalEngine::PrimalEngine() {
 
 	SDL_Init(SDL_INIT_VIDEO);
 
-	rendererMemory = MemoryArena_create(GIGABYTE(2));
-	rendererContext = new VulkanRendererContext();
-
-	rendererInit(rendererContext);
+	rendererInit(&rendererContext);
 
 	auto windowFlags = static_cast<SDL_WindowFlags>(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
@@ -46,32 +43,30 @@ PrimalEngine::PrimalEngine() {
 	setWindowRelativeMouseMode(mainWindow, windowRelativeMouseMode);
 
 	// setup main viewer camera
-	m_mainCamera = std::make_shared<Camera>(m_windowExtent.width, m_windowExtent.height);
-	m_mainCamera->velocity = glm::vec3(0.f);
-	m_mainCamera->position = glm::vec3(-15.f, 3.5f, -1.1f);
-	m_mainCamera->yaw = -4.61;
-	m_mainCamera->pitch = -0.024;
-	m_mainCamera->setMouseControlEnabled(windowRelativeMouseMode);
+	m_mainCamera.velocity = glm::vec3(0.f);
+	m_mainCamera.position = glm::vec3(-15.f, 3.5f, -1.1f);
+	m_mainCamera.yaw = -4.61;
+	m_mainCamera.pitch = -0.024;
+	m_mainCamera.setMouseControlEnabled(windowRelativeMouseMode);
 
 	m_rendererState = {
 		.window = mainWindow,
-		.mainCamera = m_mainCamera
+		.mainCamera = &m_mainCamera
 	};
 
 	// TODO(piero): Rework the initialization flow. Looks very yanky right now.
 	//              We want to cleanly initialize Vulkan (aka: get an instance, device and physical device)
 	//              Then we want to initialize our camera and setup all our initial "Windows".
 	//              Last we create all necessary resources for our renderer (sync stuff, commands, render targets, pipelines, etc)
-	rendererSetInitialState(rendererContext, &m_rendererState);
-	rendererSetup(rendererContext);
+	rendererSetInitialState(&rendererContext, &m_rendererState);
+	rendererSetup(&rendererContext);
 
 	m_isInitialized = true;
 }
 
 void PrimalEngine::cleanup() {
 	if (m_isInitialized) {
-		rendererCleanup(rendererContext);
-		delete rendererContext;
+		rendererCleanup(&rendererContext);
 	}
 	loadedEngine = nullptr;
 }
@@ -175,11 +170,11 @@ void PrimalEngine::run() {
 					setWindowRelativeMouseMode(mainWindow, windowRelativeMouseMode);
 
 					// Disable camera panning when relative mouse mode is disabled
-					m_mainCamera->setMouseControlEnabled(windowRelativeMouseMode);
+					m_mainCamera.setMouseControlEnabled(windowRelativeMouseMode);
 				}
 			}
 
-			m_mainCamera->processSDLEvent(e);
+			m_mainCamera.processSDLEvent(e);
 
 			if (e.type == SDL_EVENT_MOUSE_MOTION && !windowRelativeMouseMode) {
 				setPointerState(e.motion.windowID, e.motion.x, e.motion.y, e.motion.xrel, e.motion.yrel, e.motion.state & SDL_BUTTON_LMASK);
@@ -199,17 +194,17 @@ void PrimalEngine::run() {
 		// Check if we need to resize any windows
 		for (auto& window : windows) {
 			if (window.resizeRequested) {
-				resizeSwapchain(rendererContext, &window);
+				resizeSwapchain(&rendererContext, &window);
 
 				// NOTE(piero): If we resize the main window, we also update our camera.
 				if (window.id == mainWindow->id) {
-					m_mainCamera->onWindowResize(window.width, window.height);
+					m_mainCamera.onWindowResize(window.width, window.height);
 				}
 			}
 		}
 
-		rendererUpdate(rendererContext, deltaTime);
-		rendererDraw(rendererContext);
+		rendererUpdate(&rendererContext, deltaTime);
+		rendererDraw(&rendererContext);
 
 		auto end = std::chrono::system_clock::now();
 		auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
@@ -220,8 +215,8 @@ void PrimalEngine::run() {
 PrimalWindow* PrimalEngine::createWindow(std::string_view name, int32_t width, int32_t height, SDL_WindowFlags flags) {
 	windows.push_back(createPrimalWindow(name, width, height, flags));
 	auto& window = windows.back();
-	window.surface = createVulkanSurface(&window, rendererContext->instance, nullptr);
-	window.swapchain = createSwapchain(rendererContext->device, rendererContext->physicalDevice, window.surface, width, height, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
+	window.surface = createVulkanSurface(&window, rendererContext.instance, nullptr);
+	window.swapchain = createSwapchain(rendererContext.device, rendererContext.physicalDevice, window.surface, width, height, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
 	return &window;
 }
 

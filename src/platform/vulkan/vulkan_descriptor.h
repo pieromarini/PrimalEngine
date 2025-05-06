@@ -27,9 +27,9 @@ struct DescriptorAllocator {
 		VkDescriptorPool createPool(VkDevice device, uint32_t setCount, std::span<PoolSizeRatio> poolRatios);
 		VkDescriptorPool getPool(VkDevice device);
 
-		std::vector<PoolSizeRatio> ratios;
-		std::vector<VkDescriptorPool> fullPools;
-		std::vector<VkDescriptorPool> readyPools;
+		std::vector<PoolSizeRatio> ratios{};
+		std::vector<VkDescriptorPool> fullPools{};
+		std::vector<VkDescriptorPool> readyPools{};
 		uint32_t setsPerPool{};
 		uint32_t MAX_SETS_PER_POOL = 4092;
 };
@@ -41,7 +41,7 @@ struct DescriptorWriter {
 		void clear();
 		void updateSet(VkDevice device, VkDescriptorSet set);
 
-		std::deque<VkDescriptorImageInfo> imageInfos;
-		std::deque<VkDescriptorBufferInfo> bufferInfos;
-		std::vector<VkWriteDescriptorSet> writes;
+		std::deque<VkDescriptorImageInfo> imageInfos{};
+		std::deque<VkDescriptorBufferInfo> bufferInfos{};
+		std::vector<VkWriteDescriptorSet> writes{};
 };

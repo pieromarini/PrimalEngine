@@ -28,12 +28,11 @@ private:
 	bool windowRelativeMouseMode{ false };
 
 	PrimalWindow* mainWindow;
-  std::shared_ptr<Camera> m_mainCamera;
+  Camera m_mainCamera{ m_windowExtent.width, m_windowExtent.height };
 
 	bool quitRequested{ false };
 
-	VulkanRendererContext* rendererContext;
-	MemoryArena rendererMemory;
+	VulkanRendererContext rendererContext;
 };
 
 }// namespace pm
