@@ -11,7 +11,7 @@ void checkbox(bool* value) {
 			.height = { .size = 40.0f, .sizingMode = UI::UISizingMode::STATIC },
 			.backgroundColor = bg,
 			.padding = 5.0f,
-			.border = { 4.0f, 4.0f },
+			.border = 4.0f,
 			.data = {
 				.dataType = UIDataType::BOOL,
 				.valueBool = value } });

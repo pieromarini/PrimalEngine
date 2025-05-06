@@ -74,8 +74,11 @@ struct UIPadding {
 
 // NOTE(piero): we can specify horizontal and vertical borders for a rect.
 struct UIBorder {
-	float horizontalBorder;
-	float verticalBorder;
+	UIBorder(float val) : horizontalBorder{ val }, verticalBorder { val } {}
+	UIBorder(float h, float v) : horizontalBorder{ h }, verticalBorder { v } {}
+
+	float horizontalBorder{ 0.0f };
+	float verticalBorder{ 0.0f };
 };
 
 struct UIRenderCommand {
