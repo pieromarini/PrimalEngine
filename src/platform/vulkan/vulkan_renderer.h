@@ -27,6 +27,8 @@ namespace pm {
 
 struct UIPushConstants {
 	VkDeviceAddress vertexBuffer;
+	float screenWidth;
+	float screenHeight;
 };
 
 // NOTE: keeping these separate because we might want to include extra stuff here later on.
@@ -54,6 +56,9 @@ struct alignas(16) ViewportDrawData {
 
 struct alignas(16) UIMaterialData {
 	glm::vec4 backgroundColor;
+	float horizontalBorder{ 0.0f };
+	float verticalBorder{ 0.0f };
+	float padding[2];
 };
 
 struct MeshIndirectCommand {
@@ -319,6 +324,7 @@ struct VulkanRendererContext {
 	VkQueryPool timestampPool{};
 	VkQueryPool pipelineStatisticsPool{};
 
+	bool testBool;
 
 	// Memory
 	MemoryArena uiMemoryArena;

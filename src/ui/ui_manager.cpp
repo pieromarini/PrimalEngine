@@ -107,7 +107,6 @@ void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMou
 		} else if (clickState != PointerClickState::RELEASED) {
 			context->pointerState.pointerClickState = PointerClickState::RELEASED_THIS_FRAME;
 			context->interactionState.isDragging = false;
-			context->interactionState.elementId = 0;
 		}
 	}
 
@@ -122,8 +121,8 @@ void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMou
 
 	for (int32_t i = (int)layoutElements.length - 1; i >= 0; --i) {
 		auto element = FixedArray_get(layoutElements, i);
-		auto bb = BoundingRect{ .x = element->x, .y = element->y, .width = element->width.size, .height = element->height.size };
-		if (isInsideBoundingRect(mouseX, mouseY, bb)) {
+		auto rect = BoundingRect{ .x = element->x, .y = element->y, .width = element->width.size, .height = element->height.size };
+		if (isInsideBoundingRect(mouseX, mouseY, rect)) {
 			// Don't process hover callbacks if we are dragging the mouse around.
 			// TODO(piero): Do we actually want this? Maybe make it an option.
 			if (element->onHoverCallback && !context->interactionState.isDragging) {
@@ -132,7 +131,6 @@ void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMou
 
 			// When we click inside an element, record the interaction
 			if (context->pointerState.pointerClickState == PointerClickState::PRESSED_THIS_FRAME && firstEvent) {
-				// std::cout << std::format("{} {} {} {}\n", bb.x, bb.y, bb.width, bb.height);
 				context->interactionState.elementId = element->id;
 				firstEvent = false;
 			}
@@ -141,32 +139,64 @@ void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMou
 		}
 	}
 
+	// NOTE(piero): Clicks are processed on Mouse UP right now. We can add support for down/up clicks.
+	if (context->pointerState.pointerClickState == PointerClickState::RELEASED_THIS_FRAME) {
+		auto element = FixedArray_get(layoutElements, context->interactionState.elementId);
+		if (element->type == UILayoutElementType::RECT_ELEMENT && element->data.valueBool) {
+			*element->data.valueBool = !(*element->data.valueBool);
+		}
+
+		// Stop interacting
+		// TODO(piero): This seems weird. We were setting this when setting the pointerState to "Released" but we need to 
+		//              store the interacted element to process clicks when releasing a click.
+		context->interactionState.elementId = 0;
+	}
+
 	// Value dragging
 	if (context->pointerState.pointerClickState == PointerClickState::PRESSED && context->interactionState.isDragging) {
 		auto element = FixedArray_get(layoutElements, context->interactionState.elementId);
-		switch (element->data.dataType) {
-		case INT: {
-			if (element->data.valueInt) {
-				*element->data.valueInt = std::min(static_cast<int>(*element->data.valueInt + context->pointerState.xRel * 0.01f), std::max(element->data.minInt, element->data.maxInt));
-			}
+		switch (element->type) {
+		// NOTE(piero): Right now only text elements have draggable values.
+		case TEXT_ELEMENT:
+			handleDragValue(element);
+			break;
+		case CHECKBOX_ELEMENT:
+		case RECT_ELEMENT:
+		case CIRCLE_ELEMENT:
+		case VIEWPORT_ELEMENT:
+		case PANEL_ELEMENT:
+		case TITLEBAR_ELEMENT:
+		case DOCKSPACE_ELEMENT:
 			break;
 		}
-		case FLOAT: {
-			if (element->data.valueFloat) {
-				*element->data.valueFloat = std::min(*element->data.valueFloat + context->pointerState.xRel * 0.01f, std::max(element->data.minFloat, element->data.maxFloat));
-			}
-			break;
+	}
+}
+
+void handleDragValue(UILayoutElement* element) {
+	auto context = getUIContext();
+
+	switch (element->data.dataType) {
+	case INT: {
+		if (element->data.valueInt) {
+			*element->data.valueInt = std::min(static_cast<int>(*element->data.valueInt + context->pointerState.xRel * 0.01f), std::max(element->data.minInt, element->data.maxInt));
 		}
-		case DOUBLE: {
-			if (element->data.valueDouble) {
-				*element->data.valueDouble = std::min(*element->data.valueDouble + context->pointerState.xRel * 0.01, std::max(element->data.minDouble, element->data.maxDouble));
-			}
-			break;
+		break;
+	}
+	case FLOAT: {
+		if (element->data.valueFloat) {
+			*element->data.valueFloat = std::min(*element->data.valueFloat + context->pointerState.xRel * 0.01f, std::max(element->data.minFloat, element->data.maxFloat));
 		}
-		default: {
-			break;
+		break;
+	}
+	case DOUBLE: {
+		if (element->data.valueDouble) {
+			*element->data.valueDouble = std::min(*element->data.valueDouble + context->pointerState.xRel * 0.01, std::max(element->data.minDouble, element->data.maxDouble));
 		}
-		}
+		break;
+	}
+	default: {
+		break;
+	}
 	}
 }
 
@@ -502,6 +532,9 @@ void calculateFinalLayout() {
 		switch (layoutElement->type) {
 		case RECT_ELEMENT: {
 			c.commandType = UIRenderCommandType::RECTANGLE;
+			// NOTE(piero): Transform border size from pixel to UV space.
+			c.border.horizontalBorder = layoutElement->border.horizontalBorder / layoutElement->width.size;
+			c.border.verticalBorder = layoutElement->border.verticalBorder / layoutElement->height.size;
 			break;
 		}
 		case TEXT_ELEMENT: {
@@ -567,7 +600,6 @@ void pushText(UIElementOptions options) {
 	layoutElement->text = options.text;
 
 	getTextDimensions(layoutElement->text, context->fontAsset, width, height);
-	// std::cout << std::format("text size: {}x{}\n", width, height);
 
 	layoutElement->type = UILayoutElementType::TEXT_ELEMENT;
 	layoutElement->width.size = width;
@@ -587,6 +619,7 @@ void pushBox(UIElementOptions options) {
 
 	auto layoutElement = FixedArray_back(layoutElements);
 
+	layoutElement->type = UILayoutElementType::RECT_ELEMENT;
 	layoutElement->width = options.width;
 	layoutElement->height = options.height;
 	layoutElement->layoutDirection = options.layoutDirection;
@@ -595,6 +628,10 @@ void pushBox(UIElementOptions options) {
 	layoutElement->childGap = options.childGap;
 	layoutElement->onHoverCallback = options.onHoverCallback;
 	layoutElement->onClickCallback = options.onClickCallback;
+
+	layoutElement->border = options.border;
+
+	layoutElement->data = options.data;
 
 	// if we have a valid texture id, this is a viewport.
 	// TODO(piero): create dedicated widget for this?
@@ -693,6 +730,7 @@ void pushPanel(UIElementOptions options) {
 
 	auto layoutElement = FixedArray_back(layoutElements);
 
+	layoutElement->type = UILayoutElementType::PANEL_ELEMENT;
 	layoutElement->width = options.width;
 	layoutElement->height = options.height;
 	layoutElement->layoutDirection = options.layoutDirection;
@@ -701,7 +739,8 @@ void pushPanel(UIElementOptions options) {
 	layoutElement->childGap = options.childGap;
 	layoutElement->onHoverCallback = options.onHoverCallback;
 	layoutElement->onClickCallback = options.onClickCallback;
-	layoutElement->type = UILayoutElementType::PANEL_ELEMENT;
+
+	layoutElement->border = options.border;
 }
 
 void pushTitleBar(UIElementOptions options) {
@@ -713,6 +752,8 @@ void pushTitleBar(UIElementOptions options) {
 	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
 
 	auto layoutElement = FixedArray_back(layoutElements);
+
+	layoutElement->type = UILayoutElementType::TITLEBAR_ELEMENT;
 	layoutElement->width = options.width;
 	layoutElement->height = options.height;
 	layoutElement->layoutDirection = options.layoutDirection;
@@ -721,7 +762,8 @@ void pushTitleBar(UIElementOptions options) {
 	layoutElement->childGap = options.childGap;
 	layoutElement->onHoverCallback = options.onHoverCallback;
 	layoutElement->onClickCallback = options.onClickCallback;
-	layoutElement->type = UILayoutElementType::TITLEBAR_ELEMENT;
+
+	layoutElement->border = options.border;
 
 	closeElement();
 }
@@ -756,6 +798,8 @@ void pushDockSpace(UIElementOptions options) {
 	openElement();
 
 	auto layoutElement = FixedArray_back(layoutElements);
+	layoutElement->type = UILayoutElementType::DOCKSPACE_ELEMENT;
+
 	layoutElement->width = options.width;
 	// Dockspace height needs to account for titlebar
 	layoutElement->height = { .size = options.height.size - TITLE_BAR_HEIGHT, .sizingMode = options.height.sizingMode };
@@ -765,7 +809,8 @@ void pushDockSpace(UIElementOptions options) {
 	layoutElement->childGap = options.childGap;
 	layoutElement->onHoverCallback = options.onHoverCallback;
 	layoutElement->onClickCallback = options.onClickCallback;
-	layoutElement->type = UILayoutElementType::DOCKSPACE_ELEMENT;
+
+	layoutElement->border = options.border;
 }
 
 }// namespace pm::UI

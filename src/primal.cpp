@@ -176,12 +176,16 @@ void PrimalEngine::run() {
 
 			m_mainCamera.processSDLEvent(e);
 
-			if (e.type == SDL_EVENT_MOUSE_MOTION && !windowRelativeMouseMode) {
-				setPointerState(e.motion.windowID, e.motion.x, e.motion.y, e.motion.xrel, e.motion.yrel, e.motion.state & SDL_BUTTON_LMASK);
+			if (!windowRelativeMouseMode) {
+				if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+					// TODO(piero): this takes any button click as preseed. Need to differentiate between L/R/M clicks.
+					setPointerState(e.button.windowID, e.button.x, e.button.y, 0.0f, 0.0f, e.button.down);
+				} else if (e.type == SDL_EVENT_MOUSE_MOTION) {
+					setPointerState(e.motion.windowID, e.motion.x, e.motion.y, e.motion.xrel, e.motion.yrel, e.motion.state & SDL_BUTTON_LMASK);
+				}
 			}
 
 			m_stopRendering = mainWindow->isMinimized;
-
 		}
 
 		// do not draw if we are minimized

@@ -12,6 +12,8 @@ layout (buffer_reference , std430, buffer_reference_align=8) readonly buffer UIV
 
 layout (push_constant) uniform constants {
   UIVertexBuffer vertexBuffer;
+	float screenWidth;
+	float screenHeight;
 } PushConstants;
 
 layout (binding = 0) uniform UBO {

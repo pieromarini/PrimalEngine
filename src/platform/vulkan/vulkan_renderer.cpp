@@ -582,7 +582,7 @@ void buildUIDrawBatches(VulkanRendererContext* context, FixedArray<UI::UIWindowB
 						.vertexOffset = uiElement.vertexOffset,
 						.firstInstance = uiDrawIdCount } });
 				uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
+				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor, .horizontalBorder = renderCommand->border.horizontalBorder, .verticalBorder = renderCommand->border.verticalBorder });
 				uiDrawIdCount++;
 				break;
 			}
@@ -613,7 +613,7 @@ void buildUIDrawBatches(VulkanRendererContext* context, FixedArray<UI::UIWindowB
 						.vertexOffset = uiElement.vertexOffset,
 						.firstInstance = uiDrawIdCount } });
 				uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
+				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor, .horizontalBorder = renderCommand->border.horizontalBorder, .verticalBorder = renderCommand->border.verticalBorder });
 				uiDrawIdCount++;
 				break;
 			}
@@ -629,7 +629,7 @@ void buildUIDrawBatches(VulkanRendererContext* context, FixedArray<UI::UIWindowB
 						.vertexOffset = uiElement.vertexOffset,
 						.firstInstance = uiDrawIdCount } });
 				uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
+				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor, .horizontalBorder = renderCommand->border.horizontalBorder, .verticalBorder = renderCommand->border.verticalBorder });
 				uiDrawIdCount++;
 				break;
 			}
@@ -645,7 +645,7 @@ void buildUIDrawBatches(VulkanRendererContext* context, FixedArray<UI::UIWindowB
 						.vertexOffset = uiElement.vertexOffset,
 						.firstInstance = uiDrawIdCount } });
 				uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
+				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor, .horizontalBorder = renderCommand->border.horizontalBorder, .verticalBorder = renderCommand->border.verticalBorder });
 				uiDrawIdCount++;
 				break;
 			}
@@ -1181,6 +1181,8 @@ void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
 			// TODO: Should be included as part of a Batch
 			UIPushConstants uiPushConstants{};
 			uiPushConstants.vertexBuffer = drawBatch.meshBuffers.vertexBufferAddress;
+			uiPushConstants.screenWidth = static_cast<float>(extent.width);
+			uiPushConstants.screenHeight = static_cast<float>(extent.height);
 
 			vkCmdBindIndexBuffer(commandBuffer, drawBatch.meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdPushConstants(commandBuffer, drawBatch.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
@@ -1968,6 +1970,7 @@ void updateUIData(VulkanRendererContext* context) {
 
 				UI::sliderFloat3(&rendererState->mainCamera->position);
 				UI::sliderFloat4(&sceneData.sunlightDirection, 0.0f, 1.0f);
+				UI::checkbox(&context->testBool);
 
 				UI::openElement();
 					UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },

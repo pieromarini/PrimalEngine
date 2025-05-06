@@ -24,4 +24,7 @@ struct UIDraw {
 
 struct UIMaterialData {
 	vec4 backgroundColor;
+	float horizontalBorder;
+	float verticalBorder;
+	float padding[2];
 };

@@ -99,5 +99,6 @@ void pushDockSpace(UIElementOptions options);
 // Interactions
 bool isHovered();
 bool isInsideBoundingRect(float x, float y, BoundingRect bb);
+void handleDragValue(UILayoutElement* element);
 
 }// namespace pm::UI

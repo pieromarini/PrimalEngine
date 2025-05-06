@@ -5,6 +5,18 @@
 namespace pm::UI {
 
 void checkbox(bool* value) {
+	glm::vec4 bg = *value ? glm::vec4{ 0.0f, 1.0f, 0.0f, 1.0f } : glm::vec4{ 0.0f, 0.0f, 0.0f, 0.0f };
+	openElement();
+		pushBox({ .width = { .size = 40.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.height = { .size = 40.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.backgroundColor = bg,
+			.padding = 5.0f,
+			.border = { 4.0f, 4.0f },
+			.data = {
+				.dataType = UIDataType::BOOL,
+				.valueBool = value } });
+
+	closeElement();
 }
 
 void button() {

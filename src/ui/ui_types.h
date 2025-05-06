@@ -54,6 +54,7 @@ enum UIDataType {
 	INT,
 	FLOAT,
 	DOUBLE,
+	BOOL,
 	STRING
 };
 
@@ -71,6 +72,12 @@ struct UIPadding {
 	float left, right;
 };
 
+// NOTE(piero): we can specify horizontal and vertical borders for a rect.
+struct UIBorder {
+	float horizontalBorder;
+	float verticalBorder;
+};
+
 struct UIRenderCommand {
 	uint32_t id;
 	uint32_t zindex;
@@ -78,6 +85,8 @@ struct UIRenderCommand {
 	BoundingRect boundingRect;
 
 	glm::vec4 backgroundColor;
+
+	UIBorder border{ 0.0f };
 
 	// text
 	PrimalString text;
@@ -128,6 +137,7 @@ struct UILayoutElementData {
 		double* valueDouble;
 		float* valueFloat;
 		int* valueInt;
+		bool* valueBool;
 	};
 	union {
 		double minDouble;
@@ -147,6 +157,7 @@ enum UILayoutElementType {
 	RECT_ELEMENT,
 	TEXT_ELEMENT,
 	CIRCLE_ELEMENT,
+	CHECKBOX_ELEMENT,
 	VIEWPORT_ELEMENT,
 	PANEL_ELEMENT,
 	TITLEBAR_ELEMENT,
@@ -174,6 +185,8 @@ struct UILayoutElement {
 
 	uint32_t parent;
 	FixedArray<uint32_t> children; // reference to context->layoutElementChildrenIndices
+
+	UIBorder border{ 0.0f };
 
 	// text
 	PrimalString text;
@@ -204,6 +217,8 @@ struct UIElementOptions {
 
 	std::function<InteractionCallbackSignature> onHoverCallback;
 	std::function<InteractionCallbackSignature> onClickCallback;
+
+	UIBorder border{ 0.0f };
 
 	// text
 	std::string text;
