@@ -2,25 +2,21 @@
 
 #include "assets/asset.h"
 #include "material.h"
-#include "platform/vulkan/swapchain.h"
 #include "vulkan_loader.h"
 #include <SDL3/SDL.h>
 #include <VkBootstrap.h>
-#include <string_view>
-#include <unordered_map>
 #include <vulkan/vulkan.h>
 
 #include <ranges>
 
 #include "camera.h"
-#include "utils/fonts.h"
 #include "vk_types.h"
 #include "vulkan_descriptor.h"
 #include "vulkan_texture.h"
 
 #include "platform/window.h"
-#include "ui/ui_manager.h"
 #include "ui/ui_types.h"
+#include "memory/arena.h"
 
 
 namespace pm {
@@ -154,9 +150,9 @@ struct RendererStats {
 };
 
 struct VulkanRendererConfig {
-	PrimalWindow* window;
-	Camera* mainCamera;
-	bool resizeRequested;
+	PrimalWindow* window{};
+	Camera* mainCamera{};
+	bool resizeRequested{};
 	RendererStats rendererStats;
 };
 
