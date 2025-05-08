@@ -83,10 +83,10 @@ std::pair<float, float> generateTextFromFont(PrimalString& text, float fontSize,
 		maxY = std::max({ maxY, y0, y1 });
 
 		if (vertices) {
-			vertices->push_back({ { x0, y0, 0.0f }, u0, { 1.0f, 0.0f, 0.0f }, v0 });// Bottom-left
-			vertices->push_back({ { x1, y0, 0.0f }, u1, { 1.0f, 0.0f, 0.0f }, v0 });// Bottom-right
-			vertices->push_back({ { x1, y1, 0.0f }, u1, { 1.0f, 0.0f, 0.0f }, v1 });// Top-right
-			vertices->push_back({ { x0, y1, 0.0f }, u0, { 1.0f, 0.0f, 0.0f }, v1 });// Top-right
+			vertices->push_back({ .position = { x0, y0, 0.0f }, .uv_x = u0, .color = { 1.0f, 0.0f, 0.0f }, .uv_y = v0 });// Bottom-left
+			vertices->push_back({ .position = { x1, y0, 0.0f }, .uv_x = u1, .color = { 1.0f, 0.0f, 0.0f }, .uv_y = v0 });// Bottom-right
+			vertices->push_back({ .position = { x1, y1, 0.0f }, .uv_x = u1, .color = { 1.0f, 0.0f, 0.0f }, .uv_y = v1 });// Top-right
+			vertices->push_back({ .position = { x0, y1, 0.0f }, .uv_x = u0, .color = { 1.0f, 0.0f, 0.0f }, .uv_y = v1 });// Top-right
 		}
 
 		if (indices) {
@@ -104,7 +104,7 @@ std::pair<float, float> generateTextFromFont(PrimalString& text, float fontSize,
 
 	float textHeight = maxY - minY;
 
-	return { cursorX, textHeight };
+	return { textWidth, textHeight };
 }
 
 }// namespace pm
