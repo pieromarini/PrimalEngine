@@ -473,6 +473,8 @@ std::optional<Model> loadGLTF(VulkanRendererContext* context, std::string_view f
 	auto entitiesLoadTime = std::chrono::duration<double, std::milli>(std::chrono::system_clock::now() - entityStartTime).count();
 	std::cout << std::format("Loaded {} Entities in {:.4f}ms\n", entities.size(), entitiesLoadTime);
 
+	// NOTE(piero): Calculate world transform for all entities after loading
+	Entity_refreshTransform(model.root, glm::mat4{ 1.0f });
 
 	return model;
 }

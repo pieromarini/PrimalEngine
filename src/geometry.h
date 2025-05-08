@@ -6,7 +6,6 @@
 
 namespace pm {
 
-// TODO: I'd like to test out mesh shaders. We could swap these with "Meshlets"
 struct MeshPrimitive {
 	uint32_t firstIndex;
 	int32_t vertexOffset;

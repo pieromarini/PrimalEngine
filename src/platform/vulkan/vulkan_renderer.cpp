@@ -5,6 +5,7 @@
 
 #include "vk_types.h"
 
+#include <queue>
 #include <vk_mem_alloc.h>
 
 #include "assets/font_loader.h"
@@ -807,10 +808,9 @@ void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models
 	double flattenTime{};
 	double genTime{};
 	for (auto model : models) {
-		std::vector<Entity*> entities{};
 		auto start = std::chrono::high_resolution_clock::now();
-		Entity_flattenHierarchy(model.root, glm::mat4{ 1.0f }, entities);
-		flattenTime += std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - start).count();
+		// std::vector<Entity*> entities{};
+		// Entity_flattenHierarchy(model.root, glm::mat4{ 1.0f }, entities);
 
 		auto startGen = std::chrono::high_resolution_clock::now();
 		DrawBatch opaque{ .type = DrawBatchType::MESH_BATCH };
@@ -836,10 +836,26 @@ void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models
 		std::vector<MeshDraw> doubleSidedDraws{};
 		std::vector<MeshDraw> transparentDraws{};
 
-		for (auto& entity : entities) {
+		// NOTE(piero): generate a draw command for each entity with a mesh from this model
+		std::queue<Entity*> q;
+		q.push(model.root);
+
+		while(!q.empty()) {
+			auto& entity = q.front();
+			q.pop();
+
+			// NOTE(piero): We are not refreshing transforms right now since all entities are static.
+			//              Once we start having dynamic entites, we should implement some "dirty" state to refresh transforms.
+
+			for (auto c : entity->children) {
+				q.push(c);
+			}
+
 			if (entity->mesh == nullptr) {
 				continue;
 			}
+
+			auto s = std::chrono::high_resolution_clock::now();
 			for (auto& primitive : entity->mesh->primitives) {
 				if (primitive.passType == MaterialPass::Transparent) {
 					auto drawId = static_cast<uint32_t>(transparentCommands.size());
@@ -873,6 +889,7 @@ void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models
 					opaqueDraws.push_back({ .transform = entity->worldTransform, .materialIndex = primitive.materialIndex });
 				}
 			}
+			flattenTime += std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - s).count();
 		}
 
 		auto meshIndirectDoubleSidedCommandsBuffer = createBuffer("meshDrawCommandsBuffer DoubleSided", sizeof(MeshIndirectCommand) * doubleSidedCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
