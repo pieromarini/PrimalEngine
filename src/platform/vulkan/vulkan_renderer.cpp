@@ -59,9 +59,10 @@ void rendererSetup(VulkanRendererContext* context) {
 	loadTestScene(context);
 }
 
+// NOTE(piero): not using this right now.
 void rendererInitMemory(VulkanRendererContext* context) {
 	for (auto& frame : context->frames) {
-		frame.perFrameArena = MemoryArena_create(MEGABYTE(256));
+		// frame.perFrameArena = MemoryArena_create(MEGABYTE(256));
 	}
 }
 
