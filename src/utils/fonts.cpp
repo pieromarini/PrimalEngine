@@ -6,7 +6,7 @@
 
 namespace pm {
 
-std::pair<float, float> generateTextFromFont(PrimalString& text, float fontSize, FontAsset* font, std::vector<UI::UIVertex>* vertices, std::vector<uint32_t>* indices) {
+std::pair<float, float> generateTextGeometry(PrimalString& text, float fontSize, FontAsset* font, std::vector<UI::UIVertex>* vertices, std::vector<uint32_t>* indices) {
 	auto& metadata = font->metadata;
 
 	uint32_t vertexIndex = 0;

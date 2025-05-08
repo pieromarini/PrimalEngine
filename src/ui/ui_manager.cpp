@@ -643,7 +643,7 @@ void pushBox(UIElementOptions options) {
 
 void getTextDimensions(PrimalString& text, FontAsset* font, float& width, float& height) {
 	// TODO(piero): font size config
-	auto [w, h] = generateTextFromFont(text, 16.0f, font);
+	auto [w, h] = generateTextGeometry(text, 16.0f, font);
 	width = w;
 	height = h;
 }

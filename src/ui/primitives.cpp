@@ -77,7 +77,7 @@ UIElement text(PrimalString& text, float fontSize, FontAsset* font, std::vector<
 	element.indexCount = text.length * 6; // 6 indices per generated quad
 	element.vertexOffset = static_cast<int32_t>(vertices->size());
 
-	generateTextFromFont(text, fontSize, font, vertices, indices);
+	generateTextGeometry(text, fontSize, font, vertices, indices);
 
 	return element;
 }
