@@ -1297,7 +1297,7 @@ void drawTerrain(VulkanRendererContext* context, VkCommandBuffer commandBuffer) 
 		writer.updateSet(context->device, globalDescriptor);
 	}
 
-	// create commands
+	// create a draw command for each chunk
 	std::vector<MeshIndirectCommand> drawCommands;
 	std::vector<MeshDraw> drawData{};
 	uint32_t drawId{ 0 };
