@@ -2,6 +2,7 @@
 
 #include "assets/asset.h"
 #include "material.h"
+#include "terrain/voxel.h"
 #include "vulkan_loader.h"
 #include <SDL3/SDL.h>
 #include <VkBootstrap.h>
@@ -324,6 +325,14 @@ struct VulkanRendererContext {
 
 	// Memory
 	MemoryArena uiMemoryArena;
+
+	// Terrain test
+	VoxelTerrain voxelTerrain;
+	MaterialPipeline voxelPipeline;
+	VkDescriptorSetLayout voxelDescriptorLayout;
+	GPUMeshBuffers voxelMeshBuffers;
+	AllocatedBuffer voxelDrawCommandsBuffer;
+	uint32_t voxelDrawCommandsCount;
 };
 
 inline uint32_t getCurrentFrameIndex(VulkanRendererContext* context) {
@@ -341,6 +350,7 @@ void rendererSetInitialState(VulkanRendererContext* context, VulkanRendererConfi
 void rendererInitMemory(VulkanRendererContext* context);
 
 void loadTestScene(VulkanRendererContext* context);
+void terrainTest(VulkanRendererContext* context);
 
 void rendererInitDefaultData(VulkanRendererContext* context);
 
@@ -366,10 +376,13 @@ void initViewportPipeline(VulkanRendererContext* context);
 void initUIPipeline(VulkanRendererContext* context);
 void buildDefaultPipelines(VulkanRendererContext* context);
 
+void initVoxelPipeline(VulkanRendererContext* context);
+
 void writeBindlessTextureToGlobalDescriptor(VulkanRendererContext* context, VkDescriptorSet bindlessTextureSet, uint32_t binding, AllocatedImage& image, VkSampler sampler, uint32_t index);
 
 GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<UI::UIVertex> vertices, std::string name);
 GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<Vertex> vertices, std::string name);
+GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<VoxelVertex> vertices, std::string name);
 
 // Batching
 void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models);
@@ -387,6 +400,7 @@ void rendererDraw(VulkanRendererContext* context);
 void drawBackground(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
 void drawGeometry(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
 void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
+void drawTerrain(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
 
 void rendererCleanup(VulkanRendererContext* context);
 

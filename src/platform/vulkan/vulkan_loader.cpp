@@ -496,9 +496,6 @@ void cleanupModel(VulkanRendererContext* context, Model& model) {
 	for (auto& sampler : model.samplers) {
 		vkDestroySampler(context->device, sampler, nullptr);
 	}
-
-	// TODO: should be handled by the renderer
-	destroyBuffer(context->vmaAllocator, context->globalMaterialDataBuffer);
 }
 
 // Flatten the hierarchy and delete all entities
