@@ -1,8 +1,23 @@
 #include "voxel.h"
 #include "glm/ext/matrix_transform.hpp"
-#include <iostream>
 
 namespace pm {
+
+uint32_t packPosition(uint8_t x, uint8_t y, uint8_t z) {
+	// check that we are in range of 0-31
+	x &= 0x1F;// 0x1F = 31 (binary: 11111)
+	y &= 0x1F;
+	z &= 0x1F;
+
+	// Pack the values: x in bits 0-4, y in bits 5-9, z in bits 10-14
+	return (z << 10) | (y << 5) | x;
+}
+
+void unpackPosition(uint32_t packed, uint8_t& x, uint8_t& y, uint8_t& z) {
+	x = packed & 0x1F;
+	y = (packed >> 5) & 0x1F;
+	z = (packed >> 10) & 0x1F;
+}
 
 void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& vertices, std::vector<uint32_t>& indices) {
 	for (auto& chunk : terrain.chunks) {
@@ -11,57 +26,55 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 		chunk.indexCount = 6 * 6 * VOXEL_CHUNK_COUNT;
 
 		for (auto& voxel : chunk.voxels) {
-			glm::vec3 pos{ voxel.x, voxel.y, voxel.z };
-			float size = VOXEL_SIZE / 2.0f;
+			uint8_t size = VOXEL_SIZE;
 
 			// Vertex indices for the current voxel
 			auto baseIndex = static_cast<uint32_t>(vertices.size());
 			auto color = voxel.color;
 
 			// Front face (Z+)
-			vertices.push_back({ .position = pos + glm::vec3(-size, -size, size), .normal = glm::vec3(0.0f, 0.0f, 1.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(size, -size, size), .normal = glm::vec3(0.0f, 0.0f, 1.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(size, size, size), .normal = glm::vec3(0.0f, 0.0f, 1.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(-size, size, size), .normal = glm::vec3(0.0f, 0.0f, 1.0f), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x - size, voxel.y - size, voxel.z + size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x + size, voxel.y - size, voxel.z + size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x + size, voxel.y + size, voxel.z + size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x - size, voxel.y + size, voxel.z + size), .color = color });
 
 			// Back face (Z-)
-			vertices.push_back({ .position = pos + glm::vec3(-size, -size, -size), .normal = glm::vec3(0.0f, 0.0f, -1.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(-size, size, -size), .normal = glm::vec3(0.0f, 0.0f, -1.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(size, size, -size), .normal = glm::vec3(0.0f, 0.0f, -1.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(size, -size, -size), .normal = glm::vec3(0.0f, 0.0f, -1.0f), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x - size, voxel.y - size, voxel.z - size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x - size, voxel.y + size, voxel.z - size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x + size, voxel.y + size, voxel.z - size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x + size, voxel.y - size, voxel.z - size), .color = color });
 
 			// Right face (X+)
-			vertices.push_back({ .position = pos + glm::vec3(size, -size, -size), .normal = glm::vec3(1.0f, 0.0f, 0.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(size, size, -size), .normal = glm::vec3(1.0f, 0.0f, 0.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(size, size, size), .normal = glm::vec3(1.0f, 0.0f, 0.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(size, -size, size), .normal = glm::vec3(1.0f, 0.0f, 0.0f), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x + size, voxel.y - size, voxel.z - size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x + size, voxel.y + size, voxel.z - size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x + size, voxel.y + size, voxel.z + size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x + size, voxel.y - size, voxel.z + size), .color = color });
 
 			// Left face (X-)
-			vertices.push_back({ .position = pos + glm::vec3(-size, -size, -size), .normal = glm::vec3(-1.0f, 0.0f, 0.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(-size, -size, size), .normal = glm::vec3(-1.0f, 0.0f, 0.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(-size, size, size), .normal = glm::vec3(-1.0f, 0.0f, 0.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(-size, size, -size), .normal = glm::vec3(-1.0f, 0.0f, 0.0f), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x - size, voxel.y - size, voxel.z - size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x - size, voxel.y - size, voxel.z + size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x - size, voxel.y + size, voxel.z + size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x - size, voxel.y + size, voxel.z - size), .color = color });
 
 			// Top face (Y+)
-			vertices.push_back({ .position = pos + glm::vec3(-size, size, -size), .normal = glm::vec3(0.0f, 1.0f, 0.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(-size, size, size), .normal = glm::vec3(0.0f, 1.0f, 0.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(size, size, size), .normal = glm::vec3(0.0f, 1.0f, 0.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(size, size, -size), .normal = glm::vec3(0.0f, 1.0f, 0.0f), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x - size, voxel.y + size, voxel.z - size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x - size, voxel.y + size, voxel.z + size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x + size, voxel.y + size, voxel.z + size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x + size, voxel.y + size, voxel.z - size), .color = color });
 
 			// Bottom face (Y-)
-			vertices.push_back({ .position = pos + glm::vec3(-size, -size, -size), .normal = glm::vec3(0.0f, -1.0f, 0.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(size, -size, -size), .normal = glm::vec3(0.0f, -1.0f, 0.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(size, -size, size), .normal = glm::vec3(0.0f, -1.0f, 0.0f), .color = color });
-			vertices.push_back({ .position = pos + glm::vec3(-size, -size, size), .normal = glm::vec3(0.0f, -1.0f, 0.0f), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x - size, voxel.y - size, voxel.z - size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x + size, voxel.y - size, voxel.z - size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x + size, voxel.y - size, voxel.z + size), .color = color });
+			vertices.push_back({ .data = packPosition(voxel.x - size, voxel.y - size, voxel.z + size), .color = color });
 
-			// Add indices for the 6 faces (12 triangles)
+			// Add indices for the 6 faces
 			for (int face = 0; face < 6; face++) {
 				uint32_t faceBaseIndex = baseIndex + face * 4;
-				// First triangle of the face
 				indices.push_back(faceBaseIndex);
 				indices.push_back(faceBaseIndex + 1);
 				indices.push_back(faceBaseIndex + 2);
-				// Second triangle of the face
+
 				indices.push_back(faceBaseIndex);
 				indices.push_back(faceBaseIndex + 2);
 				indices.push_back(faceBaseIndex + 3);
@@ -73,22 +86,22 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 VoxelTerrain generateTerrain() {
 	VoxelTerrain scene{};
 
-	constexpr uint32_t TERRAIN_DIMENSION = 32;
+	constexpr uint32_t TERRAIN_DIMENSION = 4;
 
 	for (uint32_t chunkZ = 0; chunkZ < TERRAIN_DIMENSION; ++chunkZ) {
 		for (uint32_t chunkX = 0; chunkX < TERRAIN_DIMENSION; ++chunkX) {
 			VoxelChunk voxelChunk{};
 			voxelChunk.voxels.resize(VOXEL_CHUNK_COUNT);
 
-			for (uint32_t y = 0; y < VOXEL_CHUNK_SIZE; ++y) {
-				for (uint32_t z = 0; z < VOXEL_CHUNK_SIZE; ++z) {
-					for (uint32_t x = 0; x < VOXEL_CHUNK_SIZE; ++x) {
+			for (uint8_t y = 0; y < VOXEL_CHUNK_SIZE; ++y) {
+				for (uint8_t z = 0; z < VOXEL_CHUNK_SIZE; ++z) {
+					for (uint8_t x = 0; x < VOXEL_CHUNK_SIZE; ++x) {
 						uint32_t voxelIndex = x + (z * VOXEL_CHUNK_SIZE) + (y * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE);
 						voxelChunk.voxels[voxelIndex] = {
 							.id = voxelIndex,
-							.x = (float)x,
-							.y = (float)y,
-							.z = (float)z,
+							.x = x,
+							.y = y,
+							.z = z,
 							.color = { 0.0f, 0.0f, 1.0f, 1.0f }
 						};
 					}

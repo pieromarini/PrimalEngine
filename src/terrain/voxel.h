@@ -6,24 +6,21 @@
 
 namespace pm {
 
-constexpr uint32_t VOXEL_CHUNK_SIZE = 4;
+constexpr uint8_t VOXEL_CHUNK_SIZE = 16;
 constexpr uint32_t VOXEL_CHUNK_COUNT = VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE;
 
-constexpr float VOXEL_SIZE = 1.0f;
+constexpr uint8_t VOXEL_SIZE = 1;
 
 struct Voxel {
 	uint32_t id;
-	float x, y, z;
+	uint8_t x, y, z;
 	glm::vec4 color;
 };
-
-struct VoxelVertex {
-	glm::vec3 position;
-	float uv_x{ 0.0f };
-	glm::vec3 normal;
-	float uv_y{ 0.0f };
+ 
+ struct VoxelVertex {
+ 	glm::vec3 normal{ 0.0f };
+ 	uint32_t data;
 	glm::vec4 color;
-	glm::vec4 padding{ 0.0f };
 };
 
 struct VoxelChunk {
@@ -41,5 +38,9 @@ struct VoxelTerrain {
 
 void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& vertices, std::vector<uint32_t>& indices);
 VoxelTerrain generateTerrain();
+
+// helpers
+uint32_t packPosition(uint8_t x, uint8_t y, uint8_t z);
+void unpackPosition(uint32_t packed, uint8_t& x, uint8_t& y, uint8_t& z);
 
 }// namespace pm

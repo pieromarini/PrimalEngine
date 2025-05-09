@@ -10,16 +10,22 @@ layout (location = 0) out vec3 outColor;
 layout (location = 1) out vec2 outUV;
 layout (location = 2) out flat uint outDrawId;
 
+// Unpack position data. Each component is 5 bits.
+vec3 unpackPosition(uint packed) {
+	float x = float(packed & 0x1Fu);
+	float y = float((packed >> 5u) & 0x1Fu);
+	float z = float((packed >> 10u) & 0x1Fu);
+
+	return vec3(x, y, z);
+}
+
 struct VoxelVertex {
-	vec3 position;
-	float uv_x;
 	vec3 normal;
-	float uv_y;
+	uint data;
 	vec4 color;
-	vec4 padding;
 };
 
-layout(buffer_reference, std430) readonly buffer VertexBuffer {
+layout(buffer_reference, std430, buffer_reference_align=4) readonly buffer VertexBuffer {
 	VoxelVertex vertices[];
 };
 
@@ -47,12 +53,13 @@ void main() {
 
 	VoxelVertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
 	
-	vec4 position = vec4(v.position, 1.0f);
+	vec3 unpackedPos = unpackPosition(v.data);
+	vec4 position = vec4(unpackedPos, 1.0f);
 
 	gl_Position =  sceneData.viewproj * transform * position;
 
 	outColor = v.color.xyz;
-	outUV.x = v.uv_x;
-	outUV.y = v.uv_y;
+	outUV.x = 0.0f;
+	outUV.y = 0.0f;
 	outDrawId = drawId;
 }
