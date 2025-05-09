@@ -1,4 +1,6 @@
 #include "voxel.h"
+#include "glm/ext/matrix_transform.hpp"
+#include <iostream>
 
 namespace pm {
 
@@ -10,7 +12,7 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 
 		for (auto& voxel : chunk.voxels) {
 			glm::vec3 pos{ voxel.x, voxel.y, voxel.z };
-			float size = VOXEL_SIZE;
+			float size = VOXEL_SIZE / 2.0f;
 
 			// Vertex indices for the current voxel
 			auto baseIndex = static_cast<uint32_t>(vertices.size());
@@ -71,21 +73,32 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 VoxelTerrain generateTerrain() {
 	VoxelTerrain scene{};
 
-	for (uint32_t chunk = 0; chunk < 10; ++chunk) {
-		VoxelChunk voxelChunk{};
+	constexpr uint32_t TERRAIN_DIMENSION = 32;
 
-		for (uint32_t x = 0; x < VOXEL_CHUNK_SIZE; ++x) {
+	for (uint32_t chunkZ = 0; chunkZ < TERRAIN_DIMENSION; ++chunkZ) {
+		for (uint32_t chunkX = 0; chunkX < TERRAIN_DIMENSION; ++chunkX) {
+			VoxelChunk voxelChunk{};
+			voxelChunk.voxels.resize(VOXEL_CHUNK_COUNT);
+
 			for (uint32_t y = 0; y < VOXEL_CHUNK_SIZE; ++y) {
 				for (uint32_t z = 0; z < VOXEL_CHUNK_SIZE; ++z) {
-					uint32_t voxelIndex = x + (y * VOXEL_CHUNK_SIZE) + (z * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE);
-					voxelChunk.voxels[voxelIndex] = { .id = voxelIndex, .x = (float)(chunk * VOXEL_CHUNK_SIZE) + (float)x, .y = (float)(chunk * VOXEL_CHUNK_SIZE) + (float)y, .z = (float)(chunk * VOXEL_CHUNK_SIZE) + (float)z, .color = { 0.0f, 0.0f, 1.0f, 1.0f } };
+					for (uint32_t x = 0; x < VOXEL_CHUNK_SIZE; ++x) {
+						uint32_t voxelIndex = x + (z * VOXEL_CHUNK_SIZE) + (y * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE);
+						voxelChunk.voxels[voxelIndex] = {
+							.id = voxelIndex,
+							.x = (float)x,
+							.y = (float)y,
+							.z = (float)z,
+							.color = { 0.0f, 0.0f, 1.0f, 1.0f }
+						};
+					}
 				}
 			}
+
+			voxelChunk.transform = glm::translate(glm::mat4{ 1.0f }, glm::vec3{ chunkX * VOXEL_CHUNK_SIZE, 0.0f, chunkZ * VOXEL_CHUNK_SIZE });
+
+			scene.chunks.push_back(voxelChunk);
 		}
-
-		voxelChunk.transform = glm::mat4{ 1.0f };
-
-		scene.chunks.push_back(voxelChunk);
 	}
 
 	return scene;

@@ -16,7 +16,6 @@
 #include "swapchain.h"
 #include "ui/ui_types.h"
 #include "ui/widgets.h"
-#include <algorithm>
 #include <chrono>
 #include <ratio>
 #include <vulkan/vulkan_core.h>
@@ -72,14 +71,23 @@ void rendererInitMemory(VulkanRendererContext* context) {
 }
 
 void terrainTest(VulkanRendererContext* context) {
+	auto start = std::chrono::system_clock::now();
 	context->voxelTerrain = generateTerrain();
+	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start);
+	std::cout << std::format("Generated terrain in {:.4f} ms\n", static_cast<float>(elapsed.count()));
 
 	std::vector<VoxelVertex> vertices;
 	std::vector<uint32_t> indices;
 
+	start = std::chrono::system_clock::now();
 	generateTerrainGeometry(context->voxelTerrain, vertices, indices);
+	elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start);
+	std::cout << std::format("Generated terrain geometry in {:.4f} ms\n", static_cast<float>(elapsed.count()));
 
 	context->voxelMeshBuffers = uploadMesh(context, indices, vertices, "voxelMeshBuffers");
+
+	std::cout << std::format("Terrain Memory Usage: Vertex {:.2f} MB | Indices {:.2f} MB\n", static_cast<double>(context->voxelMeshBuffers.vertexBuffer.info.size) * 1e-6, static_cast<double>(context->voxelMeshBuffers.indexBuffer.info.size) * 1e-6);
+
 	context->mainDeletionQueue.push([context]() {
 		destroyBuffer(context->vmaAllocator, context->voxelMeshBuffers.vertexBuffer);
 		destroyBuffer(context->vmaAllocator, context->voxelMeshBuffers.indexBuffer);
@@ -143,7 +151,6 @@ void resizeSwapchain(VulkanRendererContext* context, PrimalWindow* window) {
 	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
-	VoxelTerrain generateTerrain();
 	drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
 	VkImageUsageFlags depthImageUsages{};
@@ -283,6 +290,7 @@ void initVulkan(VulkanRendererContext* context) {
 	features.sampleRateShading = VK_TRUE;
 	features.samplerAnisotropy = VK_TRUE;
 	features.pipelineStatisticsQuery = VK_TRUE;
+	features.fillModeNonSolid = VK_TRUE;
 
 	// Use VKBootstrap to select a gpu.
 	// We want a gpu that can write to the surface and supports vulkan 1.3 with the correct features

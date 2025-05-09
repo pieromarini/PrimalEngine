@@ -16,6 +16,7 @@ struct VoxelVertex {
 	vec3 normal;
 	float uv_y;
 	vec4 color;
+	vec4 padding;
 };
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer {

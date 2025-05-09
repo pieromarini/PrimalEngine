@@ -6,10 +6,10 @@
 
 namespace pm {
 
-constexpr uint32_t VOXEL_CHUNK_SIZE = 16;
+constexpr uint32_t VOXEL_CHUNK_SIZE = 4;
 constexpr uint32_t VOXEL_CHUNK_COUNT = VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE;
 
-constexpr uint32_t VOXEL_SIZE = 1;
+constexpr float VOXEL_SIZE = 1.0f;
 
 struct Voxel {
 	uint32_t id;
@@ -19,15 +19,16 @@ struct Voxel {
 
 struct VoxelVertex {
 	glm::vec3 position;
-	float uv_x;
+	float uv_x{ 0.0f };
 	glm::vec3 normal;
-	float uv_y;
+	float uv_y{ 0.0f };
 	glm::vec4 color;
+	glm::vec4 padding{ 0.0f };
 };
 
 struct VoxelChunk {
 	float x, y, z;
-	Voxel voxels[VOXEL_CHUNK_COUNT];
+	std::vector<Voxel> voxels;
 	uint32_t indexCount;
 	uint32_t firstIndex;
 	int32_t vertexOffset;
