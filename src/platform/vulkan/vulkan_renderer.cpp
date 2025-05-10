@@ -1318,10 +1318,10 @@ void drawTerrain(VulkanRendererContext* context, VkCommandBuffer commandBuffer) 
 
 	VkDescriptorSet terrainBatchDescriptor = getCurrentFrame(context).frameDescriptors.allocate(context->device, context->voxelDescriptorLayout);
 
-	auto commandsBuffer = createBuffer("terrainCommandsBuffer", sizeof(MeshIndirectCommand) * drawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	auto commandsBuffer = createBuffer("voxelCommandsBuffer", sizeof(MeshIndirectCommand) * drawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	memcpy(commandsBuffer.info.pMappedData, drawCommands.data(), sizeof(MeshIndirectCommand) * drawCommands.size());
 
-	auto drawsBuffer = createBuffer("meshTransformBuffer Opaque", sizeof(MeshDraw) * drawData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	auto drawsBuffer = createBuffer("voxelTransformBuffer", sizeof(MeshDraw) * drawData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	memcpy(drawsBuffer.info.pMappedData, drawData.data(), sizeof(MeshDraw) * drawData.size());
 
 	getCurrentFrame(context).deletionQueue.push([commandsBuffer, drawsBuffer, context]() {

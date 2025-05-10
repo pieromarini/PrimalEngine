@@ -6,7 +6,7 @@
 
 namespace pm {
 
-constexpr uint8_t VOXEL_CHUNK_SIZE = 16;
+constexpr uint32_t VOXEL_CHUNK_SIZE = 16;
 constexpr uint32_t VOXEL_CHUNK_COUNT = VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE;
 
 constexpr uint8_t VOXEL_SIZE = 1;
