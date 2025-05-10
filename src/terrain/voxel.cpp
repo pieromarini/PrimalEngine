@@ -1,12 +1,9 @@
 #include "voxel.h"
 #include "glm/ext/matrix_transform.hpp"
-#include <format>
-#include <iostream>
 
 namespace pm {
 
 uint32_t packPosition(uint8_t x, uint8_t y, uint8_t z) {
-	// Pack the values: x in bits 0-4, y in bits 5-9, z in bits 10-14
 	return (z << 10) | (y << 5) | x;
 }
 
@@ -28,13 +25,6 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 			// Vertex indices for the current voxel
 			auto baseIndex = static_cast<uint32_t>(vertices.size());
 			auto color = voxel.color;
-
-			/*
-			auto packed = packPosition(voxel.x - size, voxel.y - size, voxel.z + size);
-			uint8_t x{}, y{}, z{};
-			unpackPosition(packed, x, y, z);
-			std::cout << std::format("{} {} {} | Packed: {} | Packed 2: {} | Unpacked: {} {} {}\n", voxel.x, voxel.y, voxel.z, packPosition(voxel.x, voxel.y, voxel.z), packed, x, y, z);
-			*/
 
 			// Front face (Z+)
 			vertices.push_back({ .normal = glm::vec3(0.0f, 0.0f, 1.0f), .data = packPosition(voxel.x, voxel.y, voxel.z + size), .color = color });
