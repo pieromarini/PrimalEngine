@@ -9,8 +9,9 @@
 #define DEBUG 0
 
 layout (location = 0) in vec3 inColor;
-layout (location = 1) in vec2 inUV;
-layout (location = 2) in flat uint drawId;
+layout (location = 1) in vec2 inNormal;
+layout (location = 2) in vec2 inUV;
+layout (location = 3) in flat uint drawId;
 
 layout (location = 0) out vec4 outFragColor;
 

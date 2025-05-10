@@ -7,8 +7,9 @@
 #include "input_structures.h"
 
 layout (location = 0) out vec3 outColor;
-layout (location = 1) out vec2 outUV;
-layout (location = 2) out flat uint outDrawId;
+layout (location = 1) out vec3 outNormal;
+layout (location = 2) out vec2 outUV;
+layout (location = 3) out flat uint outDrawId;
 
 // Unpack position data. Each component is 5 bits.
 vec3 unpackPosition(uint packed) {
@@ -59,6 +60,7 @@ void main() {
 	gl_Position =  sceneData.viewproj * transform * position;
 
 	outColor = v.color.xyz;
+	outNormal = v.normal;
 	outUV.x = 0.0f;
 	outUV.y = 0.0f;
 	outDrawId = drawId;
