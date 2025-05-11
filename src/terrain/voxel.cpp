@@ -242,13 +242,13 @@ VoxelTerrain generateTerrain() {
 					for (uint32_t y = 0; y < VOXEL_CHUNK_SIZE; ++y) {
 						uint32_t voxelIndex = x + (z * VOXEL_CHUNK_SIZE) + (y * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE);
 
-						glm::vec4 voxelColor = { 0.0f, 0.0f, 0.0f, 0.0f };// Default: transparent
+						glm::vec4 voxelColor = { 0.0f, 0.0f, 0.0f, 0.0f };
 						bool isVoxelActive = false;
 
 						if (y < terrainHeight) {
 							isVoxelActive = true;
 
-							// Determine voxel type based on depth and biome
+							// Determine voxel type based on depth
 							if (y == terrainHeight - 1) {
 								// Grass
 								voxelColor = { 0.2f, 0.7f, 0.3f, 1.0f };
