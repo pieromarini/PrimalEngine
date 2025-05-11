@@ -7,13 +7,32 @@
 #include "input_structures.h"
 
 #define DEBUG 0
+#define DEBUG_NORMALS 0
 
 layout (location = 0) in vec3 inColor;
-layout (location = 1) in vec2 inNormal;
-layout (location = 2) in vec2 inUV;
+layout (location = 1) in vec3 inNormal;
+layout (location = 2) in vec3 inFragPos;
 layout (location = 3) in flat uint drawId;
 
 layout (location = 0) out vec4 outFragColor;
+
+struct VoxelVertex {
+	vec3 normal;
+	uint data;
+	vec4 color;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer VertexBuffer {
+	VoxelVertex vertices[];
+};
+
+layout(push_constant) uniform constants {
+	vec4 viewPosition;
+	vec4 padding;
+	vec4 padding1;
+	vec4 padding2;
+	VertexBuffer vertexBuffer;
+} PushConstants;
 
 uint hash(uint a) {
    a = (a+0x7ed55d16) + (a<<12);
@@ -26,7 +45,29 @@ uint hash(uint a) {
 }
 
 void main() {
-	outFragColor = vec4(inColor, 1.0f);
+	// constants
+	float ambientStrength = 0.3f;
+	float shininess = 5.0f;
+	float specularStrength = 0.1f;
+
+	vec3 normal = normalize(inNormal);
+
+	// ambient
+	vec3 ambient = ambientStrength * sceneData.ambientColor.xyz;
+
+	// diffuse
+	float diff = max(dot(normal, normalize(sceneData.sunlightDirection.xyz)), 0.0f);
+	vec3 diffuse = diff * sceneData.sunlightColor.xyz;
+
+	vec3 result = (ambient + diffuse) * inColor;
+
+	// Ambient occlusion
+
+	outFragColor = vec4(result, 1.0f);
+
+#if DEBUG_NORMALS
+	outFragColor = vec4(normal * 0.5f + 0.5f, 1.0f);
+#endif
 
 #if DEBUG
 	uint mhash = hash(drawId);

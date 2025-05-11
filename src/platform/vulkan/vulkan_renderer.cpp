@@ -71,6 +71,10 @@ void rendererInitMemory(VulkanRendererContext* context) {
 }
 
 void terrainTest(VulkanRendererContext* context) {
+	context->sceneData.ambientColor = glm::vec4(.4f);
+	context->sceneData.sunlightColor = glm::vec4(1.f, 1.0, 1.0f, 1.0f);
+	context->sceneData.sunlightDirection = glm::vec4(0.2f, 1.0f, 0.5, 1.f);
+
 	auto start = std::chrono::system_clock::now();
 	context->voxelTerrain = generateTerrain();
 	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start);
@@ -1349,7 +1353,7 @@ void drawTerrain(VulkanRendererContext* context, VkCommandBuffer commandBuffer) 
 	pushConstants.viewPosition = glm::vec4(context->rendererState->mainCamera->position, 1.0f);
 
 	vkCmdBindIndexBuffer(commandBuffer, context->voxelMeshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-	vkCmdPushConstants(commandBuffer, context->voxelPipeline.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+	vkCmdPushConstants(commandBuffer, context->voxelPipeline.layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 	vkCmdDrawIndexedIndirect(commandBuffer, commandsBuffer.buffer, offsetof(MeshIndirectCommand, command), drawCommands.size(), sizeof(MeshIndirectCommand));
 
 	vkCmdEndRendering(commandBuffer);
@@ -1802,7 +1806,7 @@ void initVoxelPipeline(VulkanRendererContext* context) {
 	VkPushConstantRange voxelPushConstants{};
 	voxelPushConstants.offset = 0;
 	voxelPushConstants.size = sizeof(GPUDrawPushConstants);
-	voxelPushConstants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	voxelPushConstants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
 	std::array<VkDescriptorSetLayout, 2> layouts = {
 		context->gpuSceneDataDescriptorLayout,

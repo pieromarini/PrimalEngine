@@ -17,6 +17,7 @@ struct Voxel {
 	uint32_t id;
 	uint8_t x, y, z;
 	glm::vec4 color;
+	bool empty { true };
 };
  
  struct VoxelVertex {

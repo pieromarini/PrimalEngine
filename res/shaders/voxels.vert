@@ -8,7 +8,7 @@
 
 layout (location = 0) out vec3 outColor;
 layout (location = 1) out vec3 outNormal;
-layout (location = 2) out vec2 outUV;
+layout (location = 2) out vec3 outFragPos;
 layout (location = 3) out flat uint outDrawId;
 
 // Unpack position data. Each component is 5 bits.
@@ -57,11 +57,13 @@ void main() {
 	vec3 unpackedPos = unpackPosition(v.data);
 	vec4 position = vec4(unpackedPos, 1.0f);
 
-	gl_Position =  sceneData.viewproj * transform * position;
+	vec3 worldSpaceNormal = vec3(transpose(inverse(transform)) * vec4(v.normal, 1.0f));
+	vec4 worldPosition = transform * position;
+
+	gl_Position =  sceneData.viewproj * worldPosition;
 
 	outColor = v.color.xyz;
-	outNormal = v.normal;
-	outUV.x = 0.0f;
-	outUV.y = 0.0f;
+	outNormal = worldSpaceNormal;
+	outFragPos = worldPosition.xyz;
 	outDrawId = drawId;
 }
