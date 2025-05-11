@@ -224,16 +224,18 @@ void rendererInitDefaultData(VulkanRendererContext* context) {
 	auto sceneMaterialData = static_cast<MaterialData*>(context->globalMaterialDataBuffer.info.pMappedData);
 
 	// Init default material
-	auto defaultMaterial = Material_getDefaultMaterial();
-	sceneMaterialData[0] = defaultMaterial.materialData;
+	if (context->bindlessTexturesDescriptorSet) {
+		auto defaultMaterial = Material_getDefaultMaterial();
+		sceneMaterialData[0] = defaultMaterial.materialData;
 
-	// Write default texture to descriptor set and set Material pass and pipeline
-	writeBindlessTextureToGlobalDescriptor(context, context->bindlessTexturesDescriptorSet, 0, context->errorCheckerboardImage, context->defaultSamplerLinear, 0);
-	defaultMaterial.passType = MaterialPass::MainColor;
-	defaultMaterial.pipeline = &context->opaquePipeline;
+		// Write default texture to descriptor set and set Material pass and pipeline
+		writeBindlessTextureToGlobalDescriptor(context, context->bindlessTexturesDescriptorSet, 0, context->errorCheckerboardImage, context->defaultSamplerLinear, 0);
+		defaultMaterial.passType = MaterialPass::MainColor;
+		defaultMaterial.pipeline = &context->opaquePipeline;
 
-	// Write default material to cache
-	MaterialCache_add(context->materialCache, 0, defaultMaterial);
+		// Write default material to cache
+		MaterialCache_add(context->materialCache, 0, defaultMaterial);
+	}
 
 	// Write default viewport texture
 	writeBindlessTextureToGlobalDescriptor(context, context->viewportTextureDescriptorSet, 0, context->errorCheckerboardImage, context->defaultSamplerLinear, 0);
@@ -840,6 +842,7 @@ void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models
 	double flattenTime{};
 	double genTime{};
 	for (auto model : models) {
+		std::cout << std::format("Model Memory Usage: {} MB", static_cast<double>(model.modelBuffers.vertexBuffer.info.size) * 1e-6);
 		auto start = std::chrono::high_resolution_clock::now();
 		// std::vector<Entity*> entities{};
 		// Entity_flattenHierarchy(model.root, glm::mat4{ 1.0f }, entities);
@@ -1020,7 +1023,7 @@ void rendererDraw(VulkanRendererContext* context) {
 	VK_CHECK(vkWaitForFences(context->device, 1, &getCurrentFrame(context).renderFence, true, 1000000000));
 
 	getCurrentFrame(context).deletionQueue.flush();
-	getCurrentFrame(context).frameDescriptors.clearPools(context->device);
+	getCurrentFrame(context).frameDescriptor.clearPools(context->device);
 
 	// Get next swapchain image for each swapchain/window we render to
 	auto currentFrameIndex = getCurrentFrameIndex(context);
@@ -1067,7 +1070,7 @@ void rendererDraw(VulkanRendererContext* context) {
 	vkCmdResetQueryPool(commandBuffer, context->pipelineStatisticsPool, 0, 1);
 	vkCmdBeginQuery(commandBuffer, context->pipelineStatisticsPool, 0, 0);
 
-	drawGeometry(context, commandBuffer);
+	// drawGeometry(context, commandBuffer);
 	drawTerrain(context, commandBuffer);
 
 	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -1210,7 +1213,7 @@ void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
 		for (auto& drawBatch : windowBatch.drawBatches) {
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipeline);
 
-			VkDescriptorSet drawBatchDescriptor = getCurrentFrame(context).frameDescriptors.allocate(context->device, drawBatch.descriptorSetLayout);
+			VkDescriptorSet drawBatchDescriptor = getCurrentFrame(context).frameDescriptor.allocate(context->device, drawBatch.descriptorSetLayout);
 			DescriptorWriter drawBatchDescriptorWriter;
 			for (auto& descriptor : drawBatch.descriptors) {
 				drawBatchDescriptorWriter.writeBuffer(descriptor.binding, descriptor.buffer.buffer, descriptor.size, descriptor.offset, descriptor.type);
@@ -1285,7 +1288,7 @@ void drawTerrain(VulkanRendererContext* context, VkCommandBuffer commandBuffer) 
 	memcpy(gpuSceneDataBuffer.info.pMappedData, &context->sceneData, sizeof(GPUSceneData));
 
 	// Create global sceneData descriptor
-	VkDescriptorSet globalDescriptor = getCurrentFrame(context).frameDescriptors.allocate(context->device, context->gpuSceneDataDescriptorLayout);
+	VkDescriptorSet globalDescriptor = getCurrentFrame(context).frameDescriptor.allocate(context->device, context->gpuSceneDataDescriptorLayout);
 
 	getCurrentFrame(context).deletionQueue.push([gpuSceneDataBuffer, context]() {
 		destroyBuffer(context->vmaAllocator, gpuSceneDataBuffer);
@@ -1316,7 +1319,7 @@ void drawTerrain(VulkanRendererContext* context, VkCommandBuffer commandBuffer) 
 		drawId++;
 	}
 
-	VkDescriptorSet terrainBatchDescriptor = getCurrentFrame(context).frameDescriptors.allocate(context->device, context->voxelDescriptorLayout);
+	VkDescriptorSet terrainBatchDescriptor = getCurrentFrame(context).frameDescriptor.allocate(context->device, context->voxelDescriptorLayout);
 
 	auto commandsBuffer = createBuffer("voxelCommandsBuffer", sizeof(MeshIndirectCommand) * drawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	memcpy(commandsBuffer.info.pMappedData, drawCommands.data(), sizeof(MeshIndirectCommand) * drawCommands.size());
@@ -1395,7 +1398,7 @@ void drawGeometry(VulkanRendererContext* context, VkCommandBuffer commandBuffer)
 	memcpy(gpuSceneDataBuffer.info.pMappedData, &context->sceneData, sizeof(GPUSceneData));
 
 	// Create global sceneData descriptor
-	VkDescriptorSet globalDescriptor = getCurrentFrame(context).frameDescriptors.allocate(context->device, context->gpuSceneDataDescriptorLayout);
+	VkDescriptorSet globalDescriptor = getCurrentFrame(context).frameDescriptor.allocate(context->device, context->gpuSceneDataDescriptorLayout);
 
 	getCurrentFrame(context).deletionQueue.push([gpuSceneDataBuffer, context]() {
 		destroyBuffer(context->vmaAllocator, gpuSceneDataBuffer);
@@ -1415,7 +1418,7 @@ void drawGeometry(VulkanRendererContext* context, VkCommandBuffer commandBuffer)
 
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipeline);
 
-		VkDescriptorSet drawBatchDescriptor = getCurrentFrame(context).frameDescriptors.allocate(context->device, drawBatch.descriptorSetLayout);
+		VkDescriptorSet drawBatchDescriptor = getCurrentFrame(context).frameDescriptor.allocate(context->device, drawBatch.descriptorSetLayout);
 		DescriptorWriter drawBatchDescriptorWriter;
 		for (auto& descriptor : drawBatch.descriptors) {
 			drawBatchDescriptorWriter.writeBuffer(descriptor.binding, descriptor.buffer.buffer, descriptor.size, descriptor.offset, descriptor.type);
@@ -1515,11 +1518,11 @@ void initDescriptors(VulkanRendererContext* context) {
 			{ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio = 4 },
 		};
 
-		frame.frameDescriptors = {};
-		frame.frameDescriptors.init(context->device, 1000, frame_sizes);
+		frame.frameDescriptor = {};
+		frame.frameDescriptor.init(context->device, 10000, frame_sizes);
 
 		context->mainDeletionQueue.push([context, &frame]() {
-			frame.frameDescriptors.destroyPools(context->device);
+			frame.frameDescriptor.destroyPools(context->device);
 		});
 	}
 
@@ -1823,7 +1826,7 @@ void initVoxelPipeline(VulkanRendererContext* context) {
 	pipelineBuilder.setShaders(voxelVertexShader, voxelFragShader);
 	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
-	pipelineBuilder.setCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+	pipelineBuilder.setCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
 	pipelineBuilder.setMultisamplingNone();
 	pipelineBuilder.disableBlending();
 	pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -1832,7 +1835,6 @@ void initVoxelPipeline(VulkanRendererContext* context) {
 	pipelineBuilder.setColorAttachmentFormat(context->sceneDrawImage.imageFormat);
 	pipelineBuilder.setDepthFormat(context->sceneDepthImage.imageFormat);
 
-	// build opaque pipeline
 	context->voxelPipeline.pipeline = pipelineBuilder.buildPipeline(context->device, context->pipelineCache);
 
 	context->mainDeletionQueue.push([context] {

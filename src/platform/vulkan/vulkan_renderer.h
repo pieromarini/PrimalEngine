@@ -165,7 +165,7 @@ struct FrameData {
 
 	DeletionQueue deletionQueue;
 
-	DescriptorAllocator frameDescriptors;
+	DescriptorAllocator frameDescriptor;
 
 	std::vector<DrawBatch> drawBatches{};
 	std::vector<UIWindowBatch> uiWindowBatches{};

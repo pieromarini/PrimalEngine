@@ -26,7 +26,7 @@ struct VoxelVertex {
 	vec4 color;
 };
 
-layout(buffer_reference, std430, buffer_reference_align=4) readonly buffer VertexBuffer {
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer VertexBuffer {
 	VoxelVertex vertices[];
 };
 

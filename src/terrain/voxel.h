@@ -11,6 +11,8 @@ constexpr uint32_t VOXEL_CHUNK_COUNT = VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE * VOX
 
 constexpr uint8_t VOXEL_SIZE = 1;
 
+constexpr bool DEBUG_VOXEL_COLORS = false;
+
 struct Voxel {
 	uint32_t id;
 	uint8_t x, y, z;
