@@ -243,7 +243,7 @@ VoxelTerrain generateTerrain() {
 
 					// Fill voxels from bottom to height
 					for (uint32_t y = 0; y < VOXEL_CHUNK_SIZE; ++y) {
-						uint32_t voxelIndex = getVoxelIndex(x , y, z);
+						uint32_t voxelIndex = getVoxelIndex(x, y, z);
 
 						glm::vec4 voxelColor = { 0.0f, 0.0f, 0.0f, 0.0f };
 						bool isVoxelActive = false;
@@ -267,6 +267,7 @@ VoxelTerrain generateTerrain() {
 								voxelColor = { (float)(chunkX + 1) / (float)TERRAIN_DIMENSION, 0.0f, (float)(chunkZ + 1) / (float)TERRAIN_DIMENSION, 1.0f };
 							}
 
+							// Count non-empty voxels
 							terrain.voxelCount++;
 						}
 

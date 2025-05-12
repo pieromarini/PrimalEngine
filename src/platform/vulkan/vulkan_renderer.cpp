@@ -1357,6 +1357,8 @@ void drawTerrain(VulkanRendererContext* context, VkCommandBuffer commandBuffer) 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
+	context->rendererState->rendererStats.drawCallCount = static_cast<int32_t>(drawCommands.size());
+
 	context->rendererState->rendererStats.meshDrawTimeAvg = context->rendererState->rendererStats.meshDrawTimeAvg * 0.95 + (static_cast<float>(elapsed.count()) / 1000.0f) * 0.05;
 }
 
