@@ -12,6 +12,7 @@ constexpr uint32_t VOXEL_CHUNK_COUNT = VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE * VOX
 constexpr uint8_t VOXEL_SIZE = 1;
 
 constexpr bool DEBUG_VOXEL_COLORS = false;
+constexpr bool DEBUG_CHUNK_COLORS = false;
 
 struct Voxel {
 	uint32_t id;
@@ -37,7 +38,10 @@ struct VoxelChunk {
 
 struct VoxelTerrain {
 	std::vector<VoxelChunk> chunks;
+	uint64_t voxelCount{ 0 };
 };
+
+uint32_t getVoxelIndex(uint32_t x, uint32_t y, uint32_t z);
 
 void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& vertices, std::vector<uint32_t>& indices);
 VoxelTerrain generateTerrain();

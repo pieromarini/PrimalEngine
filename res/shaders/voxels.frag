@@ -46,9 +46,7 @@ uint hash(uint a) {
 
 void main() {
 	// constants
-	float ambientStrength = 0.3f;
-	float shininess = 5.0f;
-	float specularStrength = 0.1f;
+	float ambientStrength = 0.5f;
 
 	vec3 normal = normalize(inNormal);
 
@@ -60,8 +58,6 @@ void main() {
 	vec3 diffuse = diff * sceneData.sunlightColor.xyz;
 
 	vec3 result = (ambient + diffuse) * inColor;
-
-	// Ambient occlusion
 
 	outFragColor = vec4(result, 1.0f);
 

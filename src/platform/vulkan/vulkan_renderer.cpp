@@ -59,6 +59,11 @@ void rendererSetup(VulkanRendererContext* context) {
 	initFontData(context);
 	initUI(context);
 
+	// Default lighting parameters
+	context->sceneData.ambientColor = glm::vec4(.4f);
+	context->sceneData.sunlightColor = glm::vec4(1.f, 1.0, 1.0f, 1.0f);
+	context->sceneData.sunlightDirection = glm::vec4(0.2f, 1.0f, 0.5, 1.f);
+
 	// loadTestScene(context);
 	terrainTest(context);
 }
@@ -71,10 +76,6 @@ void rendererInitMemory(VulkanRendererContext* context) {
 }
 
 void terrainTest(VulkanRendererContext* context) {
-	context->sceneData.ambientColor = glm::vec4(.4f);
-	context->sceneData.sunlightColor = glm::vec4(1.f, 1.0, 1.0f, 1.0f);
-	context->sceneData.sunlightDirection = glm::vec4(0.2f, 1.0f, 0.5, 1.f);
-
 	auto start = std::chrono::system_clock::now();
 	context->voxelTerrain = generateTerrain();
 	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start);
@@ -84,13 +85,13 @@ void terrainTest(VulkanRendererContext* context) {
 	std::vector<uint32_t> indices;
 
 	// reserve space for terrain
-	vertices.reserve(6 * 4 * VOXEL_CHUNK_COUNT * context->voxelTerrain.chunks.size());
-	indices.reserve(6 * 6 * VOXEL_CHUNK_COUNT * context->voxelTerrain.chunks.size());
+	vertices.reserve(6 * 4 * context->voxelTerrain.voxelCount);
+	indices.reserve(6 * 6 * context->voxelTerrain.voxelCount);
 
 	start = std::chrono::system_clock::now();
 	generateTerrainGeometry(context->voxelTerrain, vertices, indices);
 	elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start);
-	std::cout << std::format("Generated terrain geometry in {:.4f} ms\n", static_cast<float>(elapsed.count()));
+	std::cout << std::format("Generated terrain geometry with {} voxels in {:.4f} ms\n", context->voxelTerrain.voxelCount, static_cast<float>(elapsed.count()));
 
 	context->voxelMeshBuffers = uploadMesh(context, indices, vertices, "voxelMeshBuffers");
 
@@ -103,11 +104,6 @@ void terrainTest(VulkanRendererContext* context) {
 }
 
 void loadTestScene(VulkanRendererContext* context) {
-	// some default lighting parameters
-	context->sceneData.ambientColor = glm::vec4(.4f);
-	context->sceneData.sunlightColor = glm::vec4(1.f, 1.0, 1.0f, 1.0f);
-	context->sceneData.sunlightDirection = glm::vec4(0.2f, 1.0f, 0.5, 1.f);
-
 	// const std::string modelPath = { "res/models/bistro/bistro_ktx2.glb" };
 	const std::string modelPath = { "res/models/structure.glb" };
 

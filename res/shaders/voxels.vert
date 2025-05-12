@@ -57,7 +57,8 @@ void main() {
 	vec3 unpackedPos = unpackPosition(v.data);
 	vec4 position = vec4(unpackedPos, 1.0f);
 
-	vec3 worldSpaceNormal = vec3(transpose(inverse(transform)) * vec4(v.normal, 1.0f));
+	// TODO(piero): Calculate Normal matrix on CPU
+	vec3 worldSpaceNormal = mat3(transpose(inverse(transform))) * v.normal;
 	vec4 worldPosition = transform * position;
 
 	gl_Position =  sceneData.viewproj * worldPosition;

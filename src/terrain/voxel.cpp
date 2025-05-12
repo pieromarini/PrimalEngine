@@ -16,12 +16,12 @@ void unpackPosition(uint32_t packed, uint8_t& x, uint8_t& y, uint8_t& z) {
 }
 
 void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& vertices, std::vector<uint32_t>& indices) {
-	// Create a 3D lookup grid to check for adjacent voxels
 	std::unordered_map<int64_t, bool> voxelMap;
 
 	// Fill the voxel lookup map
 	for (auto& chunk : terrain.chunks) {
-		auto chunkOffset = glm::vec3(chunk.transform[3]);// Extract translation from transform matrix
+		// Extract translation from transform matrix
+		auto chunkOffset = glm::vec3(chunk.transform[3]);
 
 		for (auto& voxel : chunk.voxels) {
 			// Calculate world position
@@ -201,6 +201,10 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 	}
 }
 
+uint32_t getVoxelIndex(uint32_t x, uint32_t y, uint32_t z) {
+	return x + (z * VOXEL_CHUNK_SIZE) + (y * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE);
+}
+
 VoxelTerrain generateTerrain() {
 	VoxelTerrain terrain{};
 	constexpr uint32_t TERRAIN_DIMENSION = 16;
@@ -211,7 +215,7 @@ VoxelTerrain generateTerrain() {
 	const siv::PerlinNoise perlin{ seed };
 
 	// Terrain generation parameters
-	constexpr float HEIGHT_SCALE = 20.0f;
+	constexpr float HEIGHT_SCALE = 14.0f;
 	constexpr float NOISE_SCALE = 0.03f;
 
 	for (uint32_t chunkZ = 0; chunkZ < TERRAIN_DIMENSION; ++chunkZ) {
@@ -225,22 +229,21 @@ VoxelTerrain generateTerrain() {
 
 			for (uint32_t z = 0; z < VOXEL_CHUNK_SIZE; ++z) {
 				for (uint32_t x = 0; x < VOXEL_CHUNK_SIZE; ++x) {
-					// Calculate height at this x,z position
 					float wx = (worldX + (float)x) * NOISE_SCALE;
 					float wz = (worldZ + (float)z) * NOISE_SCALE;
 
 					// Get height from noise
 					auto heightValue = perlin.normalizedOctave2D_01(wx, wz, 8);
 
-					// Scale noise to height
-					int terrainHeight = static_cast<int>(heightValue * HEIGHT_SCALE);
+					// Scale [0, 1] noise to [0, HEIGHT_SCALE]
+					auto terrainHeight = static_cast<int32_t>(heightValue * HEIGHT_SCALE);
 
 					// Limit height to chunk bounds
-					terrainHeight = std::min(std::max(1, terrainHeight), static_cast<int>(VOXEL_CHUNK_SIZE - 1));
+					terrainHeight = std::min(std::max(1, terrainHeight), static_cast<int32_t>(VOXEL_CHUNK_SIZE - 1));
 
 					// Fill voxels from bottom to height
 					for (uint32_t y = 0; y < VOXEL_CHUNK_SIZE; ++y) {
-						uint32_t voxelIndex = x + (z * VOXEL_CHUNK_SIZE) + (y * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE);
+						uint32_t voxelIndex = getVoxelIndex(x , y, z);
 
 						glm::vec4 voxelColor = { 0.0f, 0.0f, 0.0f, 0.0f };
 						bool isVoxelActive = false;
@@ -259,6 +262,12 @@ VoxelTerrain generateTerrain() {
 								// Stone layer (deep)
 								voxelColor = { 0.5f, 0.5f, 0.5f, 1.0f };
 							}
+
+							if (DEBUG_CHUNK_COLORS) {
+								voxelColor = { (float)(chunkX + 1) / (float)TERRAIN_DIMENSION, 0.0f, (float)(chunkZ + 1) / (float)TERRAIN_DIMENSION, 1.0f };
+							}
+
+							terrain.voxelCount++;
 						}
 
 						// Set voxel properties
@@ -267,7 +276,7 @@ VoxelTerrain generateTerrain() {
 							.x = (uint8_t)x,
 							.y = (uint8_t)y,
 							.z = (uint8_t)z,
-							.color = isVoxelActive ? voxelColor : glm::vec4{ 1.0f, 0.0f, 0.0f, 0.0f },
+							.color = voxelColor,
 							.empty = !isVoxelActive
 						};
 					}
