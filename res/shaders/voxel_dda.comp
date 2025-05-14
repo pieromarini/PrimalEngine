@@ -1,0 +1,291 @@
+#version 460
+
+layout (local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0) uniform SceneData {
+	mat4 view;
+	mat4 proj;
+	mat4 viewproj;
+	vec4 ambientColor;
+	vec4 sunlightDirection;
+	vec4 sunlightColor;
+} sceneData;
+
+layout (rgba8, set = 1, binding = 0) uniform image2D albedo;
+layout (rgba16, set = 1, binding = 1) uniform image2D irradiance;
+layout (r32f, set = 1, binding = 2) uniform image2D depth;
+
+layout(push_constant) uniform constants {
+	vec4 viewPosition;
+	vec4 data2;
+	vec4 data3;
+	vec4 data4;
+} PushConstants;
+
+struct Ray {
+	vec3 origin;
+	vec3 direction;
+};
+
+struct VoxelGrid {
+	vec3 minBound;
+	uint numVoxelsX;
+
+	vec3 maxBound;
+	uint numVoxelsY;
+
+	vec3 gridSize;
+	uint numVoxelsZ;
+};
+
+struct HitInfo {
+	float dist;
+	vec3 pos;
+	vec3 normal;
+	vec2 uv;
+	uint materialId;
+};
+
+layout(set = 1, binding = 3) readonly buffer Grid {
+	VoxelGrid grid;
+};
+
+layout(set = 1, binding = 4) readonly buffer Voxels {
+	uint voxels[];
+};
+
+vec3 getMaterialColor(uint materialID) {
+	// Simple color mapping based on material ID
+	switch(materialID) {
+		case 1: return vec3(0.2f, 0.7f, 0.3f);
+		case 2: return vec3(0.6f, 0.4f, 0.2f);
+		case 3: return vec3(0.5f, 0.5f, 0.5f);
+
+		// sky color (light blue)
+		default: return vec3(0.5, 0.7, 1.0);
+	}
+}
+
+// NOTE(piero): Sizes MUST be a power of two (because of the & operator to speed up modulo.)
+uint getLinearIndex(ivec3 pos, ivec3 gridSize) {
+	return (pos.x & (gridSize.x - 1)) +
+				 (pos.z & (gridSize.z - 1)) * gridSize.z +
+				 (pos.y & (gridSize.y - 1)) * (gridSize.x * gridSize.z);
+}
+
+uint getVoxel(ivec3 pos, ivec3 gridSize) {
+	uint index = getLinearIndex(pos, gridSize);
+	return voxels[index];
+}
+
+// Function to convert clip space coordinates to ray direction
+Ray rayFromCamera(vec2 clipCoords, vec3 cameraPosition) {
+	// Convert to NDC space
+	vec4 ndcPos = vec4(clipCoords.x, clipCoords.y, 1.0, 1.0);
+
+	// Unproject using inverse projection and view matrices
+	vec4 viewPos = inverse(sceneData.proj) * ndcPos;
+	viewPos /= viewPos.w;
+
+	vec4 worldPos = inverse(sceneData.view) * viewPos;
+
+	Ray ray;
+
+	ray.origin = cameraPosition;
+	// Ray direction in world space
+	ray.direction = normalize(worldPos.xyz - cameraPosition);
+
+	return ray;
+}
+
+vec3 clipRayToAABB(Ray ray, vec3 bbMin, vec3 bbMax, out bool rayMiss) {
+	vec3 invDir = 1.0 / ray.direction;
+	vec3 t1 = (bbMin - ray.origin) * invDir;
+	vec3 t2 = (bbMax - ray.origin) * invDir;
+	vec3 temp = t1;
+	t1 = min(temp, t2);
+	t2 = max(temp, t2);
+
+	float tmin = max(t1.x, max(t1.y, t1.z));
+	float tmax = min(t2.x, min(t2.y, t2.z));
+
+	rayMiss = (tmin > tmax || tmax < 0);
+
+	return tmin > 0 && tmin < tmax ? ray.origin + ray.direction * tmin : ray.origin;
+}
+
+bvec3 getStepMask(vec3 sideDist) {
+	bvec3 mask;
+
+	mask.x = sideDist.x < sideDist.y && sideDist.x < sideDist.z;
+	mask.y = !mask.x && sideDist.y < sideDist.z;
+	mask.z = !mask.x && !mask.y;
+
+	return mask;
+}
+
+bool checkBounds(ivec3 pos, ivec3 gridSize) {
+	return pos.x >= 0 && pos.x < gridSize.x &&
+		pos.y >= 0 && pos.y < gridSize.y && 
+		pos.z >= 0 && pos.z < gridSize.z;
+}
+
+// More robust raycasting function
+HitInfo raycastGrid(Ray ray, VoxelGrid grid) {
+	HitInfo hit;
+	hit.materialId = 0; // Initialize to empty
+	hit.dist = 1e30;    // Initialize to far distance
+
+	ivec3 gridSize = ivec3(grid.gridSize);
+
+	vec3 invDir = 1.0 / ray.direction;
+
+	// Calculate starting position
+	bool rayMiss;
+	vec3 startPos = clipRayToAABB(ray, grid.minBound, grid.maxBound, rayMiss);
+	if (rayMiss) {
+		return hit;
+	}
+
+	// Clamp starting position to grid
+	startPos = clamp(startPos, vec3(0), grid.gridSize - vec3(0.000001));
+
+	// Initialize positions
+	ivec3 mapPos = ivec3(floor(startPos));
+	ivec3 rayStep = ivec3(sign(ray.direction));
+
+	// Distance between cell boundaries
+	vec3 deltaDist = abs(invDir);
+
+	// Calculate distance to next cell boundary
+	vec3 sideDist;
+	sideDist.x = rayStep.x > 0 ?
+		(floor(startPos.x) + 1.0 - startPos.x) * deltaDist.x :
+		(startPos.x - floor(startPos.x)) * deltaDist.x;
+	sideDist.y = rayStep.y > 0 ?
+		(floor(startPos.y) + 1.0 - startPos.y) * deltaDist.y :
+		(startPos.y - floor(startPos.y)) * deltaDist.y;
+	sideDist.z = rayStep.z > 0 ?
+		(floor(startPos.z) + 1.0 - startPos.z) * deltaDist.z :
+		(startPos.z - floor(startPos.z)) * deltaDist.z;
+
+	int MAX_RAY_STEPS = 512;
+	vec3 normal = vec3(0.0);
+
+  bvec3 stepMask = getStepMask(sideDist);
+
+	for (int i = 0; i < MAX_RAY_STEPS; i++) {
+		if (!checkBounds(mapPos, gridSize)) break;
+
+		stepMask = getStepMask(sideDist);
+
+		uint voxelType = getVoxel(mapPos, gridSize);
+		if (voxelType != 0) {
+			vec3 dists = mix(vec3(0), sideDist, stepMask);
+			float distance = max(dists.x, max(dists.y, dists.z));
+
+			hit.materialId = voxelType;
+			hit.dist = distance;
+			hit.pos = ray.origin + ray.direction * distance;
+			hit.normal = normal;
+
+			// Calculate UVs based on hit face
+			if (abs(normal.x) > 0.5) {
+				hit.uv = fract(vec2(hit.pos.z, hit.pos.y));
+			} else if (abs(normal.y) > 0.5) {
+				hit.uv = fract(vec2(hit.pos.x, hit.pos.z));
+			} else {
+				hit.uv = fract(vec2(hit.pos.x, hit.pos.y));
+			}
+
+			break;
+		}
+
+		// DDA step - determine which boundary to cross next
+		mapPos += mix(ivec3(0), rayStep, stepMask);
+		sideDist += mix(ivec3(0), deltaDist, stepMask);
+		normal = mix(ivec3(0), -rayStep, stepMask);
+	}
+
+	return hit;
+}
+
+// Simple lighting calculation
+vec3 calculateLighting(vec3 position, vec3 normal, vec3 baseColor) {
+	// Extract lighting data from uniform
+	vec3 lightDir = normalize(sceneData.sunlightDirection.xyz);
+	vec3 lightColor = sceneData.sunlightColor.xyz;
+	vec3 ambientColor = sceneData.ambientColor.xyz;
+
+	// Calculate diffuse lighting
+	float diffFactor = max(dot(normal, lightDir), 0.0);
+	vec3 diffuse = diffFactor * lightColor * baseColor;
+
+	// Add ambient term
+	vec3 ambient = ambientColor * baseColor;
+
+	// Simple shadow test (optional - can add shadow ray later)
+
+	// Final color
+	return ambient + diffuse;
+}
+
+void main() {
+	ivec2 texelCoord = ivec2(gl_GlobalInvocationID.xy);
+	vec2 imageResolution = imageSize(albedo);
+
+	if (any(greaterThanEqual(texelCoord, imageResolution))) {
+		return;
+	}
+
+	vec2 texCoords = (vec2(texelCoord) + 0.5) / vec2(imageResolution);
+	vec2 clipCoords = texCoords * 2.0 - 1.0; // Convert to [-1, 1] range
+
+	vec3 cameraPosition = PushConstants.viewPosition.xyz;
+
+	// Calculate ray direction in world space
+	Ray ray = rayFromCamera(clipCoords, cameraPosition);
+
+	// DEBUG: ray direction
+	// vec3 debugColor = normalize(ray.direction) * 0.5 + 0.5;
+	// imageStore(albedo, texelCoord, vec4(debugColor, 1.0));
+	// return;
+
+	// Cast the ray into the voxel grid
+	HitInfo hit = raycastGrid(ray, grid);
+
+	vec4 finalColor;
+	if (hit.materialId != 0) {
+		// We hit a voxel - apply material color and lighting
+		vec3 materialColor = getMaterialColor(hit.materialId);
+
+		// DEBUG: normals
+		// vec3 debugNormal = hit.normal * 0.5 + 0.5;
+		// finalColor = vec4(debugNormal, 1.0);
+
+		// Apply lighting
+		vec3 litColor = calculateLighting(hit.pos, hit.normal, materialColor);
+
+		// Store depth information - normalize to 0-1 range using MAX_DIST as far plane
+		// float normalizedDepth = hit.dist / 1000.0; // Assuming 1000 is far plane
+		// imageStore(depth, texelCoord, vec4(normalizedDepth, 0.0, 0.0, 0.0));
+
+		finalColor = vec4(litColor, 1.0);
+	} else {
+		// Miss - draw sky color
+		vec3 skyColor = getMaterialColor(0);
+
+		// Quick sky gradient
+		skyColor = mix(skyColor, skyColor * 0.7, 0.5 * ray.direction.y + 0.5);
+
+		// Set far distance for depth
+		// imageStore(depth, texelCoord, vec4(1.0, 0.0, 0.0, 0.0));
+
+		finalColor = vec4(skyColor, 1.0);
+	}
+
+	// Store final color
+	imageStore(albedo, texelCoord, finalColor);
+
+	// imageStore(irradiance, texelCoord, vec4(finalColor.rgb, 1.0));
+}

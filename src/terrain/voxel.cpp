@@ -201,22 +201,36 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 	}
 }
 
-uint32_t getVoxelIndex(uint32_t x, uint32_t y, uint32_t z) {
-	return x + (z * VOXEL_CHUNK_SIZE) + (y * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE);
+uint32_t getVoxelIndex(uint32_t localX, uint32_t y, uint32_t localZ, uint32_t chunkX, uint32_t chunkZ) {
+	uint32_t globalX = localX + (chunkX * VOXEL_CHUNK_SIZE);
+	uint32_t globalZ = localZ + (chunkZ * VOXEL_CHUNK_SIZE);
+
+	uint32_t totalXSize = TERRAIN_DIMENSION * VOXEL_CHUNK_SIZE;
+	uint32_t totalZSize = TERRAIN_DIMENSION * VOXEL_CHUNK_SIZE;
+
+	return globalX + (globalZ * totalXSize) + (y * totalXSize * totalZSize);
 }
 
 VoxelTerrain generateTerrain() {
 	VoxelTerrain terrain{};
-	constexpr uint32_t TERRAIN_DIMENSION = 16;
 
 	// Create noise generators with different seeds
-
 	const siv::PerlinNoise::seed_type seed = 728492752u;
 	const siv::PerlinNoise perlin{ seed };
 
 	// Terrain generation parameters
 	constexpr float HEIGHT_SCALE = 14.0f;
 	constexpr float NOISE_SCALE = 0.03f;
+
+	// TODO(piero): handle multiple chunks
+	terrain.grid.minBound = glm::vec3(0.0f, 0.0f, 0.0f);
+	terrain.grid.maxBound = glm::vec3(VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION, VOXEL_CHUNK_SIZE, VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION);
+	terrain.grid.gridSize = terrain.grid.maxBound - terrain.grid.minBound;
+	terrain.grid.numVoxelsX = VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION;
+	terrain.grid.numVoxelsY = VOXEL_CHUNK_SIZE;
+	terrain.grid.numVoxelsZ = VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION;
+
+	terrain.voxelData.resize(VOXEL_CHUNK_COUNT * TERRAIN_DIMENSION * TERRAIN_DIMENSION);
 
 	for (uint32_t chunkZ = 0; chunkZ < TERRAIN_DIMENSION; ++chunkZ) {
 		for (uint32_t chunkX = 0; chunkX < TERRAIN_DIMENSION; ++chunkX) {
@@ -241,12 +255,13 @@ VoxelTerrain generateTerrain() {
 					// Limit height to chunk bounds
 					terrainHeight = std::min(std::max(1, terrainHeight), static_cast<int32_t>(VOXEL_CHUNK_SIZE - 1));
 
-					// Fill voxels from bottom to height
+					// TODO(piero): Keeping some code here for compatibility with voxel mesh renderer.
 					for (uint32_t y = 0; y < VOXEL_CHUNK_SIZE; ++y) {
-						uint32_t voxelIndex = getVoxelIndex(x, y, z);
+						// uint32_t voxelIndex = getVoxelIndex(x, y, z, 1, 1);
 
 						glm::vec4 voxelColor = { 0.0f, 0.0f, 0.0f, 0.0f };
 						bool isVoxelActive = false;
+						uint32_t materialIndex = 0;
 
 						if (y < terrainHeight) {
 							isVoxelActive = true;
@@ -254,12 +269,15 @@ VoxelTerrain generateTerrain() {
 							// Determine voxel type based on depth
 							if (y == terrainHeight - 1) {
 								// Grass
+								materialIndex = 1;
 								voxelColor = { 0.2f, 0.7f, 0.3f, 1.0f };
 							} else if (y > terrainHeight - 4) {
 								// Dirt layer (just below surface)
+								materialIndex = 2;
 								voxelColor = { 0.6f, 0.4f, 0.2f, 1.0f };
 							} else {
 								// Stone layer (deep)
+								materialIndex = 3;
 								voxelColor = { 0.5f, 0.5f, 0.5f, 1.0f };
 							}
 
@@ -271,7 +289,11 @@ VoxelTerrain generateTerrain() {
 							terrain.voxelCount++;
 						}
 
+						uint32_t vi = getVoxelIndex(x, y, z, chunkX, chunkZ);
+						terrain.voxelData[vi] = materialIndex;
+
 						// Set voxel properties
+						/*
 						voxelChunk.voxels[voxelIndex] = {
 							.id = voxelIndex,
 							.x = (uint8_t)x,
@@ -280,6 +302,7 @@ VoxelTerrain generateTerrain() {
 							.color = voxelColor,
 							.empty = !isVoxelActive
 						};
+						*/
 					}
 				}
 			}
@@ -291,5 +314,4 @@ VoxelTerrain generateTerrain() {
 
 	return terrain;
 }
-
 }// namespace pm

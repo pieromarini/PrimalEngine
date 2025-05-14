@@ -55,6 +55,8 @@ void rendererSetup(VulkanRendererContext* context) {
 	initPipelines(context);
 	initQueryPools(context);
 
+	initGBuffer(context);
+
 	rendererInitDefaultData(context);
 	initFontData(context);
 	initUI(context);
@@ -65,7 +67,7 @@ void rendererSetup(VulkanRendererContext* context) {
 	context->sceneData.sunlightDirection = glm::vec4(0.2f, 1.0f, 0.5, 1.f);
 
 	// loadTestScene(context);
-	terrainTest(context);
+	// terrainTest(context);
 }
 
 // NOTE(piero): not using this right now.
@@ -73,6 +75,103 @@ void rendererInitMemory(VulkanRendererContext* context) {
 	for (auto& frame : context->frames) {
 		// frame.perFrameArena = MemoryArena_create(MEGABYTE(256));
 	}
+}
+
+void initGBuffer(VulkanRendererContext* context) {
+	VkExtent3D size{
+		.width = 1448,
+		.height = 700,
+		.depth = 1
+	};
+
+	auto start = std::chrono::system_clock::now();
+	context->voxelTerrain = generateTerrain();
+	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start);
+	std::cout << std::format("Generated terrain in {:.4f} ms\n", static_cast<float>(elapsed.count()));
+
+	VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
+	context->gbuffer = {
+		.albedo = createImage("GBuffer-Albedo", size, context->device, context->vmaAllocator, VK_FORMAT_R8G8B8A8_UNORM, usage | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
+		.irradiance = createImage("GBuffer-Irradiance", size, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, usage),
+		.depth = createImage("GBuffer-Depth", size, context->device, context->vmaAllocator, VK_FORMAT_R32_SFLOAT, usage)
+	};
+
+	auto voxelGridBuffer = createBuffer("voxel grid buffer", sizeof(VoxelGrid), context->vmaAllocator, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	memcpy(voxelGridBuffer.info.pMappedData, &context->voxelTerrain.grid, sizeof(VoxelGrid));
+
+	auto voxelDataBuffer = createBuffer("voxel data buffer", sizeof(uint32_t) * context->voxelTerrain.voxelData.size(), context->vmaAllocator, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	memcpy(voxelDataBuffer.info.pMappedData, context->voxelTerrain.voxelData.data(), sizeof(uint32_t) * context->voxelTerrain.voxelData.size());
+
+	// descriptors
+	{
+		DescriptorLayoutBuilder builder;
+		builder.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		builder.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		builder.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		builder.addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		builder.addBinding(4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		context->gbufferDescriptorLayout = builder.build(context->device, VK_SHADER_STAGE_COMPUTE_BIT);
+	}
+
+	context->gbufferDescriptorSet = context->globalDescriptorAllocator.allocate(context->device, context->gbufferDescriptorLayout);
+
+	{
+		DescriptorWriter writer;
+		writer.writeImage(0, context->gbuffer.albedo.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		writer.writeImage(1, context->gbuffer.irradiance.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		writer.writeImage(2, context->gbuffer.depth.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		writer.writeBuffer(3, voxelGridBuffer.buffer, sizeof(VoxelGrid), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		writer.writeBuffer(4, voxelDataBuffer.buffer, sizeof(uint32_t) * context->voxelTerrain.voxelData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		writer.updateSet(context->device, context->gbufferDescriptorSet);
+	}
+
+	context->mainDeletionQueue.push([context, voxelGridBuffer, voxelDataBuffer]() {
+		vkDestroyDescriptorSetLayout(context->device, context->gbufferDescriptorLayout, nullptr);
+		destroyBuffer(context->vmaAllocator, voxelGridBuffer);
+		destroyBuffer(context->vmaAllocator, voxelDataBuffer);
+	});
+
+	// pipeline
+	VkShaderModule computeDrawShader{};
+	if (!loadShaderModule("res/shaders/voxel_dda.comp.spv", context->device, &computeDrawShader)) {
+		std::cout << std::format("Error when building the compute shader \n");
+	}
+
+	VkPushConstantRange pushConstants{};
+	pushConstants.offset = 0;
+	pushConstants.size = sizeof(ComputePushConstants);
+	pushConstants.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+	std::array<VkDescriptorSetLayout, 2> layouts = {
+		context->gpuSceneDataDescriptorLayout,
+		context->gbufferDescriptorLayout
+	};
+
+	VkPipelineLayoutCreateInfo gbufferLayout = pipelineLayoutCreateInfo();
+	gbufferLayout.pPushConstantRanges = &pushConstants;
+	gbufferLayout.pushConstantRangeCount = 1;
+	gbufferLayout.setLayoutCount = layouts.size();
+	gbufferLayout.pSetLayouts = layouts.data();
+
+	VK_CHECK(vkCreatePipelineLayout(context->device, &gbufferLayout, nullptr, &context->gbufferPipelineLayout));
+
+	auto stageinfo = pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, computeDrawShader);
+
+	VkComputePipelineCreateInfo computePipelineCreateInfo{};
+	computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	computePipelineCreateInfo.pNext = nullptr;
+	computePipelineCreateInfo.layout = context->gbufferPipelineLayout;
+	computePipelineCreateInfo.stage = stageinfo;
+
+	VK_CHECK(vkCreateComputePipelines(context->device, context->pipelineCache, 1, &computePipelineCreateInfo, nullptr, &context->gbufferPipeline));
+
+	vkDestroyShaderModule(context->device, computeDrawShader, nullptr);
+
+	context->mainDeletionQueue.push([context]() {
+		vkDestroyPipelineLayout(context->device, context->gbufferPipelineLayout, nullptr);
+		vkDestroyPipeline(context->device, context->gbufferPipeline, nullptr);
+	});
 }
 
 void terrainTest(VulkanRendererContext* context) {
@@ -412,7 +511,7 @@ void initRenderTargets(VulkanRendererContext* context) {
 	context->rendererState->window->renderTarget = createImage("drawImage", drawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
 	testWindow->renderTarget = createImage("scene window drawImage", testWindowExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
 
-	context->sceneDrawImage = createImage("scene drawImage", sceneDrawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
+	context->sceneDrawImage = createImage("scene drawImage", sceneDrawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
 
 	VkImageUsageFlags depthImageUsages{};
 	depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
@@ -478,6 +577,11 @@ void rendererCleanup(VulkanRendererContext* context) {
 	for (auto& frame : context->frames) {
 		frame.deletionQueue.flush();
 	}
+
+	// Destroy gbuffer
+	destroyImage(context->device, context->vmaAllocator, context->gbuffer.albedo);
+	destroyImage(context->device, context->vmaAllocator, context->gbuffer.irradiance);
+	destroyImage(context->device, context->vmaAllocator, context->gbuffer.depth);
 
 	destroyImage(context->device, context->vmaAllocator, context->sourceCodeFontTexture);
 
@@ -842,7 +946,6 @@ void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models
 	double flattenTime{};
 	double genTime{};
 	for (auto model : models) {
-		std::cout << std::format("Model Memory Usage: {} MB", static_cast<double>(model.modelBuffers.vertexBuffer.info.size) * 1e-6);
 		auto start = std::chrono::high_resolution_clock::now();
 		// std::vector<Entity*> entities{};
 		// Entity_flattenHierarchy(model.root, glm::mat4{ 1.0f }, entities);
@@ -880,7 +983,7 @@ void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models
 			q.pop();
 
 			// NOTE(piero): We are not refreshing transforms right now since all entities are static.
-			//              Once we start having dynamic entites, we should implement some "dirty" state to refresh transforms.
+			//              Once we start having dynamic entities, we should implement some "dirty" state to refresh transforms.
 
 			for (auto c : entity->children) {
 				q.push(c);
@@ -1052,11 +1155,12 @@ void rendererDraw(VulkanRendererContext* context) {
 	vkCmdResetQueryPool(commandBuffer, context->timestampPool, 0, 128);
 	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, context->timestampPool, 0);
 
-	// transition our main draw image into general layout so we can write into it
-	// we will overwrite it all so we dont care about what was the older layout
-	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	// transition GBuffer targets so compute can write to them
+	transitionImage(commandBuffer, context->gbuffer.albedo.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	transitionImage(commandBuffer, context->gbuffer.irradiance.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	transitionImage(commandBuffer, context->gbuffer.depth.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
-	// drawBackground(context, commandBuffer);
+	drawToGBuffer(context, commandBuffer);
 
 	// transition render targets into correct layouts
 	for (auto& window : PrimalEngine::get().windows) {
@@ -1064,16 +1168,22 @@ void rendererDraw(VulkanRendererContext* context) {
 		transitionImage(commandBuffer, window.depthTarget.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 	}
 
-	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	transitionImage(commandBuffer, context->sceneDepthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
 	vkCmdResetQueryPool(commandBuffer, context->pipelineStatisticsPool, 0, 1);
 	vkCmdBeginQuery(commandBuffer, context->pipelineStatisticsPool, 0, 0);
 
 	// drawGeometry(context, commandBuffer);
-	drawTerrain(context, commandBuffer);
+	// drawTerrain(context, commandBuffer);
 
-	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	// TEMP(piero): Copy albedo to drawImage
+	transitionImage(commandBuffer, context->gbuffer.albedo.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	VkExtent2D size = { .width = context->gbuffer.albedo.imageExtent.width, .height = context->gbuffer.albedo.imageExtent.height };
+	copyImageToImage(commandBuffer, context->gbuffer.albedo.image, context->sceneDrawImage.image, size, size);
+
+	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	drawUI(context, commandBuffer);
 
@@ -1163,13 +1273,39 @@ void rendererDraw(VulkanRendererContext* context) {
 	context->frameNumber++;
 }
 
-void drawBackground(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
+void drawToGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
+	// allocate a new uniform buffer for the scene data
+	// This should be deleted each frame.
+	AllocatedBuffer gpuSceneDataBuffer = createBuffer("gpuSceneDataBuffer", sizeof(GPUSceneData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+	// write the buffer
+	void* sceneUniformData{};
+	memcpy(gpuSceneDataBuffer.info.pMappedData, &context->sceneData, sizeof(GPUSceneData));
+
+	// Create global sceneData descriptor
+	VkDescriptorSet globalDescriptor = getCurrentFrame(context).frameDescriptor.allocate(context->device, context->gpuSceneDataDescriptorLayout);
+
+	getCurrentFrame(context).deletionQueue.push([gpuSceneDataBuffer, context]() {
+		destroyBuffer(context->vmaAllocator, gpuSceneDataBuffer);
+	});
+
+	{
+		DescriptorWriter writer;
+		writer.writeBuffer(0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+		writer.updateSet(context->device, globalDescriptor);
+	}
+
 	ComputePushConstants data = {
-		.data1 = { 0.1, 0.2, 0.4, 0.97 }
+		.viewPosition = glm::vec4{ context->rendererState->mainCamera->position, 1.0f }
 	};
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context->skyPipeline);
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context->skyPipelineLayout, 0, 1, &context->drawImageDescriptors, 0, nullptr);
-	vkCmdPushConstants(commandBuffer, context->skyPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &data);
+
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context->gbufferPipeline);
+
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context->gbufferPipelineLayout, 0, 1, &globalDescriptor, 0, nullptr);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context->gbufferPipelineLayout, 1, 1, &context->gbufferDescriptorSet, 0, nullptr);
+
+	vkCmdPushConstants(commandBuffer, context->gbufferPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &data);
+
 	auto width = 1448;
 	auto height = 700;
 	vkCmdDispatch(commandBuffer, std::ceil(width / 16.0), std::ceil(height / 16.0), 1);
@@ -1367,9 +1503,9 @@ void drawGeometry(VulkanRendererContext* context, VkCommandBuffer commandBuffer)
 
 	auto start = std::chrono::system_clock::now();
 
-	VkClearValue clearColor{ .color = { 0.0f, 0.0f, 0.0f, 1.0f } };
+	// VkClearValue clearColor{ .color = { 0.0f, 0.0f, 0.0f, 1.0f } };
 
-	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(context->sceneDrawImage.imageView, &clearColor, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(context->sceneDrawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(context->sceneDepthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
 	VkRenderingInfo renderInfo = renderingInfo({ .extent = { .width = context->sceneDrawImage.imageExtent.width, .height = context->sceneDrawImage.imageExtent.height } }, &colorAttachment, &depthAttachment);
@@ -1457,10 +1593,11 @@ void drawGeometry(VulkanRendererContext* context, VkCommandBuffer commandBuffer)
 
 void initDescriptors(VulkanRendererContext* context) {
 	std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
-		{ .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 1 },
+		{ .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 0.7 },
+		{ .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .ratio = 0.3 },
 	};
 
-	context->globalDescriptorAllocator.init(context->device, 10, sizes);
+	context->globalDescriptorAllocator.init(context->device, 1000, sizes);
 	context->mainDeletionQueue.push([context]() {
 		context->globalDescriptorAllocator.destroyPools(context->device);
 	});
@@ -1484,7 +1621,7 @@ void initDescriptors(VulkanRendererContext* context) {
 	{
 		DescriptorLayoutBuilder builder;
 		builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-		context->gpuSceneDataDescriptorLayout = builder.build(context->device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		context->gpuSceneDataDescriptorLayout = builder.build(context->device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT);
 	}
 
 	// Model Draw SSBO
@@ -1573,52 +1710,11 @@ void initPipelines(VulkanRendererContext* context) {
 	VkPipelineCacheCreateInfo cacheCreateInfo{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO };
 	vkCreatePipelineCache(context->device, &cacheCreateInfo, nullptr, &context->pipelineCache);
 
-	initBackgroundPipelines(context);
 	buildDefaultPipelines(context);
 	initUIPipeline(context);
 	initFontPipeline(context);
 	initViewportPipeline(context);
 	initVoxelPipeline(context);
-}
-
-void initBackgroundPipelines(VulkanRendererContext* context) {
-	VkPipelineLayoutCreateInfo computeLayout{};
-	computeLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	computeLayout.pNext = nullptr;
-	computeLayout.pSetLayouts = &context->drawImageDescriptorLayout;
-	computeLayout.setLayoutCount = 1;
-
-	VkPushConstantRange pushConstants{};
-	pushConstants.offset = 0;
-	pushConstants.size = sizeof(ComputePushConstants);
-	pushConstants.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-	computeLayout.pPushConstantRanges = &pushConstants;
-	computeLayout.pushConstantRangeCount = 1;
-
-	VK_CHECK(vkCreatePipelineLayout(context->device, &computeLayout, nullptr, &context->skyPipelineLayout));
-
-	VkShaderModule computeDrawShader{};
-	if (!loadShaderModule("res/shaders/gradient.comp.spv", context->device, &computeDrawShader)) {
-		std::cout << std::format("Error when building the compute shader \n");
-	}
-
-	auto stageinfo = pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, computeDrawShader);
-
-	VkComputePipelineCreateInfo computePipelineCreateInfo{};
-	computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-	computePipelineCreateInfo.pNext = nullptr;
-	computePipelineCreateInfo.layout = context->skyPipelineLayout;
-	computePipelineCreateInfo.stage = stageinfo;
-
-	VK_CHECK(vkCreateComputePipelines(context->device, context->pipelineCache, 1, &computePipelineCreateInfo, nullptr, &context->skyPipeline));
-
-	vkDestroyShaderModule(context->device, computeDrawShader, nullptr);
-
-	context->mainDeletionQueue.push([context]() {
-		vkDestroyPipelineLayout(context->device, context->skyPipelineLayout, nullptr);
-		vkDestroyPipeline(context->device, context->skyPipeline, nullptr);
-	});
 }
 
 void initUIPipeline(VulkanRendererContext* context) {

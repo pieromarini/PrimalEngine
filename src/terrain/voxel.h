@@ -6,6 +6,8 @@
 
 namespace pm {
 
+constexpr uint32_t TERRAIN_DIMENSION = 16;
+
 constexpr uint32_t VOXEL_CHUNK_SIZE = 16;
 constexpr uint32_t VOXEL_CHUNK_COUNT = VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE;
 
@@ -36,12 +38,25 @@ struct VoxelChunk {
 	glm::mat4 transform;
 };
 
-struct VoxelTerrain {
-	std::vector<VoxelChunk> chunks;
-	uint64_t voxelCount{ 0 };
+struct alignas(16) VoxelGrid {
+	glm::vec3 minBound;
+	uint32_t numVoxelsX;
+
+	glm::vec3 maxBound;
+	uint32_t numVoxelsY;
+
+	glm::vec3 gridSize;
+	uint32_t numVoxelsZ;
 };
 
-uint32_t getVoxelIndex(uint32_t x, uint32_t y, uint32_t z);
+struct VoxelTerrain {
+	std::vector<VoxelChunk> chunks;
+	std::vector<uint32_t> voxelData;
+	uint64_t voxelCount{ 0 };
+	VoxelGrid grid;
+};
+
+uint32_t getVoxelIndex(uint32_t localX, uint32_t y, uint32_t localZ, uint32_t chunkX, uint32_t chunkZ);
 
 void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& vertices, std::vector<uint32_t>& indices);
 VoxelTerrain generateTerrain();

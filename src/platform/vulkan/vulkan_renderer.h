@@ -110,6 +110,12 @@ struct UIWindowBatch {
 	std::vector<DrawBatch> drawBatches;
 };
 
+struct GBuffer {
+	AllocatedImage albedo;
+	AllocatedImage irradiance;
+	AllocatedImage depth;
+};
+
 class DeletionQueue {
 public:
 	void push(std::function<void()>&& function) {
@@ -184,7 +190,7 @@ struct GPUSceneData {
 };
 
 struct ComputePushConstants {
-	glm::vec4 data1;
+	glm::vec4 viewPosition;
 	glm::vec4 data2;
 	glm::vec4 data3;
 	glm::vec4 data4;
@@ -262,8 +268,6 @@ struct VulkanRendererContext {
 	VkPipeline viewportPipeline{};
 
 	// Pipelines
-	VkPipeline skyPipeline{};
-	VkPipelineLayout skyPipelineLayout{};
 	VkPipeline fontPipeline{};
 	VkPipelineLayout fontPipelineLayout{};
 	VkPipeline uiPipeline{};
@@ -333,6 +337,13 @@ struct VulkanRendererContext {
 	GPUMeshBuffers voxelMeshBuffers;
 	AllocatedBuffer voxelDrawCommandsBuffer;
 	uint32_t voxelDrawCommandsCount;
+
+	// GBuffer
+	GBuffer gbuffer;
+	VkDescriptorSet gbufferDescriptorSet;
+	VkDescriptorSetLayout gbufferDescriptorLayout;
+	VkPipelineLayout gbufferPipelineLayout;
+	VkPipeline gbufferPipeline;
 };
 
 inline uint32_t getCurrentFrameIndex(VulkanRendererContext* context) {
@@ -370,7 +381,6 @@ void resizeSwapchain(VulkanRendererContext* context, PrimalWindow* window);
 
 // specific pipelines
 // TODO(piero): Init pipelines from config file
-void initBackgroundPipelines(VulkanRendererContext* context);
 void initFontPipeline(VulkanRendererContext* context);
 void initViewportPipeline(VulkanRendererContext* context);
 void initUIPipeline(VulkanRendererContext* context);
@@ -397,7 +407,7 @@ void updateUIData(VulkanRendererContext* context);
 
 // drawing
 void rendererDraw(VulkanRendererContext* context);
-void drawBackground(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
+void drawToGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
 void drawGeometry(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
 void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
 void drawTerrain(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
@@ -409,5 +419,9 @@ void immediateSubmit(VulkanRendererContext* context, std::function<void(VkComman
 uint32_t registerImage(VulkanRendererContext* context, AllocatedImage* image);
 
 void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown);
+
+
+// Voxel stuff
+void initGBuffer(VulkanRendererContext* context);
 
 }// namespace pm
