@@ -1,3 +1,4 @@
+#include "assets/image_loader.h"
 #include "platform/vulkan/buffers.h"
 #include "platform/window.h"
 #include "primal.h"
@@ -6,6 +7,7 @@
 
 #include "vk_types.h"
 
+#include <limits>
 #include <queue>
 #include <vk_mem_alloc.h>
 
@@ -55,16 +57,22 @@ void rendererSetup(VulkanRendererContext* context) {
 	initPipelines(context);
 	initQueryPools(context);
 
-	initGBuffer(context);
-
 	rendererInitDefaultData(context);
 	initFontData(context);
 	initUI(context);
 
+
 	// Default lighting parameters
 	context->sceneData.ambientColor = glm::vec4(.4f);
 	context->sceneData.sunlightColor = glm::vec4(1.f, 1.0, 1.0f, 1.0f);
-	context->sceneData.sunlightDirection = glm::vec4(0.2f, 1.0f, 0.5, 1.f);
+	context->sceneData.sunlightDirection = glm::vec4(0.38f, 1.0f, 0.97f, 1.f);
+
+	auto start = std::chrono::system_clock::now();
+	context->voxelTerrain = generateTerrain();
+	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start);
+	std::cout << std::format("Generated terrain in {:.4f} ms\n", static_cast<float>(elapsed.count()));
+
+	initGBuffer(context);
 
 	// loadTestScene(context);
 	// terrainTest(context);
@@ -78,59 +86,20 @@ void rendererInitMemory(VulkanRendererContext* context) {
 }
 
 void initGBuffer(VulkanRendererContext* context) {
-	VkExtent3D size{
-		.width = 1448,
-		.height = 700,
-		.depth = 1
-	};
+	// TODO(piero): Move this out.
+	auto imageAsset = loadPNG("BlueNoiseAsset", "res/textures/blue_noise_rgba.png");
+	if (imageAsset.data) {
+		VkExtent3D imagesize{};
+		imagesize.width = imageAsset.width;
+		imagesize.height = imageAsset.height;
+		imagesize.depth = 1;
 
-	auto start = std::chrono::system_clock::now();
-	context->voxelTerrain = generateTerrain();
-	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start);
-	std::cout << std::format("Generated terrain in {:.4f} ms\n", static_cast<float>(elapsed.count()));
-
-	VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-
-	context->gbuffer = {
-		.albedo = createImage("GBuffer-Albedo", size, context->device, context->vmaAllocator, VK_FORMAT_R8G8B8A8_UNORM, usage | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
-		.irradiance = createImage("GBuffer-Irradiance", size, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, usage),
-		.depth = createImage("GBuffer-Depth", size, context->device, context->vmaAllocator, VK_FORMAT_R32_SFLOAT, usage)
-	};
-
-	auto voxelGridBuffer = createBuffer("voxel grid buffer", sizeof(VoxelGrid), context->vmaAllocator, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-	memcpy(voxelGridBuffer.info.pMappedData, &context->voxelTerrain.grid, sizeof(VoxelGrid));
-
-	auto voxelDataBuffer = createBuffer("voxel data buffer", sizeof(uint32_t) * context->voxelTerrain.voxelData.size(), context->vmaAllocator, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-	memcpy(voxelDataBuffer.info.pMappedData, context->voxelTerrain.voxelData.data(), sizeof(uint32_t) * context->voxelTerrain.voxelData.size());
-
-	// descriptors
-	{
-		DescriptorLayoutBuilder builder;
-		builder.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		builder.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		builder.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		builder.addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		builder.addBinding(4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		context->gbufferDescriptorLayout = builder.build(context->device, VK_SHADER_STAGE_COMPUTE_BIT);
+		context->blueNoise = createImage("BlueNoise", imageAsset.data, imagesize, context, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+		context->blueNoise.sampler = context->defaultSamplerLinear;
 	}
+	destroyImageAsset(imageAsset);
 
-	context->gbufferDescriptorSet = context->globalDescriptorAllocator.allocate(context->device, context->gbufferDescriptorLayout);
-
-	{
-		DescriptorWriter writer;
-		writer.writeImage(0, context->gbuffer.albedo.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		writer.writeImage(1, context->gbuffer.irradiance.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		writer.writeImage(2, context->gbuffer.depth.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		writer.writeBuffer(3, voxelGridBuffer.buffer, sizeof(VoxelGrid), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		writer.writeBuffer(4, voxelDataBuffer.buffer, sizeof(uint32_t) * context->voxelTerrain.voxelData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		writer.updateSet(context->device, context->gbufferDescriptorSet);
-	}
-
-	context->mainDeletionQueue.push([context, voxelGridBuffer, voxelDataBuffer]() {
-		vkDestroyDescriptorSetLayout(context->device, context->gbufferDescriptorLayout, nullptr);
-		destroyBuffer(context->vmaAllocator, voxelGridBuffer);
-		destroyBuffer(context->vmaAllocator, voxelDataBuffer);
-	});
+	createGBuffer(context);
 
 	// pipeline
 	VkShaderModule computeDrawShader{};
@@ -172,6 +141,65 @@ void initGBuffer(VulkanRendererContext* context) {
 		vkDestroyPipelineLayout(context->device, context->gbufferPipelineLayout, nullptr);
 		vkDestroyPipeline(context->device, context->gbufferPipeline, nullptr);
 	});
+}
+
+void createGBuffer(VulkanRendererContext* context) {
+	// TODO(piero): Refactor viewport render targets resizing
+	VkExtent3D size{
+		.width = context->fullScreen ? static_cast<uint32_t>(context->rendererState->window->width) : 1448,
+		.height = context->fullScreen ? static_cast<uint32_t>(context->rendererState->window->height - 80) : 700,
+		.depth = 1
+	};
+
+	VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
+	context->gbuffer = {
+		.albedo = createImage("GBuffer-Albedo", size, context->device, context->vmaAllocator, VK_FORMAT_R8G8B8A8_UNORM, usage | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
+		.irradiance = createImage("GBuffer-Irradiance", size, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, usage),
+		.depth = createImage("GBuffer-Depth", size, context->device, context->vmaAllocator, VK_FORMAT_R32_SFLOAT, usage),
+
+		.gridInfo = createBuffer("voxel grid buffer", sizeof(VoxelGrid), context->vmaAllocator, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU),
+		.voxelData = createBuffer("voxel data buffer", sizeof(uint32_t) * context->voxelTerrain.voxelData.size(), context->vmaAllocator, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)
+	};
+
+	memcpy(context->gbuffer.gridInfo.info.pMappedData, &context->voxelTerrain.grid, sizeof(VoxelGrid));
+	memcpy(context->gbuffer.voxelData.info.pMappedData, context->voxelTerrain.voxelData.data(), sizeof(uint32_t) * context->voxelTerrain.voxelData.size());
+
+	// descriptors
+	{
+		DescriptorLayoutBuilder builder;
+		builder.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		builder.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		builder.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		builder.addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		builder.addBinding(4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		builder.addBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		context->gbufferDescriptorLayout = builder.build(context->device, VK_SHADER_STAGE_COMPUTE_BIT);
+	}
+
+	context->gbufferDescriptorSet = context->globalDescriptorAllocator.allocate(context->device, context->gbufferDescriptorLayout);
+
+	{
+		DescriptorWriter writer;
+		writer.writeImage(0, context->gbuffer.albedo.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		writer.writeImage(1, context->gbuffer.irradiance.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		writer.writeImage(2, context->gbuffer.depth.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		writer.writeBuffer(3, context->gbuffer.gridInfo.buffer, sizeof(VoxelGrid), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		writer.writeBuffer(4, context->gbuffer.voxelData.buffer, sizeof(uint32_t) * context->voxelTerrain.voxelData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		writer.writeImage(5, context->blueNoise.imageView, context->blueNoise.sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		writer.updateSet(context->device, context->gbufferDescriptorSet);
+	}
+}
+
+void destroyGBuffer(VulkanRendererContext* context) {
+	destroyImage(context->device, context->vmaAllocator, context->gbuffer.albedo);
+	destroyImage(context->device, context->vmaAllocator, context->gbuffer.irradiance);
+	destroyImage(context->device, context->vmaAllocator, context->gbuffer.depth);
+
+	destroyBuffer(context->vmaAllocator, context->gbuffer.gridInfo);
+	destroyBuffer(context->vmaAllocator, context->gbuffer.voxelData);
+
+	vkDestroyDescriptorSetLayout(context->device, context->gbufferDescriptorLayout, nullptr);
 }
 
 void terrainTest(VulkanRendererContext* context) {
@@ -283,6 +311,29 @@ void resizeSwapchain(VulkanRendererContext* context, PrimalWindow* window) {
 	window->height = newHeight;
 
 	window->resizeRequested = false;
+}
+
+void resizeRenderTargets(VulkanRendererContext* context) {
+	vkDeviceWaitIdle(context->device);
+
+	VkExtent3D sceneDrawImageExtent{
+		.width = context->fullScreen ? static_cast<uint32_t>(context->rendererState->window->width) : 1448,
+		.height = context->fullScreen ? static_cast<uint32_t>(context->rendererState->window->height - 80) : 700,
+		.depth = 1
+	};
+
+	VkImageUsageFlags depthImageUsages{};
+	depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+	destroyImage(context->device, context->vmaAllocator, context->sceneDrawImage);
+	destroyImage(context->device, context->vmaAllocator, context->sceneDepthImage);
+	context->sceneDrawImage = createImage("scene drawImage", sceneDrawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
+	context->sceneDepthImage = createImage("scene depthImage", sceneDrawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
+
+	// Overwrite registered image and write to descriptor.
+	// TODO(piero): refactor
+	context->registeredImages[context->sceneTextureId - 1] = &context->sceneDrawImage;
+	writeBindlessTextureToGlobalDescriptor(context, context->viewportTextureDescriptorSet, 0, context->sceneDrawImage, context->defaultSamplerLinear, context->sceneTextureId);
 }
 
 void rendererInitDefaultData(VulkanRendererContext* context) {
@@ -487,8 +538,8 @@ void initRenderTargets(VulkanRendererContext* context) {
 
 	// TODO(piero): what size should this be?
 	VkExtent3D sceneDrawImageExtent{
-		1448,
-		700,
+		context->fullScreen ? static_cast<uint32_t>(context->rendererState->window->width) : 1448,
+		context->fullScreen ? static_cast<uint32_t>(context->rendererState->window->height - 80) : 700,
 		1
 	};
 
@@ -520,14 +571,6 @@ void initRenderTargets(VulkanRendererContext* context) {
 	testWindow->depthTarget = createImage("scene window depthImage", testWindowExtent, context->device, context->vmaAllocator, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
 
 	context->sceneDepthImage = createImage("scene depthImage", sceneDrawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
-
-	context->mainDeletionQueue.push([context] {
-		vkDestroyImageView(context->device, context->sceneDrawImage.imageView, nullptr);
-		vmaDestroyImage(context->vmaAllocator, context->sceneDrawImage.image, context->sceneDrawImage.allocation);
-
-		vkDestroyImageView(context->device, context->sceneDepthImage.imageView, nullptr);
-		vmaDestroyImage(context->vmaAllocator, context->sceneDepthImage.image, context->sceneDepthImage.allocation);
-	});
 }
 
 void initCommands(VulkanRendererContext* context) {
@@ -578,15 +621,18 @@ void rendererCleanup(VulkanRendererContext* context) {
 		frame.deletionQueue.flush();
 	}
 
-	// Destroy gbuffer
-	destroyImage(context->device, context->vmaAllocator, context->gbuffer.albedo);
-	destroyImage(context->device, context->vmaAllocator, context->gbuffer.irradiance);
-	destroyImage(context->device, context->vmaAllocator, context->gbuffer.depth);
+	// destroy sceneDrawImage
+	destroyImage(context->device, context->vmaAllocator, context->sceneDrawImage);
+	destroyImage(context->device, context->vmaAllocator, context->sceneDepthImage);
+
+	destroyGBuffer(context);
 
 	destroyImage(context->device, context->vmaAllocator, context->sourceCodeFontTexture);
 
 	destroyFontSDF(context->sourceCodeFont);
 	// destroyFontSDF(context->arialFont);
+
+	destroyImage(context->device, context->vmaAllocator, context->blueNoise);
 
 	vkDestroyPipelineCache(context->device, context->pipelineCache, nullptr);
 
@@ -1116,6 +1162,9 @@ void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models
 }
 
 void rendererUpdate(VulkanRendererContext* context, float deltaTime) {
+	// TEMP(piero): frame count for random sequences on GPU
+	context->rendererState->rendererStats.frameCount++;
+
 	updateScene(context, deltaTime);
 	updateUIData(context);
 	updateFontData(context);
@@ -1178,6 +1227,7 @@ void rendererDraw(VulkanRendererContext* context) {
 	// drawTerrain(context, commandBuffer);
 
 	// TEMP(piero): Copy albedo to drawImage
+	// TODO(piero): blit with a compute shader
 	transitionImage(commandBuffer, context->gbuffer.albedo.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	VkExtent2D size = { .width = context->gbuffer.albedo.imageExtent.width, .height = context->gbuffer.albedo.imageExtent.height };
@@ -1296,7 +1346,8 @@ void drawToGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer
 	}
 
 	ComputePushConstants data = {
-		.viewPosition = glm::vec4{ context->rendererState->mainCamera->position, 1.0f }
+		.viewPosition = glm::vec4{ context->rendererState->mainCamera->position, 1.0f },
+		.data2 = glm::vec4(context->rendererState->rendererStats.frameCount, 0.0f, 0.0f, 0.0f)
 	};
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context->gbufferPipeline);
@@ -1306,8 +1357,8 @@ void drawToGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer
 
 	vkCmdPushConstants(commandBuffer, context->gbufferPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &data);
 
-	auto width = 1448;
-	auto height = 700;
+	auto width = context->sceneDrawImage.imageExtent.width;
+	auto height = context->sceneDrawImage.imageExtent.height;
 	vkCmdDispatch(commandBuffer, std::ceil(width / 16.0), std::ceil(height / 16.0), 1);
 }
 
@@ -2218,141 +2269,179 @@ void updateUIData(VulkanRendererContext* context) {
 
 	auto start = std::chrono::high_resolution_clock::now();
 
-	// TODO(piero): Refactor this
-	auto testWindow = &PrimalEngine::get().windows[1];
-
 	UI::beginFrame();
 
-	UI::beginWindow(rendererState->window);
+	if (context->fullScreen) {
+		UI::beginWindow(rendererState->window);
 
-	// Title bar
-	UI::openElement();
-	UI::pushBox({ .width = { .size = 2048.0f, .sizingMode = UI::UISizingMode::STATIC },
-		.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
-		.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-		.backgroundColor = { 0.678f, 0.678f, 0.678f, 1.0f } });
+		// Title bar
+		UI::openElement();
+			UI::pushBox({ .width = { .size = static_cast<float>(rendererState->window->width), .sizingMode = UI::UISizingMode::STATIC },
+				.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
+				.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+				.backgroundColor = { 0.678f, 0.678f, 0.678f, 1.0f } });
 
-	// Show renderer stats
-	UI::openElement();
-	UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-		.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::FIT },
-		.layoutDirection = UI::UILayoutDirection::VERTICAL,
-		.backgroundColor = { 0.0f, 0.0f, 0.0f, 0.0f },
-		.padding = 10.0f,
-		.childGap = 10.0f });
+			// Show renderer stats
+			UI::openElement();
+				UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+					.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::FIT },
+					.layoutDirection = UI::UILayoutDirection::VERTICAL,
+					.backgroundColor = { 0.0f, 0.0f, 0.0f, 0.0f },
+					.padding = 10.0f,
+					.childGap = 10.0f });
+				UI::openTextElement();
+				UI::pushText({ .text = stats });
+				UI::closeTextElement();
 
-	UI::openTextElement();
-	UI::pushText({ .text = stats });
-	UI::closeTextElement();
+				UI::openTextElement();
+					UI::pushText({ .text = otherStats });
+				UI::closeTextElement();
+			UI::closeElement();
 
-	UI::openTextElement();
-	UI::pushText({ .text = otherStats });
-	UI::closeTextElement();
-	UI::closeElement();
+		UI::closeElement();
 
-	UI::closeElement();
+		// TODO(piero): Refactor this when implementing GROW sizing for UI
+		UI::viewport({ .id = 1000,
+			.width = static_cast<float>(context->rendererState->window->width),
+			.height = static_cast<float>(context->rendererState->window->height - 80),
+			.textureId = context->sceneTextureId });
 
-	UI::openElement();
-	UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-		.height = { .sizingMode = UI::UISizingMode::FIT },
-		.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-		.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
+		UI::endWindow();
+	} else {
+		// TODO(piero): Refactor this
+		auto testWindow = &PrimalEngine::get().windows[1];
 
-	// Viewport + Asset browser
-	UI::openElement();
-	UI::pushPanel({ .width = { .sizingMode = UI::UISizingMode::FIT },
-		.height = { .sizingMode = UI::UISizingMode::FIT },
-		.layoutDirection = UI::UILayoutDirection::VERTICAL,
-		.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
+		UI::beginWindow(rendererState->window);
 
-	// Viewport
-	UI::pushDockSpace({ .width = { .sizingMode = UI::UISizingMode::FIT },
-		.height = { .sizingMode = UI::UISizingMode::FIT },
-		.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-		.backgroundColor = { 0.3294f, 0.3294f, 0.3294f, 1.0f } });
+		// Title bar
+		UI::openElement();
+		UI::pushBox({ .width = { .size = 2048.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+			.backgroundColor = { 0.678f, 0.678f, 0.678f, 1.0f } });
 
-	UI::viewport({ .id = 1000,
-		.width = 1448.0f,
-		.height = 700.0f,
-		.textureId = context->sceneTextureId });
+		// Show renderer stats
+		UI::openElement();
+		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+			.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::FIT },
+			.layoutDirection = UI::UILayoutDirection::VERTICAL,
+			.backgroundColor = { 0.0f, 0.0f, 0.0f, 0.0f },
+			.padding = 10.0f,
+			.childGap = 10.0f });
 
-	UI::closeDockSpaceElement();
+		UI::openTextElement();
+		UI::pushText({ .text = stats });
+		UI::closeTextElement();
 
-	// Asset browser
-	UI::pushDockSpace({ .width = { .size = 1448.0f, .sizingMode = UI::UISizingMode::STATIC },
-		.height = { .size = 300.0f, .sizingMode = UI::UISizingMode::STATIC },
-		.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-		.backgroundColor = { 0.3294f, 0.3294f, 0.3294f, 1.0f } });
+		UI::openTextElement();
+		UI::pushText({ .text = otherStats });
+		UI::closeTextElement();
+		UI::closeElement();
 
-	UI::closeDockSpaceElement();
-	UI::closeElement();
+		UI::closeElement();
 
-	// Info Panel
-	UI::pushDockSpace({ .width = { .size = 600.0f, .sizingMode = UI::UISizingMode::STATIC },
-		.height = { .size = 980.0f, .sizingMode = UI::UISizingMode::STATIC },
-		.layoutDirection = UI::UILayoutDirection::VERTICAL,
-		.backgroundColor = { 0.41960784313f, 0.41960784313f, 0.41960784313f, 1.0f },
-		.padding = 10.0f,
-		.childGap = 10.0f });
+		UI::openElement();
+		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+			.height = { .sizingMode = UI::UISizingMode::FIT },
+			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+			.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
 
-	UI::sliderFloat3(&rendererState->mainCamera->position);
-	UI::sliderFloat4(&sceneData.sunlightDirection, 0.0f, 1.0f);
-	UI::checkbox(&context->testBool);
+		// Viewport + Asset browser
+		UI::openElement();
+		UI::pushPanel({ .width = { .sizingMode = UI::UISizingMode::FIT },
+			.height = { .sizingMode = UI::UISizingMode::FIT },
+			.layoutDirection = UI::UILayoutDirection::VERTICAL,
+			.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
 
-	UI::openElement();
-	UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-		.height = { .sizingMode = UI::UISizingMode::FIT },
-		.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-		.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
-		.padding = 10.0f,
-		.childGap = 20.0f });
+		// Viewport
+		UI::pushDockSpace({ .width = { .sizingMode = UI::UISizingMode::FIT },
+			.height = { .sizingMode = UI::UISizingMode::FIT },
+			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+			.backgroundColor = { 0.3294f, 0.3294f, 0.3294f, 1.0f } });
 
-	UI::pushCircleFilled(80.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
-	UI::pushCircle(80.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
-	UI::closeElement();
+		UI::viewport({ .id = 1000,
+			.width = 1448.0f,
+			.height = 700.0f,
+			.textureId = context->sceneTextureId });
 
-	UI::sliderFloat4(&sceneData.sunlightColor, 0.0f, 1.0f);
-	UI::closeDockSpaceElement();
-	UI::closeElement();
+		UI::closeDockSpaceElement();
 
-	UI::endWindow();
+		// Asset browser
+		UI::pushDockSpace({ .width = { .size = 1448.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.height = { .size = 300.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+			.backgroundColor = { 0.3294f, 0.3294f, 0.3294f, 1.0f } });
 
-	UI::beginWindow(testWindow);
+		UI::closeDockSpaceElement();
+		UI::closeElement();
 
-	UI::openElement();
-	UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-		.height = { .sizingMode = UI::UISizingMode::FIT },
-		.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-		.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
+		// Info Panel
+		UI::pushDockSpace({ .width = { .size = 600.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.height = { .size = 980.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.layoutDirection = UI::UILayoutDirection::VERTICAL,
+			.backgroundColor = { 0.41960784313f, 0.41960784313f, 0.41960784313f, 1.0f },
+			.padding = 10.0f,
+			.childGap = 10.0f });
 
-	UI::pushDockSpace({ .width = { .size = 400.0f, .sizingMode = UI::UISizingMode::STATIC },
-		.height = { .size = 800.0f, .sizingMode = UI::UISizingMode::STATIC },
-		.layoutDirection = UI::UILayoutDirection::VERTICAL,
-		.backgroundColor = { 0.41960784313f, 0.41960784313f, 0.41960784313f, 1.0f },
-		.padding = 10.0f,
-		.childGap = 10.0f });
+		UI::sliderFloat3(&rendererState->mainCamera->position);
+		UI::sliderFloat4(&sceneData.sunlightDirection, 0.0f, 1.0f);
+		UI::checkbox(&context->testBool);
 
-	UI::sliderFloat3(&rendererState->mainCamera->position);
-	UI::sliderFloat4(&sceneData.sunlightDirection, 0.0f, 1.0f);
+		UI::openElement();
+		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+			.height = { .sizingMode = UI::UISizingMode::FIT },
+			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+			.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
+			.padding = 10.0f,
+			.childGap = 20.0f });
 
-	UI::openElement();
-	UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-		.height = { .sizingMode = UI::UISizingMode::FIT },
-		.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-		.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
-		.padding = 10.0f,
-		.childGap = 20.0f });
+		UI::pushCircleFilled(80.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
+		UI::pushCircle(80.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
+		UI::closeElement();
 
-	UI::pushCircleFilled(50.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
-	UI::pushCircle(50.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
-	UI::closeElement();
+		UI::sliderFloat4(&sceneData.sunlightColor, 0.0f, 1.0f);
+		UI::closeDockSpaceElement();
+		UI::closeElement();
 
-	UI::sliderFloat4(&sceneData.sunlightColor, 0.0f, 1.0f);
-	UI::closeDockSpaceElement();
-	UI::closeElement();
+		UI::endWindow();
+
+		UI::beginWindow(testWindow);
+
+		UI::openElement();
+		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+			.height = { .sizingMode = UI::UISizingMode::FIT },
+			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+			.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
+
+		UI::pushDockSpace({ .width = { .size = 400.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.height = { .size = 800.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.layoutDirection = UI::UILayoutDirection::VERTICAL,
+			.backgroundColor = { 0.41960784313f, 0.41960784313f, 0.41960784313f, 1.0f },
+			.padding = 10.0f,
+			.childGap = 10.0f });
+
+		UI::sliderFloat3(&rendererState->mainCamera->position);
+		UI::sliderFloat4(&sceneData.sunlightDirection, 0.0f, 1.0f);
+
+		UI::openElement();
+		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+			.height = { .sizingMode = UI::UISizingMode::FIT },
+			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+			.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
+			.padding = 10.0f,
+			.childGap = 20.0f });
+
+		UI::pushCircleFilled(50.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
+		UI::pushCircle(50.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
+		UI::closeElement();
+
+		UI::sliderFloat4(&sceneData.sunlightColor, 0.0f, 1.0f);
+		UI::closeDockSpaceElement();
+		UI::closeElement();
 
 
-	UI::endWindow();
+		UI::endWindow();
+	}
 
 	// NOTE(piero): We are not making a deep copy of this data. We are still referencing the arena memory.
 	getCurrentFrame(context).uiWindowBatchCommands = UI::endFrame();

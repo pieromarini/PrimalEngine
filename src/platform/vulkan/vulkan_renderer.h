@@ -114,6 +114,9 @@ struct GBuffer {
 	AllocatedImage albedo;
 	AllocatedImage irradiance;
 	AllocatedImage depth;
+
+	AllocatedBuffer gridInfo;
+	AllocatedBuffer voxelData;
 };
 
 class DeletionQueue {
@@ -154,6 +157,8 @@ struct RendererStats {
 
 	uint32_t triangleCount{};
 	uint32_t drawCallCount{};
+
+	uint32_t frameCount{ 0 };
 };
 
 struct VulkanRendererConfig {
@@ -344,6 +349,11 @@ struct VulkanRendererContext {
 	VkDescriptorSetLayout gbufferDescriptorLayout;
 	VkPipelineLayout gbufferPipelineLayout;
 	VkPipeline gbufferPipeline;
+
+	AllocatedImage blueNoise;
+
+	// TODO(piero): Should refactor this. Used to render a different layout to test full screen viewport rendering
+	bool fullScreen{ false };
 };
 
 inline uint32_t getCurrentFrameIndex(VulkanRendererContext* context) {
@@ -378,6 +388,7 @@ void initUI(VulkanRendererContext* context);
 void initBindlessTextureDescriptor(VulkanRendererContext* context, VkDescriptorPool& pool, VkDescriptorSetLayout& descriptorSetLayout, VkDescriptorSet& descriptotSet);
 
 void resizeSwapchain(VulkanRendererContext* context, PrimalWindow* window);
+void resizeRenderTargets(VulkanRendererContext* context);
 
 // specific pipelines
 // TODO(piero): Init pipelines from config file
@@ -423,5 +434,7 @@ void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMou
 
 // Voxel stuff
 void initGBuffer(VulkanRendererContext* context);
+void createGBuffer(VulkanRendererContext* context);
+void destroyGBuffer(VulkanRendererContext* context);
 
 }// namespace pm

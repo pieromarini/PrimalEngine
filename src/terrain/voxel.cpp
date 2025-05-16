@@ -219,15 +219,15 @@ VoxelTerrain generateTerrain() {
 	const siv::PerlinNoise perlin{ seed };
 
 	// Terrain generation parameters
-	constexpr float HEIGHT_SCALE = 14.0f;
+	constexpr float HEIGHT_SCALE = 35.0f;
 	constexpr float NOISE_SCALE = 0.03f;
 
 	// TODO(piero): handle multiple chunks
 	terrain.grid.minBound = glm::vec3(0.0f, 0.0f, 0.0f);
-	terrain.grid.maxBound = glm::vec3(VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION, VOXEL_CHUNK_SIZE, VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION);
+	terrain.grid.maxBound = glm::vec3(VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION, VOXEL_CHUNK_SIZE_Y, VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION);
 	terrain.grid.gridSize = terrain.grid.maxBound - terrain.grid.minBound;
 	terrain.grid.numVoxelsX = VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION;
-	terrain.grid.numVoxelsY = VOXEL_CHUNK_SIZE;
+	terrain.grid.numVoxelsY = VOXEL_CHUNK_SIZE_Y;
 	terrain.grid.numVoxelsZ = VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION;
 
 	terrain.voxelData.resize(VOXEL_CHUNK_COUNT * TERRAIN_DIMENSION * TERRAIN_DIMENSION);
@@ -256,7 +256,7 @@ VoxelTerrain generateTerrain() {
 					terrainHeight = std::min(std::max(1, terrainHeight), static_cast<int32_t>(VOXEL_CHUNK_SIZE - 1));
 
 					// TODO(piero): Keeping some code here for compatibility with voxel mesh renderer.
-					for (uint32_t y = 0; y < VOXEL_CHUNK_SIZE; ++y) {
+					for (uint32_t y = 0; y < VOXEL_CHUNK_SIZE_Y; ++y) {
 						// uint32_t voxelIndex = getVoxelIndex(x, y, z, 1, 1);
 
 						glm::vec4 voxelColor = { 0.0f, 0.0f, 0.0f, 0.0f };

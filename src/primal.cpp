@@ -44,7 +44,7 @@ PrimalEngine::PrimalEngine() {
 
 	// setup main viewer camera
 	m_mainCamera.velocity = glm::vec3(0.f);
-	m_mainCamera.position = glm::vec3(-15.f, 3.5f, -1.1f);
+	m_mainCamera.position = glm::vec3(2.48f, 21.17f, 16.55f);
 	m_mainCamera.yaw = -4.61;
 	m_mainCamera.pitch = -0.024;
 	m_mainCamera.setMouseControlEnabled(windowRelativeMouseMode);
@@ -171,6 +171,16 @@ void PrimalEngine::run() {
 
 					// Disable camera panning when relative mouse mode is disabled
 					m_mainCamera.setMouseControlEnabled(windowRelativeMouseMode);
+				} else if (e.key.key == SDLK_F) {
+					rendererContext.fullScreen = !rendererContext.fullScreen;
+
+					// TODO(piero): This shouldn't be here. Refactor
+					resizeRenderTargets(&rendererContext);
+
+					destroyGBuffer(&rendererContext);
+					createGBuffer(&rendererContext);
+
+					m_mainCamera.onWindowResize(mainWindow->width, mainWindow->height);
 				}
 			}
 

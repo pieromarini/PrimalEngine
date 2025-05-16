@@ -9,7 +9,8 @@ namespace pm {
 constexpr uint32_t TERRAIN_DIMENSION = 16;
 
 constexpr uint32_t VOXEL_CHUNK_SIZE = 16;
-constexpr uint32_t VOXEL_CHUNK_COUNT = VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE;
+constexpr uint32_t VOXEL_CHUNK_SIZE_Y = 64;
+constexpr uint32_t VOXEL_CHUNK_COUNT = VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE_Y;
 
 constexpr uint8_t VOXEL_SIZE = 1;
 

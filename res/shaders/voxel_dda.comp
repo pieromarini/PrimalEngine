@@ -13,7 +13,7 @@ layout(set = 0, binding = 0) uniform SceneData {
 
 layout (rgba8, set = 1, binding = 0) uniform image2D albedo;
 layout (rgba16, set = 1, binding = 1) uniform image2D irradiance;
-layout (r32f, set = 1, binding = 2) uniform image2D depth;
+layout (r32f, set = 1, binding = 2) uniform image2D depthImage;
 
 layout(push_constant) uniform constants {
 	vec4 viewPosition;
@@ -38,12 +38,25 @@ struct VoxelGrid {
 	uint numVoxelsZ;
 };
 
-struct HitInfo {
-	float dist;
+struct RayHitInternal {
+	vec3 pos;
+	vec3 sideDist;
+	vec3 deltaDist;
+	ivec3 rayStep;
+	uint material;
+	bvec3 mask;
+};
+
+struct RayHit {
+	uint material;
 	vec3 pos;
 	vec3 normal;
-	vec2 uv;
-	uint materialId;
+	vec3 dir;
+};
+
+struct Material {
+	vec4 diffuse;
+	float metallic;
 };
 
 layout(set = 1, binding = 3) readonly buffer Grid {
@@ -54,16 +67,58 @@ layout(set = 1, binding = 4) readonly buffer Voxels {
 	uint voxels[];
 };
 
-vec3 getMaterialColor(uint materialID) {
-	// Simple color mapping based on material ID
+layout (set = 1, binding = 5) uniform sampler2D blueNoise;
+
+// Constants
+// TODO(piero): make configurable
+const int MAX_RAY_STEPS = 512;
+const int MAX_REFLECTIONS = 2;
+const int AO_SAMPLES = 0;
+
+Material getMaterial(uint materialID) {
+	Material material;
+	material.metallic = 0.0f;
+
 	switch(materialID) {
-		case 1: return vec3(0.2f, 0.7f, 0.3f);
-		case 2: return vec3(0.6f, 0.4f, 0.2f);
-		case 3: return vec3(0.5f, 0.5f, 0.5f);
+		case 1:
+			material.diffuse = vec4(0.2f, 0.7f, 0.3f, 1.0f);
+			break;
+		case 2:
+			material.diffuse = vec4(0.6f, 0.4f, 0.2f, 1.0f);
+			material.metallic = 1.0f;
+			break;
+		case 3:
+			material.diffuse = vec4(0.5f, 0.5f, 0.5f, 1.0f);
+			break;
 
 		// sky color (light blue)
-		default: return vec3(0.5, 0.7, 1.0);
+		default:
+			material.diffuse = vec4(0.5f, 0.7f, 1.0f, 1.0f);
+			break;
 	}
+
+	return material;
+}
+
+vec3 fragmentNoiseSeq(uint num) {
+	uint frameNum = uint(PushConstants.data2.x);
+	uint offset = num * 32 + frameNum % 32;
+
+	ivec2 texelCoord = ivec2(gl_GlobalInvocationID.xy);
+	vec2 imageResolution = vec2(512);
+	vec2 texCoords = (vec2(texelCoord) + 0.5) / vec2(imageResolution);
+	vec2 clipCoords = texCoords * 2.0 - 1.0; // Convert to [-1, 1] range
+
+	// Constants inspired by http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
+	const float g = 1.22074408460575947536;
+	const vec3 a = vec3(1.0 / g, 1.0 / (g * g), 1.0 / (g * g * g));
+	vec3 noise = texture(blueNoise, clipCoords).rgb;
+	return mod(noise + offset * a, 1.0);
+}
+
+// Generates a random direction within the unit sphere
+vec3 randomDir(uint num) {
+	return normalize(fragmentNoiseSeq(num) * 2.0 - vec3(1.0));
 }
 
 // NOTE(piero): Sizes MUST be a power of two (because of the & operator to speed up modulo.)
@@ -114,120 +169,201 @@ vec3 clipRayToAABB(Ray ray, vec3 bbMin, vec3 bbMax, out bool rayMiss) {
 	return tmin > 0 && tmin < tmax ? ray.origin + ray.direction * tmin : ray.origin;
 }
 
-bvec3 getStepMask(vec3 sideDist) {
-	bvec3 mask;
-
-	mask.x = sideDist.x < sideDist.y && sideDist.x < sideDist.z;
-	mask.y = !mask.x && sideDist.y < sideDist.z;
-	mask.z = !mask.x && !mask.y;
-
-	return mask;
-}
-
-bool checkBounds(ivec3 pos, ivec3 gridSize) {
+bool checkBounds(ivec3 pos, vec3 gridSize) {
 	return pos.x >= 0 && pos.x < gridSize.x &&
 		pos.y >= 0 && pos.y < gridSize.y && 
 		pos.z >= 0 && pos.z < gridSize.z;
 }
 
-// More robust raycasting function
-HitInfo raycastGrid(Ray ray, VoxelGrid grid) {
-	HitInfo hit;
-	hit.materialId = 0; // Initialize to empty
-	hit.dist = 1e30;    // Initialize to far distance
-
-	ivec3 gridSize = ivec3(grid.gridSize);
-
+vec3 boxIntersection(Ray ray, VoxelGrid grid) {
 	vec3 invDir = 1.0 / ray.direction;
 
-	// Calculate starting position
-	bool rayMiss;
-	vec3 startPos = clipRayToAABB(ray, grid.minBound, grid.maxBound, rayMiss);
-	if (rayMiss) {
-		return hit;
+	vec3 t1 = (-ray.origin) * invDir;
+	vec3 t2 = (vec3(grid.maxBound) - ray.origin) * invDir;
+	vec3 tminDir = min(t1, t2);
+	vec3 tmaxDir = max(t1, t2);
+
+	float tmin = max(tminDir.x, max(tminDir.y, tminDir.z));
+	float tmax = min(tmaxDir.x, min(tmaxDir.y, tmaxDir.z));
+
+	if (tmin >= 0 && tmax >= tmin) {
+		return ray.origin + (tmin + 0.1) * ray.direction;
+	} else {
+		return ray.origin;
 	}
+}
 
-	// Clamp starting position to grid
-	startPos = clamp(startPos, vec3(0), grid.gridSize - vec3(0.000001));
+RayHitInternal traceRayInternal(Ray ray, VoxelGrid grid, uint maxSteps) {
+	RayHitInternal result;
 
-	// Initialize positions
-	ivec3 mapPos = ivec3(floor(startPos));
-	ivec3 rayStep = ivec3(sign(ray.direction));
+	// Ray starting position
+	result.pos = boxIntersection(ray, grid);
 
-	// Distance between cell boundaries
-	vec3 deltaDist = abs(invDir);
+	// First voxel to sample
+	ivec3 mapPos = ivec3(floor(result.pos));
 
-	// Calculate distance to next cell boundary
-	vec3 sideDist;
-	sideDist.x = rayStep.x > 0 ?
-		(floor(startPos.x) + 1.0 - startPos.x) * deltaDist.x :
-		(startPos.x - floor(startPos.x)) * deltaDist.x;
-	sideDist.y = rayStep.y > 0 ?
-		(floor(startPos.y) + 1.0 - startPos.y) * deltaDist.y :
-		(startPos.y - floor(startPos.y)) * deltaDist.y;
-	sideDist.z = rayStep.z > 0 ?
-		(floor(startPos.z) + 1.0 - startPos.z) * deltaDist.z :
-		(startPos.z - floor(startPos.z)) * deltaDist.z;
+	// Portion of ray needed for ray to traverse a voxel in each direction
+	result.deltaDist = abs(1.0f / ray.direction);
 
-	int MAX_RAY_STEPS = 512;
-	vec3 normal = vec3(0.0);
+	// Integer position steps along ray
+	result.rayStep = ivec3(sign(ray.direction));
 
-  bvec3 stepMask = getStepMask(sideDist);
+	// Distance ray can travel in each direction before crossing a boundary
+	result.sideDist = (sign(ray.direction) * (vec3(mapPos) - result.pos) + (sign(ray.direction) * 0.5) + 0.5) * result.deltaDist;
 
-	for (int i = 0; i < MAX_RAY_STEPS; i++) {
-		if (!checkBounds(mapPos, gridSize)) break;
-
-		stepMask = getStepMask(sideDist);
-
-		uint voxelType = getVoxel(mapPos, gridSize);
-		if (voxelType != 0) {
-			vec3 dists = mix(vec3(0), sideDist, stepMask);
-			float distance = max(dists.x, max(dists.y, dists.z));
-
-			hit.materialId = voxelType;
-			hit.dist = distance;
-			hit.pos = ray.origin + ray.direction * distance;
-			hit.normal = normal;
-
-			// Calculate UVs based on hit face
-			if (abs(normal.x) > 0.5) {
-				hit.uv = fract(vec2(hit.pos.z, hit.pos.y));
-			} else if (abs(normal.y) > 0.5) {
-				hit.uv = fract(vec2(hit.pos.x, hit.pos.z));
-			} else {
-				hit.uv = fract(vec2(hit.pos.x, hit.pos.y));
-			}
-
+	for (uint i = 0; i < maxSteps; i++) {
+		if (!checkBounds(mapPos, grid.maxBound)) {
 			break;
 		}
 
-		// DDA step - determine which boundary to cross next
-		mapPos += mix(ivec3(0), rayStep, stepMask);
-		sideDist += mix(ivec3(0), deltaDist, stepMask);
-		normal = mix(ivec3(0), -rayStep, stepMask);
+		// If we hit a voxel, break
+		result.material = getVoxel(mapPos, ivec3(grid.gridSize));
+		if (result.material != 0) {
+			break;
+		}
+
+		// Determine which direction has minimum travel distance before hitting a boundary
+		result.mask = lessThanEqual(result.sideDist.xyz, min(result.sideDist.yzx, result.sideDist.zxy));
+
+		// Advance the distance needed for that axis
+		result.sideDist += vec3(result.mask) * result.deltaDist;
+
+		// Advance the integer map positon
+		mapPos += ivec3(vec3(result.mask)) * result.rayStep;
 	}
 
-	return hit;
+	return result;
 }
 
-// Simple lighting calculation
-vec3 calculateLighting(vec3 position, vec3 normal, vec3 baseColor) {
-	// Extract lighting data from uniform
-	vec3 lightDir = normalize(sceneData.sunlightDirection.xyz);
-	vec3 lightColor = sceneData.sunlightColor.xyz;
-	vec3 ambientColor = sceneData.ambientColor.xyz;
+RayHit traceRay(Ray ray, VoxelGrid grid, uint maxSteps) {
+	RayHitInternal hitInternal = traceRayInternal(ray, grid, maxSteps);
 
-	// Calculate diffuse lighting
-	float diffFactor = max(dot(normal, lightDir), 0.0);
-	vec3 diffuse = diffFactor * lightColor * baseColor;
+	RayHit result;
+	result.material = hitInternal.material;
+	result.dir = ray.direction;
 
-	// Add ambient term
-	vec3 ambient = ambientColor * baseColor;
+	if (result.material != 0) {
+		// Calculate normal direction from final mask
+		result.normal = normalize(vec3(hitInternal.mask) * -vec3(hitInternal.rayStep));
 
-	// Simple shadow test (optional - can add shadow ray later)
+		// Calculate the ending position from distance traveled
+		float d = length(vec3(hitInternal.mask) * (hitInternal.sideDist - hitInternal.deltaDist));
+		result.pos = hitInternal.pos + d * ray.direction;
+	}
 
-	// Final color
-	return ambient + diffuse;
+	return result;
+}
+
+bool traceRayHit(Ray ray, VoxelGrid grid, uint maxSteps) {
+	RayHitInternal hitInternal = traceRayInternal(ray, grid, maxSteps);
+	return hitInternal.material != 0;
+}
+
+vec3 skyColor(RayHit hit) {
+	Material skyMaterial = getMaterial(0);
+	// Quick sky gradient
+	return mix(skyMaterial.diffuse.xyz, skyMaterial.diffuse.xyz * 0.7, 0.5 * hit.dir.y + 0.5);
+}
+
+// Generates a random direction within the unit sphere
+vec3 calcAmbient(RayHit hit, uint depth) {
+    float ambient = 0.0;
+
+    if (AO_SAMPLES == 0) {
+        ambient = 1.0;
+    } else {
+			float sampleFrac = 1.0f / AO_SAMPLES;
+			for (uint i = 0; i < AO_SAMPLES; i++) {
+				// Generate a random direction around the normal
+				vec3 dir = hit.normal + randomDir(i + depth * AO_SAMPLES);
+
+				// Trace ray
+				Ray ray;
+				ray.origin = hit.pos + dir * 0.01;
+				ray.direction = dir;
+				bool hit = traceRayHit(ray, grid, 64);
+
+				// Add ambient color if hit
+				if (hit) {
+					ambient += sampleFrac;
+				}
+			}
+    }
+
+    return ambient * 1.0f * skyColor(hit);
+}
+
+vec3 color(RayHit ray, Material material, vec3 ambient, vec3 reflection, bool shadowed) {
+	vec3 diffuse = vec3(0.0);
+	if (!shadowed) {
+		float diff = max(dot(ray.normal, normalize(sceneData.sunlightDirection.xyz)), 0.0);
+		diffuse = diff * sceneData.sunlightColor.rgb * 0.2f;
+	}
+
+	vec3 specular = reflection * material.metallic;
+
+	return (diffuse + specular + ambient) * material.diffuse.xyz;
+}
+
+bool isShadowed(RayHit hit, VoxelGrid grid, uint maxSteps) {
+	Ray r;
+	r.origin = hit.pos + hit.normal * 0.01;
+	r.direction = normalize(sceneData.sunlightDirection.xyz);
+	return traceRayHit(r, grid, maxSteps);
+}
+
+vec3 colorHit(RayHit hit, vec3 reflection, uint depth) {
+	if (hit.material != 0) {
+		Material material = getMaterial(hit.material);
+
+		vec3 ambient = calcAmbient(hit, depth);
+		bool shadowed = isShadowed(hit, grid, 512);
+
+		return color(hit, material, ambient, reflection, shadowed) * 1.0f / float(depth + 1);
+	} else {
+		return skyColor(hit);
+	}
+}
+
+vec3 colorMainRay(RayHit hit, VoxelGrid grid) {
+	// Get hit material
+	Material material = getMaterial(hit.material);
+
+	vec3 reflection = vec3(0.0);
+	if (material.metallic > 0.0) {
+		// Stack of reflection bounces
+		RayHit bounces[MAX_REFLECTIONS];
+
+		// Continue taking reflection bounces until we reach our maximum
+		RayHit lastHit = hit;
+		int lastIdx = -1;
+		for (int i = 0; i < MAX_REFLECTIONS; i++) {
+			vec3 reflectDir = reflect(lastHit.dir, lastHit.normal);
+
+			Ray r;
+			r.origin = lastHit.pos + lastHit.normal * 0.01;
+			r.direction = reflectDir;
+
+			RayHit reflectHit = traceRay(r, grid, 512);
+
+			// Store reflection bounce in stack
+			bounces[i] = reflectHit;
+			lastHit = reflectHit;
+
+			// Terminate early if material isn't metallic or we hit sky
+			if (lastHit.material == 0 || getMaterial(lastHit.material).metallic <= 0.0) {
+				lastIdx = i;
+				break;
+			}
+		}
+
+		// Sum backwards up the stack
+		for (int i = lastIdx; i >= 0; i--) {
+			reflection += colorHit(bounces[i], reflection, i);
+		}
+	}
+
+	return colorHit(hit, reflection, 0);
 }
 
 void main() {
@@ -246,43 +382,21 @@ void main() {
 	// Calculate ray direction in world space
 	Ray ray = rayFromCamera(clipCoords, cameraPosition);
 
-	// DEBUG: ray direction
-	// vec3 debugColor = normalize(ray.direction) * 0.5 + 0.5;
-	// imageStore(albedo, texelCoord, vec4(debugColor, 1.0));
-	// return;
-
 	// Cast the ray into the voxel grid
-	HitInfo hit = raycastGrid(ray, grid);
+	RayHit result = traceRay(ray, grid, MAX_RAY_STEPS);
 
-	vec4 finalColor;
-	if (hit.materialId != 0) {
-		// We hit a voxel - apply material color and lighting
-		vec3 materialColor = getMaterialColor(hit.materialId);
+	vec3 color;
 
-		// DEBUG: normals
-		// vec3 debugNormal = hit.normal * 0.5 + 0.5;
-		// finalColor = vec4(debugNormal, 1.0);
-
-		// Apply lighting
-		vec3 litColor = calculateLighting(hit.pos, hit.normal, materialColor);
-
-		// Store depth information - normalize to 0-1 range using MAX_DIST as far plane
-		// float normalizedDepth = hit.dist / 1000.0; // Assuming 1000 is far plane
-		// imageStore(depth, texelCoord, vec4(normalizedDepth, 0.0, 0.0, 0.0));
-
-		finalColor = vec4(litColor, 1.0);
+	if (result.material != 0) {
+		color = colorMainRay(result, grid);
+		float depthValue = length(result.pos - cameraPosition);
+		imageStore(depthImage, texelCoord, vec4(depthValue, 0.0f, 0.0f, 0.0f));
 	} else {
-		// Miss - draw sky color
-		vec3 skyColor = getMaterialColor(0);
-
-		// Quick sky gradient
-		skyColor = mix(skyColor, skyColor * 0.7, 0.5 * ray.direction.y + 0.5);
-
-		// Set far distance for depth
-		// imageStore(depth, texelCoord, vec4(1.0, 0.0, 0.0, 0.0));
-
-		finalColor = vec4(skyColor, 1.0);
+		color = skyColor(result);
+		imageStore(albedo, texelCoord, vec4(0.0f));
 	}
+
+	vec4 finalColor = vec4(color, 1.0f);
 
 	// Store final color
 	imageStore(albedo, texelCoord, finalColor);
