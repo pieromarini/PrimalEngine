@@ -39,21 +39,21 @@ layout(push_constant) uniform constants {
 } PushConstants;
 
 layout (set = 1, binding = 0) readonly buffer DrawCommands {
-  IndirectCommandData drawCommands[];
+	IndirectCommandData drawCommands[];
 };
 
 layout (std430, set = 1, binding = 1) readonly buffer Draws {
-  MeshDraw draws[];
+	MeshDraw draws[];
 };
 
 void main() {
-  uint drawId = drawCommands[gl_DrawIDARB].drawId;
+	uint drawId = drawCommands[gl_DrawIDARB].drawId;
 	MeshDraw meshDraw = draws[drawId];
 
 	mat4 transform = meshDraw.transform;
 
 	VoxelVertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
-	
+
 	vec3 unpackedPos = unpackPosition(v.data);
 	vec4 position = vec4(unpackedPos, 1.0f);
 

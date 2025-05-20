@@ -8,8 +8,8 @@ struct ViewportDrawData {
 	float padding[3];
 };
 
-layout (binding = 2, std430) readonly buffer Draws {
-  ViewportDrawData draws[];
+layout (set = 0, binding = 2, std430) readonly buffer Draws {
+	ViewportDrawData draws[];
 };
 
 layout (set = 1, binding = 0) uniform sampler2D viewportTextures[];

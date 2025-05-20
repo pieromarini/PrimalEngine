@@ -8,7 +8,7 @@ struct Vertex {
 };
 
 struct IndirectCommandData {
-  uint drawId;
+	uint drawId;
 
 	// VkDrawIndexedIndirectCommand
 	uint indexCount;

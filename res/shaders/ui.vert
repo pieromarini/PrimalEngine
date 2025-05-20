@@ -7,26 +7,26 @@
 #include "ui_structures.h"
 
 layout (buffer_reference , std430, buffer_reference_align=8) readonly buffer UIVertexBuffer {
-  UIVertex vertices[];
+	UIVertex vertices[];
 };
 
 layout (push_constant) uniform constants {
-  UIVertexBuffer vertexBuffer;
+	UIVertexBuffer vertexBuffer;
 	float screenWidth;
 	float screenHeight;
 } PushConstants;
 
-layout (binding = 0) uniform UBO {
-  mat4 projection;
-  mat4 view;
+layout (set = 0, binding = 0) uniform UBO {
+	mat4 projection;
+	mat4 view;
 } ubo;
 
-layout (binding = 1) readonly buffer DrawCommands {
-  IndirectCommandData drawCommands[];
+layout (set = 0, binding = 1) readonly buffer DrawCommands {
+	IndirectCommandData drawCommands[];
 };
 
-layout (binding = 2, std430) readonly buffer Draws {
-  UIDraw draws[];
+layout (set = 0, binding = 2, std430) readonly buffer Draws {
+	UIDraw draws[];
 };
 
 layout (location = 0) out vec2 outUV;
@@ -34,12 +34,12 @@ layout (location = 1) out vec3 outColor;
 layout (location = 2) out flat uint outDrawId;
 
 void main() {
-  uint drawId = drawCommands[gl_DrawIDARB].drawId;
+	uint drawId = drawCommands[gl_DrawIDARB].drawId;
 	UIDraw draw = draws[drawId];
-  UIVertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
+	UIVertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
 
 	outDrawId = drawId;
-  outUV = vec2(v.uv_x, v.uv_y);
-  outColor = v.color;
-  gl_Position = ubo.projection * ubo.view * draw.transform * vec4(v.position.xy, 0.0, 1.0);
+	outUV = vec2(v.uv_x, v.uv_y);
+	outColor = v.color;
+	gl_Position = ubo.projection * ubo.view * draw.transform * vec4(v.position.xy, 0.0, 1.0);
 }

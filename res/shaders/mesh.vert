@@ -29,22 +29,22 @@ layout (set = 2, binding = 0) readonly buffer GLTFMaterialData {
 };
 
 layout (set = 2, binding = 1) readonly buffer DrawCommands {
-  IndirectCommandData drawCommands[];
+	IndirectCommandData drawCommands[];
 };
 
 layout (std430, set = 2, binding = 2) readonly buffer Draws {
-  MeshDraw draws[];
+	MeshDraw draws[];
 };
 
 void main() {
-  uint drawId = drawCommands[gl_DrawIDARB].drawId;
+	uint drawId = drawCommands[gl_DrawIDARB].drawId;
 	MeshDraw meshDraw = draws[drawId];
 
 	mat4 transform = meshDraw.transform;
 	uint materialIndex = meshDraw.materialIndex;
 
 	Vertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
-	
+
 	vec4 position = vec4(v.position, 1.0f);
 
 	gl_Position =  sceneData.viewproj * transform * position;

@@ -35,37 +35,37 @@ layout (set = 2, binding = 0) readonly buffer GLTFMaterialData {
 };
 
 layout (set = 2, binding = 1) readonly buffer DrawCommands {
-  IndirectCommandData drawCommands[];
+	IndirectCommandData drawCommands[];
 };
 
 layout (std430, set = 2, binding = 2) readonly buffer Draws {
-  MeshDraw draws[];
+	MeshDraw draws[];
 };
 
 uint hash(uint a) {
-   a = (a+0x7ed55d16) + (a<<12);
-   a = (a^0xc761c23c) ^ (a>>19);
-   a = (a+0x165667b1) + (a<<5);
-   a = (a+0xd3a2646c) ^ (a<<9);
-   a = (a+0xfd7046c5) + (a<<3);
-   a = (a^0xb55a4f09) ^ (a>>16);
-   return a;
+	a = (a+0x7ed55d16) + (a<<12);
+	a = (a^0xc761c23c) ^ (a>>19);
+	a = (a+0x165667b1) + (a<<5);
+	a = (a+0xd3a2646c) ^ (a<<9);
+	a = (a+0xfd7046c5) + (a<<3);
+	a = (a^0xb55a4f09) ^ (a>>16);
+	return a;
 }
 
 void main() {
 	MeshDraw meshDraw = draws[drawId];
 	MaterialData material = materialData[meshDraw.materialIndex];
 
-/*
-	float lightValue = max(dot(inNormal, sceneData.sunlightDirection.xyz), 0.9f);
+	/*
+		 float lightValue = max(dot(inNormal, sceneData.sunlightDirection.xyz), 0.9f);
 
-	vec3 color = inColor * sceneData.sunlightColor.xyz * lightValue;
-	if (material.albedoTexture > 0) {
-		color *= texture(textures[nonuniformEXT(material.albedoTexture)], inUV).xyz;
-	}
+		 vec3 color = inColor * sceneData.sunlightColor.xyz * lightValue;
+		 if (material.albedoTexture > 0) {
+		 color *= texture(textures[nonuniformEXT(material.albedoTexture)], inUV).xyz;
+		 }
 
-	vec3 ambient = color * sceneData.ambientColor.xyz;
-	*/
+		 vec3 ambient = color * sceneData.ambientColor.xyz;
+	 */
 	vec3 sunlightDirection = normalize(sceneData.sunlightDirection.xyz);
 
 	vec3 color = vec3(1.0f);

@@ -7,20 +7,20 @@
 #include "ui_structures.h"
 
 layout (buffer_reference , std430, buffer_reference_align=8) readonly buffer UIVertexBuffer {
-  UIVertex vertices[];
+	UIVertex vertices[];
 };
 
-layout (binding = 0) uniform UBO {
-  mat4 projection;
-  mat4 view;
+layout (set = 0, binding = 0) uniform UBO {
+	mat4 projection;
+	mat4 view;
 } ubo;
 
-layout (binding = 2) readonly buffer Draws {
-  UIDraw draws[];
+layout (set = 0, binding = 2) readonly buffer Draws {
+	UIDraw draws[];
 };
 
-layout (binding = 3) readonly buffer Materials {
-  UIMaterialData materialData[];
+layout (set = 0, binding = 3) readonly buffer Materials {
+	UIMaterialData materialData[];
 };
 
 layout (location = 0) in vec2 inUV;
@@ -37,7 +37,7 @@ void main() {
 	// NOTE(piero): Rendering a border for rectangles
 	if ((material.horizontalBorder > 0.0f || material.verticalBorder > 0.0f) && 
 			(inUV.x < material.horizontalBorder || inUV.x > (1.0f - material.horizontalBorder) || 
-			inUV.y < material.verticalBorder || inUV.y > (1.0f - material.verticalBorder))) {
+			 inUV.y < material.verticalBorder || inUV.y > (1.0f - material.verticalBorder))) {
 		outFragColor = vec4(0.0f, 0.0f, 1.0, 1.0f);
 	} else {
 		if (material.backgroundColor.a <= 0.0f) {
