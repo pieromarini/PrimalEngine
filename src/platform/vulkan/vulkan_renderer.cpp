@@ -101,7 +101,7 @@ void initGBuffer(VulkanRendererContext* context) {
 
 	createGBuffer(context);
 
-	// pipeline
+	// gbuffer pipeline
 	VkShaderModule computeDrawShader{};
 	if (!loadShaderModule("res/shaders/voxel_dda.comp.spv", context->device, &computeDrawShader)) {
 		std::cout << std::format("Error when building the compute shader \n");
@@ -140,6 +140,46 @@ void initGBuffer(VulkanRendererContext* context) {
 	context->mainDeletionQueue.push([context]() {
 		vkDestroyPipelineLayout(context->device, context->gbufferPipelineLayout, nullptr);
 		vkDestroyPipeline(context->device, context->gbufferPipeline, nullptr);
+	});
+
+	// resolve gbuffer pipeline
+	VkShaderModule resolveDrawShader{};
+	if (!loadShaderModule("res/shaders/gbuffer_resolve.comp.spv", context->device, &resolveDrawShader)) {
+		std::cout << std::format("Error when building the compute shader \n");
+	}
+
+	VkPushConstantRange pc{};
+	pc.offset = 0;
+	pc.size = sizeof(uint32_t);
+	pc.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+	std::array<VkDescriptorSetLayout, 1> resolveLayouts = {
+		context->resolveDescriptorLayout
+	};
+
+	VkPipelineLayoutCreateInfo resolveLayout = pipelineLayoutCreateInfo();
+	resolveLayout.pPushConstantRanges = &pc;
+	resolveLayout.pushConstantRangeCount = 1;
+	resolveLayout.setLayoutCount = resolveLayouts.size();
+	resolveLayout.pSetLayouts = resolveLayouts.data();
+
+	VK_CHECK(vkCreatePipelineLayout(context->device, &resolveLayout, nullptr, &context->resolvePipelineLayout));
+
+	auto resolveStageInfo = pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, resolveDrawShader);
+
+	VkComputePipelineCreateInfo resolvePipelineCreateInfo{};
+	resolvePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	resolvePipelineCreateInfo.pNext = nullptr;
+	resolvePipelineCreateInfo.layout = context->resolvePipelineLayout;
+	resolvePipelineCreateInfo.stage = resolveStageInfo;
+
+	VK_CHECK(vkCreateComputePipelines(context->device, context->pipelineCache, 1, &resolvePipelineCreateInfo, nullptr, &context->resolvePipeline));
+
+	vkDestroyShaderModule(context->device, resolveDrawShader, nullptr);
+
+	context->mainDeletionQueue.push([context]() {
+		vkDestroyPipelineLayout(context->device, context->resolvePipelineLayout, nullptr);
+		vkDestroyPipeline(context->device, context->resolvePipeline, nullptr);
 	});
 }
 
@@ -189,6 +229,28 @@ void createGBuffer(VulkanRendererContext* context) {
 		writer.writeImage(5, context->blueNoise.imageView, context->blueNoise.sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		writer.updateSet(context->device, context->gbufferDescriptorSet);
 	}
+
+	// resolve pipeline (write gbuffer to render target)
+
+	{
+		DescriptorLayoutBuilder builder;
+		builder.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		builder.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		builder.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		builder.addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		context->resolveDescriptorLayout = builder.build(context->device, VK_SHADER_STAGE_COMPUTE_BIT);
+	}
+
+	context->resolveDescriptorSet = context->globalDescriptorAllocator.allocate(context->device, context->resolveDescriptorLayout);
+
+	{
+		DescriptorWriter writer;
+		writer.writeImage(0, context->gbuffer.albedo.imageView, context->defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		writer.writeImage(1, context->gbuffer.irradiance.imageView, context->defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		writer.writeImage(2, context->gbuffer.depth.imageView, context->defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		writer.writeImage(3, context->sceneDrawImage.imageView, VK_NULL_HANDLE,  VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		writer.updateSet(context->device, context->resolveDescriptorSet);
+	}
 }
 
 void destroyGBuffer(VulkanRendererContext* context) {
@@ -200,6 +262,7 @@ void destroyGBuffer(VulkanRendererContext* context) {
 	destroyBuffer(context->vmaAllocator, context->gbuffer.voxelData);
 
 	vkDestroyDescriptorSetLayout(context->device, context->gbufferDescriptorLayout, nullptr);
+	vkDestroyDescriptorSetLayout(context->device, context->resolveDescriptorLayout, nullptr);
 }
 
 void terrainTest(VulkanRendererContext* context) {
@@ -1226,14 +1289,15 @@ void rendererDraw(VulkanRendererContext* context) {
 	// drawGeometry(context, commandBuffer);
 	// drawTerrain(context, commandBuffer);
 
-	// TEMP(piero): Copy albedo to drawImage
-	// TODO(piero): blit with a compute shader
-	transitionImage(commandBuffer, context->gbuffer.albedo.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	VkExtent2D size = { .width = context->gbuffer.albedo.imageExtent.width, .height = context->gbuffer.albedo.imageExtent.height };
-	copyImageToImage(commandBuffer, context->gbuffer.albedo.image, context->sceneDrawImage.image, size, size);
+	// blit gbuffer with a compute shader
+	transitionImage(commandBuffer, context->gbuffer.albedo.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	transitionImage(commandBuffer, context->gbuffer.irradiance.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	transitionImage(commandBuffer, context->gbuffer.depth.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 
-	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	resolveGBuffer(context, commandBuffer);
+
+	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	drawUI(context, commandBuffer);
 
@@ -1329,7 +1393,6 @@ void drawToGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer
 	AllocatedBuffer gpuSceneDataBuffer = createBuffer("gpuSceneDataBuffer", sizeof(GPUSceneData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
 	// write the buffer
-	void* sceneUniformData{};
 	memcpy(gpuSceneDataBuffer.info.pMappedData, &context->sceneData, sizeof(GPUSceneData));
 
 	// Create global sceneData descriptor
@@ -1356,6 +1419,23 @@ void drawToGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context->gbufferPipelineLayout, 1, 1, &context->gbufferDescriptorSet, 0, nullptr);
 
 	vkCmdPushConstants(commandBuffer, context->gbufferPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &data);
+
+	auto width = context->sceneDrawImage.imageExtent.width;
+	auto height = context->sceneDrawImage.imageExtent.height;
+	vkCmdDispatch(commandBuffer, std::ceil(width / 16.0), std::ceil(height / 16.0), 1);
+}
+
+void resolveGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
+	uint32_t data = 0;
+
+	// Create global sceneData descriptor
+	VkDescriptorSet globalDescriptor = getCurrentFrame(context).frameDescriptor.allocate(context->device, context->resolveDescriptorLayout);
+
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context->resolvePipeline);
+
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context->resolvePipelineLayout, 0, 1, &context->resolveDescriptorSet, 0, nullptr);
+
+	vkCmdPushConstants(commandBuffer, context->resolvePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &data);
 
 	auto width = context->sceneDrawImage.imageExtent.width;
 	auto height = context->sceneDrawImage.imageExtent.height;

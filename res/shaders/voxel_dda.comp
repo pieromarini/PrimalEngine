@@ -109,7 +109,6 @@ vec3 fragmentNoiseSeq(uint num) {
 	vec2 texCoords = (vec2(texelCoord) + 0.5) / vec2(imageResolution);
 	vec2 clipCoords = texCoords * 2.0 - 1.0; // Convert to [-1, 1] range
 
-	// Constants inspired by http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
 	const float g = 1.22074408460575947536;
 	const vec3 a = vec3(1.0 / g, 1.0 / (g * g), 1.0 / (g * g * g));
 	vec3 noise = texture(blueNoise, clipCoords).rgb;
@@ -153,7 +152,7 @@ Ray rayFromCamera(vec2 clipCoords, vec3 cameraPosition) {
 	return ray;
 }
 
-vec3 clipRayToAABB(Ray ray, vec3 bbMin, vec3 bbMax, out bool rayMiss) {
+vec3 clipRayToAABB(Ray ray, vec3 bbMin, vec3 bbMax) {
 	vec3 invDir = 1.0 / ray.direction;
 	vec3 t1 = (bbMin - ray.origin) * invDir;
 	vec3 t2 = (bbMax - ray.origin) * invDir;
@@ -163,8 +162,6 @@ vec3 clipRayToAABB(Ray ray, vec3 bbMin, vec3 bbMax, out bool rayMiss) {
 
 	float tmin = max(t1.x, max(t1.y, t1.z));
 	float tmax = min(t2.x, min(t2.y, t2.z));
-
-	rayMiss = (tmin > tmax || tmax < 0);
 
 	return tmin > 0 && tmin < tmax ? ray.origin + ray.direction * tmin : ray.origin;
 }
@@ -197,7 +194,7 @@ RayHitInternal traceRayInternal(Ray ray, VoxelGrid grid, uint maxSteps) {
 	RayHitInternal result;
 
 	// Ray starting position
-	result.pos = boxIntersection(ray, grid);
+	result.pos = clipRayToAABB(ray, grid.minBound, grid.maxBound);
 
 	// First voxel to sample
 	ivec3 mapPos = ivec3(floor(result.pos));

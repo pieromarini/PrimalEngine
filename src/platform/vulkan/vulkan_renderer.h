@@ -350,7 +350,15 @@ struct VulkanRendererContext {
 	VkPipelineLayout gbufferPipelineLayout;
 	VkPipeline gbufferPipeline;
 
+	// Write GBuffer to render target using a compute shader
+	VkDescriptorSet resolveDescriptorSet;
+	VkDescriptorSetLayout resolveDescriptorLayout;
+	VkPipelineLayout resolvePipelineLayout;
+	VkPipeline resolvePipeline;
+
 	AllocatedImage blueNoise;
+
+	uint32_t gbufferDebugChannel{ 0 };
 
 	// TODO(piero): Should refactor this. Used to render a different layout to test full screen viewport rendering
 	bool fullScreen{ false };
@@ -418,7 +426,10 @@ void updateUIData(VulkanRendererContext* context);
 
 // drawing
 void rendererDraw(VulkanRendererContext* context);
+
 void drawToGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
+void resolveGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
+
 void drawGeometry(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
 void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
 void drawTerrain(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
