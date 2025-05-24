@@ -196,7 +196,7 @@ void createGBuffer(VulkanRendererContext* context) {
 	context->gbuffer = {
 		.albedo = createImage("GBuffer-Albedo", size, context->device, context->vmaAllocator, VK_FORMAT_R8G8B8A8_UNORM, usage | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
 		.irradiance = createImage("GBuffer-Irradiance", size, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, usage),
-		.depth = createImage("GBuffer-Depth", size, context->device, context->vmaAllocator, VK_FORMAT_R32_SFLOAT, usage),
+		.depth = createImage("GBuffer-Depth", size, context->device, context->vmaAllocator, VK_FORMAT_R32_SFLOAT, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT),
 
 		.gridInfo = createBuffer("voxel grid buffer", sizeof(VoxelGrid), context->vmaAllocator, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU),
 		.voxelData = createBuffer("voxel data buffer", sizeof(uint32_t) * context->voxelTerrain.voxelData.size(), context->vmaAllocator, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)
@@ -1272,6 +1272,28 @@ void rendererDraw(VulkanRendererContext* context) {
 	transitionImage(commandBuffer, context->gbuffer.irradiance.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	transitionImage(commandBuffer, context->gbuffer.depth.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
+	// TEMP: clear depth buffer
+	VkClearColorValue clearValue = {};
+	clearValue.float32[0] = 0.0f;
+	clearValue.float32[1] = 0.0f;
+	clearValue.float32[2] = 0.0f;
+	clearValue.float32[3] = 0.0f;
+
+	VkImageSubresourceRange range = {};
+	range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	range.baseMipLevel = 0;
+	range.levelCount = 1;
+	range.baseArrayLayer = 0;
+	range.layerCount = 1;
+
+	vkCmdClearColorImage(
+		commandBuffer,
+		context->gbuffer.depth.image,
+		VK_IMAGE_LAYOUT_GENERAL,
+		&clearValue,
+		1,
+		&range);
+
 	drawToGBuffer(context, commandBuffer);
 
 	// transition render targets into correct layouts
@@ -1289,13 +1311,13 @@ void rendererDraw(VulkanRendererContext* context) {
 	// drawGeometry(context, commandBuffer);
 	// drawTerrain(context, commandBuffer);
 
-	// blit gbuffer with a compute shader
+	// blit gbuffer to sceneDrawImage
 	transitionImage(commandBuffer, context->gbuffer.albedo.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	transitionImage(commandBuffer, context->gbuffer.irradiance.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	transitionImage(commandBuffer, context->gbuffer.depth.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 
-	resolveGBuffer(context, commandBuffer);
+	blitGBuffer(context, commandBuffer);
 
 	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
@@ -1425,17 +1447,12 @@ void drawToGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer
 	vkCmdDispatch(commandBuffer, std::ceil(width / 16.0), std::ceil(height / 16.0), 1);
 }
 
-void resolveGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
-	uint32_t data = 0;
-
-	// Create global sceneData descriptor
-	VkDescriptorSet globalDescriptor = getCurrentFrame(context).frameDescriptor.allocate(context->device, context->resolveDescriptorLayout);
-
+void blitGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context->resolvePipeline);
 
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context->resolvePipelineLayout, 0, 1, &context->resolveDescriptorSet, 0, nullptr);
 
-	vkCmdPushConstants(commandBuffer, context->resolvePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &data);
+	vkCmdPushConstants(commandBuffer, context->resolvePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &context->gbufferDebugChannel);
 
 	auto width = context->sceneDrawImage.imageExtent.width;
 	auto height = context->sceneDrawImage.imageExtent.height;

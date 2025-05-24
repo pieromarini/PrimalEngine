@@ -428,7 +428,7 @@ void updateUIData(VulkanRendererContext* context);
 void rendererDraw(VulkanRendererContext* context);
 
 void drawToGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
-void resolveGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
+void blitGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
 
 void drawGeometry(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
 void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer);

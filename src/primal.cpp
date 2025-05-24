@@ -181,6 +181,12 @@ void PrimalEngine::run() {
 					createGBuffer(&rendererContext);
 
 					m_mainCamera.onWindowResize(mainWindow->width, mainWindow->height);
+				} else if (e.key.key == SDLK_0) {
+					rendererContext.gbufferDebugChannel = 0;
+				} else if (e.key.key == SDLK_1) {
+					rendererContext.gbufferDebugChannel = 1;
+				} else if (e.key.key == SDLK_2) {
+					rendererContext.gbufferDebugChannel = 2;
 				}
 			}
 

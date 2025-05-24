@@ -18,7 +18,26 @@ void main() {
 
   vec2 uv = (vec2(texelCoord) + 0.5) / vec2(texSize);
 
-	vec4 finalColor = texture(albedo, uv);
+	vec4 finalColor;
+
+	switch (PushConstants.debugChannel) {
+	case 0: {
+		finalColor = texture(albedo, uv);
+		break;
+	}
+	case 1: {
+		finalColor = texture(irradiance, uv);
+		break;
+	}
+	case 2: {
+		finalColor = texture(depthImage, uv);
+		break;
+	}
+	default: {
+		finalColor = texture(albedo, uv);
+		break;
+	}
+	}
 
 	imageStore(outputImage, texelCoord, finalColor);
 }

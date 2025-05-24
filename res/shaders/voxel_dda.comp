@@ -163,31 +163,13 @@ vec3 clipRayToAABB(Ray ray, vec3 bbMin, vec3 bbMax) {
 	float tmin = max(t1.x, max(t1.y, t1.z));
 	float tmax = min(t2.x, min(t2.y, t2.z));
 
-	return tmin > 0 && tmin < tmax ? ray.origin + ray.direction * tmin : ray.origin;
+	return tmin >= 0 && tmax >= tmin ? ray.origin + ray.direction * (tmin + 0.001) : ray.origin;
 }
 
 bool checkBounds(ivec3 pos, vec3 gridSize) {
 	return pos.x >= 0 && pos.x < gridSize.x &&
 		pos.y >= 0 && pos.y < gridSize.y && 
 		pos.z >= 0 && pos.z < gridSize.z;
-}
-
-vec3 boxIntersection(Ray ray, VoxelGrid grid) {
-	vec3 invDir = 1.0 / ray.direction;
-
-	vec3 t1 = (-ray.origin) * invDir;
-	vec3 t2 = (vec3(grid.maxBound) - ray.origin) * invDir;
-	vec3 tminDir = min(t1, t2);
-	vec3 tmaxDir = max(t1, t2);
-
-	float tmin = max(tminDir.x, max(tminDir.y, tminDir.z));
-	float tmax = min(tmaxDir.x, min(tmaxDir.y, tmaxDir.z));
-
-	if (tmin >= 0 && tmax >= tmin) {
-		return ray.origin + (tmin + 0.1) * ray.direction;
-	} else {
-		return ray.origin;
-	}
 }
 
 RayHitInternal traceRayInternal(Ray ray, VoxelGrid grid, uint maxSteps) {
