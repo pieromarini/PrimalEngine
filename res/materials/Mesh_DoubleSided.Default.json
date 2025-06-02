@@ -1,0 +1,84 @@
+{
+  "name": "Mesh_DoubleSided.Default",
+	"pipeline": {
+		"type": "graphics",
+		"cull_mode": "none",
+		"front_face": "clockwise",
+		"blend_mode": "disabled",
+		"depth_test": true,
+		"shaders": [
+			{
+				"type": "vertex",
+				"path": "res/shaders/mesh.vert.spv"
+			},
+			{
+				"type": "fragment",
+				"path": "res/shaders/mesh.frag.spv"
+			}
+		]
+	},
+  "push_constants": {
+    "debug_name": "PushConstants",
+    "size_in_bytes": 80,
+    "stages": ["vertex", "fragment"]
+  },
+  "layouts": [
+    {
+      "set": 0,
+      "bindings": [
+        {
+          "debug_name": "SceneData",
+          "binding": 0,
+          "type": "uniform",
+          "readonly": false,
+          "size_in_bytes": 240,
+          "stages": ["vertex", "fragment"]
+        }
+      ]
+    },
+		{
+			"set": 1,
+			"global": true,
+			"bindless_name": "BindlessMeshTextures",
+			"bindings": [
+				{
+					"debug_name": "textures",
+					"binding": 0,
+					"type": "bindless_image_samplers",
+					"readonly": false,
+					"sampler_type": "linear",
+					"stages": ["fragment"]
+				}
+			]
+		},
+    {
+      "set": 2,
+      "bindings": [
+        {
+          "debug_name": "GLTFMaterialData",
+          "binding": 0,
+          "type": "storage_array",
+          "readonly": true,
+          "size_in_bytes": 48,
+          "stages": ["vertex", "fragment"]
+        },
+        {
+          "debug_name": "DrawCommands",
+          "binding": 1,
+          "type": "storage_array",
+          "readonly": true,
+          "size_in_bytes": 24,
+          "stages": ["vertex", "fragment"]
+        },
+        {
+          "debug_name": "Draws",
+          "binding": 2,
+          "type": "storage_array",
+          "readonly": true,
+          "size_in_bytes": 80,
+          "stages": ["vertex", "fragment"]
+        }
+      ]
+    }
+  ]
+}

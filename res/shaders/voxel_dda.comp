@@ -82,13 +82,15 @@ Material getMaterial(uint materialID) {
 	switch(materialID) {
 		case 1:
 			material.diffuse = vec4(0.2f, 0.7f, 0.3f, 1.0f);
+			material.metallic = 0.0f;
 			break;
 		case 2:
 			material.diffuse = vec4(0.6f, 0.4f, 0.2f, 1.0f);
-			material.metallic = 1.0f;
+			material.metallic = 0.0f;
 			break;
 		case 3:
 			material.diffuse = vec4(0.5f, 0.5f, 0.5f, 1.0f);
+			material.metallic = 0.0f;
 			break;
 
 		// sky color (light blue)
@@ -249,7 +251,7 @@ vec3 calcAmbient(RayHit hit, uint depth) {
     float ambient = 0.0;
 
     if (AO_SAMPLES == 0) {
-        ambient = 1.0;
+        ambient = 0.3;
     } else {
 			float sampleFrac = 1.0f / AO_SAMPLES;
 			for (uint i = 0; i < AO_SAMPLES; i++) {

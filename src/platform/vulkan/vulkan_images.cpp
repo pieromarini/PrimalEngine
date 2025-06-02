@@ -3,6 +3,33 @@
 
 namespace pm {
 
+VkPipelineStageFlags2 getPipelineStageFlags2(VkImageLayout layout) {
+	switch (layout) {
+	case VK_IMAGE_LAYOUT_UNDEFINED:
+		return VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+	case VK_IMAGE_LAYOUT_PREINITIALIZED:
+		return VK_PIPELINE_STAGE_2_HOST_BIT;
+	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+	case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+		return VK_PIPELINE_STAGE_2_COPY_BIT;
+	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+		return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+	case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL:
+		return VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+	case VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR:
+		return VK_PIPELINE_STAGE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+		return VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+	case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
+		return VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+	case VK_IMAGE_LAYOUT_GENERAL:
+		return VK_PIPELINE_STAGE_2_HOST_BIT;
+	default:
+		assert(false);
+		return 0;
+	}
+}
+
 VkPipelineStageFlags getPipelineStageFlags(VkImageLayout layout) {
 	switch (layout) {
 	case VK_IMAGE_LAYOUT_UNDEFINED:
@@ -33,7 +60,7 @@ VkPipelineStageFlags getPipelineStageFlags(VkImageLayout layout) {
 
 void transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout) {
 	VkImageMemoryBarrier2 imageBarrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
-
+	
 	imageBarrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
 	imageBarrier.srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT;
 	imageBarrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;

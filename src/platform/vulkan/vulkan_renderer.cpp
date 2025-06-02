@@ -2,6 +2,7 @@
 #include "platform/vulkan/buffers.h"
 #include "platform/window.h"
 #include "primal.h"
+#include "renderer/material_config.h"
 #include "terrain/voxel.h"
 #include "ui/ui_manager.h"
 
@@ -52,8 +53,6 @@ void rendererSetup(VulkanRendererContext* context) {
 	initCommands(context);
 	initSyncStructures(context);
 	initDescriptors(context);
-	initBindlessTextureDescriptor(context, context->bindlessPool, context->bindlessTexturesSetLayout, context->bindlessTexturesDescriptorSet);
-	initBindlessTextureDescriptor(context, context->viewportDescriptorPool, context->viewportTextureSetLayout, context->viewportTextureDescriptorSet);
 	initPipelines(context);
 	initQueryPools(context);
 
@@ -72,9 +71,9 @@ void rendererSetup(VulkanRendererContext* context) {
 	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start);
 	std::cout << std::format("Generated terrain in {:.4f} ms\n", static_cast<float>(elapsed.count()));
 
-	initGBuffer(context);
+	// setupVoxelRaycastRenderer(context);
 
-	// loadTestScene(context);
+	loadTestScene(context);
 	// terrainTest(context);
 }
 
@@ -85,7 +84,145 @@ void rendererInitMemory(VulkanRendererContext* context) {
 	}
 }
 
-void initGBuffer(VulkanRendererContext* context) {
+PrimalMaterial createMaterial(VulkanRendererContext* context, std::string_view materialConfig, bool flag) {
+	PrimalMaterial material;
+
+	auto config = loadMaterialConfig(materialConfig);
+
+	material.descriptorLayouts.reserve(config.layouts.size());
+
+	// create descriptor set layouts
+	for (auto& layout : config.layouts) {
+		if (layout.isGlobal) {
+			// NOTE(piero): need to refactor this. Very hacky. We are storing the descriptor set inside of the layout object
+			// TODO(piero): We are not using the descriptor layout parsed from the material config file (layout.bindings)
+			// NOTE(piero): Using a property on the materials called `bindless_name` we can "share" these bindless arrays between materials.
+			//              This seems very hacky but it works for now. We initialize the bindless array once and just copy over the descriptor layout and set for the different materials.
+			//              This allows us to write to the same descriptor set from different materials.
+			auto set = context->bindlessTextureArrays.find(layout.bindlessName);
+			if (set != context->bindlessTextureArrays.end()) {
+				material.descriptorLayouts.push_back(set->second.first);
+				layout.descriptorSet = set->second.second;
+			} else {
+				VkDescriptorSetLayout descriptorSetLayout{};
+				initBindlessTextureDescriptor(context, descriptorSetLayout, layout.descriptorSet);
+				material.descriptorLayouts.push_back(descriptorSetLayout);
+			}
+		} else {
+			DescriptorLayoutBuilder builder;
+			for (auto binding : layout.bindings) {
+				builder.addBinding(binding.binding, (VkDescriptorType)binding.type, binding.stages);
+			}
+			material.descriptorLayouts.push_back(builder.build(context->device));
+		}
+	}
+
+	// NOTE(piero): Copying array of layouts.
+	material.layouts = config.layouts;
+
+	VkPushConstantRange pushConstants{};
+	pushConstants.offset = 0;
+	pushConstants.size = config.pushConstants.size;
+	pushConstants.stageFlags = config.pushConstants.stages;
+
+	VkPipelineLayoutCreateInfo pipelineLayout = pipelineLayoutCreateInfo();
+	pipelineLayout.pPushConstantRanges = &pushConstants;
+	pipelineLayout.pushConstantRangeCount = 1;
+	pipelineLayout.setLayoutCount = material.descriptorLayouts.size();
+	pipelineLayout.pSetLayouts = material.descriptorLayouts.data();
+
+	VK_CHECK(vkCreatePipelineLayout(context->device, &pipelineLayout, nullptr, &material.pipelineLayout));
+
+	if (config.pipelineConfig.type == PIPELINE_TYPE_COMPUTE) {
+		VkShaderModule computeShader{};
+		if (!loadShaderModule(config.pipelineConfig.shaders[2].path.c_str(), context->device, &computeShader)) {
+			std::cout << std::format("Error when building the compute shader\n");
+		}
+
+		auto stageinfo = pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, computeShader);
+
+		VkComputePipelineCreateInfo pipelineCreateInfo{};
+		pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+		pipelineCreateInfo.pNext = nullptr;
+		pipelineCreateInfo.layout = material.pipelineLayout;
+		pipelineCreateInfo.stage = stageinfo;
+
+		VK_CHECK(vkCreateComputePipelines(context->device, context->pipelineCache, 1, &pipelineCreateInfo, nullptr, &material.pipeline));
+
+		vkDestroyShaderModule(context->device, computeShader, nullptr);
+
+	} else if (config.pipelineConfig.type == PIPELINE_TYPE_GRAPHICS) {
+		VkShaderModule vertexShader{};
+		if (!loadShaderModule(config.pipelineConfig.shaders[0].path.c_str(), context->device, &vertexShader)) {
+			std::cout << std::format("Error when building the vertex shader\n");
+		}
+
+		VkShaderModule fragmentShader{};
+		if (!loadShaderModule(config.pipelineConfig.shaders[1].path.c_str(), context->device, &fragmentShader)) {
+			std::cout << std::format("Error when building the fragment shader\n");
+		}
+
+		PipelineBuilder pipelineBuilder;
+		pipelineBuilder.setPipelineLayout(material.pipelineLayout);
+		pipelineBuilder.setShaders(vertexShader, fragmentShader);
+		pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+		pipelineBuilder.setCullMode(config.pipelineConfig.cullMode, config.pipelineConfig.frontFace);
+
+		// TODO(piero): make configurable
+		pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
+		pipelineBuilder.setMultisamplingNone();
+
+		switch (config.pipelineConfig.blendMode) {
+		case BLEND_MODE_DISABLED:
+			pipelineBuilder.disableBlending();
+			break;
+		case BLEND_MODE_ADDITIVE:
+			pipelineBuilder.enableBlendingAdditive();
+			break;
+		case BLEND_MODE_ALPHABLEND:
+			pipelineBuilder.enableBlendingAlphablend();
+			break;
+		case BLEND_MODE_BACKGROUND:
+			pipelineBuilder.enableBackgroundBlending();
+			break;
+		}
+
+		if (config.pipelineConfig.depthTest) {
+			pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+		} else {
+			pipelineBuilder.disableDepthTest();
+		}
+
+		// TODO(piero): make configurable.
+		if (flag) {
+			pipelineBuilder.setColorAttachmentFormat(context->sceneDrawImage.imageFormat);
+			pipelineBuilder.setDepthFormat(context->sceneDepthImage.imageFormat);
+		} else {
+			pipelineBuilder.setColorAttachmentFormat(context->rendererState->window->renderTarget.imageFormat);
+			pipelineBuilder.setDepthFormat(context->rendererState->window->depthTarget.imageFormat);
+		}
+
+		material.pipeline = pipelineBuilder.buildPipeline(context->device, context->pipelineCache);
+
+		vkDestroyShaderModule(context->device, vertexShader, nullptr);
+		vkDestroyShaderModule(context->device, fragmentShader, nullptr);
+	} else {
+		assert(!"Unknown pipeline config type");
+	}
+
+	return material;
+}
+
+void destroyMaterial(VulkanRendererContext* context, PrimalMaterial& material) {
+	vkDestroyPipelineLayout(context->device, material.pipelineLayout, nullptr);
+	vkDestroyPipeline(context->device, material.pipeline, nullptr);
+
+	for (auto& descriptorLayout : material.descriptorLayouts) {
+		vkDestroyDescriptorSetLayout(context->device, descriptorLayout, nullptr);
+	}
+}
+
+void setupVoxelRaycastRenderer(VulkanRendererContext* context) {
 	// TODO(piero): Move this out.
 	auto imageAsset = loadPNG("BlueNoiseAsset", "res/textures/blue_noise_rgba.png");
 	if (imageAsset.data) {
@@ -294,8 +431,8 @@ void terrainTest(VulkanRendererContext* context) {
 }
 
 void loadTestScene(VulkanRendererContext* context) {
-	// const std::string modelPath = { "res/models/bistro/bistro_ktx2.glb" };
-	const std::string modelPath = { "res/models/structure.glb" };
+	const std::string modelPath = { "res/models/bistro/bistro_ktx2.glb" };
+	// const std::string modelPath = { "res/models/structure.glb" };
 
 	auto start = std::chrono::system_clock::now();
 	auto loadedGLTF = loadGLTF(context, modelPath);
@@ -396,7 +533,7 @@ void resizeRenderTargets(VulkanRendererContext* context) {
 	// Overwrite registered image and write to descriptor.
 	// TODO(piero): refactor
 	context->registeredImages[context->sceneTextureId - 1] = &context->sceneDrawImage;
-	writeBindlessTextureToGlobalDescriptor(context, context->viewportTextureDescriptorSet, 0, context->sceneDrawImage, context->defaultSamplerLinear, context->sceneTextureId);
+	writeUniform(context, &context->uiViewportMaterialInstance, 1, 0, context->sceneDrawImage.imageView, context->defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, context->sceneTextureId);
 }
 
 void rendererInitDefaultData(VulkanRendererContext* context) {
@@ -437,21 +574,19 @@ void rendererInitDefaultData(VulkanRendererContext* context) {
 	auto sceneMaterialData = static_cast<MaterialData*>(context->globalMaterialDataBuffer.info.pMappedData);
 
 	// Init default material
-	if (context->bindlessTexturesDescriptorSet) {
-		auto defaultMaterial = Material_getDefaultMaterial();
-		sceneMaterialData[0] = defaultMaterial.materialData;
+	auto defaultMaterial = Material_getDefaultMaterial();
+	sceneMaterialData[0] = defaultMaterial.materialData;
 
-		// Write default texture to descriptor set and set Material pass and pipeline
-		writeBindlessTextureToGlobalDescriptor(context, context->bindlessTexturesDescriptorSet, 0, context->errorCheckerboardImage, context->defaultSamplerLinear, 0);
-		defaultMaterial.passType = MaterialPass::MainColor;
-		defaultMaterial.pipeline = &context->opaquePipeline;
+	// Write default mesh texture
+	defaultMaterial.passType = MaterialPass::MainColor;
+	defaultMaterial.material = createMaterialInstance(&context->opaqueMaterial);
+	writeUniform(context, &defaultMaterial.material, 1, 0, context->errorCheckerboardImage.imageView, context->defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0);
 
-		// Write default material to cache
-		MaterialCache_add(context->materialCache, 0, defaultMaterial);
-	}
+	// Write default material to cache
+	MaterialCache_add(context->materialCache, 0, defaultMaterial);
 
 	// Write default viewport texture
-	writeBindlessTextureToGlobalDescriptor(context, context->viewportTextureDescriptorSet, 0, context->errorCheckerboardImage, context->defaultSamplerLinear, 0);
+	writeUniform(context, &context->uiViewportMaterialInstance, 1, 0, context->errorCheckerboardImage.imageView, context->defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0);
 
 	context->mainDeletionQueue.push([context] {
 		destroyBuffer(context->vmaAllocator, context->globalMaterialDataBuffer);
@@ -684,18 +819,20 @@ void rendererCleanup(VulkanRendererContext* context) {
 		frame.deletionQueue.flush();
 	}
 
+	vkDestroyDescriptorSetLayout(context->device, context->bindlessTexturesSetLayout, nullptr);
+
 	// destroy sceneDrawImage
 	destroyImage(context->device, context->vmaAllocator, context->sceneDrawImage);
 	destroyImage(context->device, context->vmaAllocator, context->sceneDepthImage);
 
-	destroyGBuffer(context);
+	// destroyGBuffer(context);
 
 	destroyImage(context->device, context->vmaAllocator, context->sourceCodeFontTexture);
 
 	destroyFontSDF(context->sourceCodeFont);
 	// destroyFontSDF(context->arialFont);
 
-	destroyImage(context->device, context->vmaAllocator, context->blueNoise);
+	// destroyImage(context->device, context->vmaAllocator, context->blueNoise);
 
 	vkDestroyPipelineCache(context->device, context->pipelineCache, nullptr);
 
@@ -797,16 +934,16 @@ void buildUIDrawBatches(VulkanRendererContext* context, FixedArray<UI::UIWindowB
 		std::vector<UIMaterialData> uiMaterialData;
 
 		uiDrawBatch.meshBuffers = uiGeometryBuffers;
-		uiDrawBatch.pipeline = context->uiPipeline;
-		uiDrawBatch.pipelineLayout = context->uiPipelineLayout;
+		uiDrawBatch.pipeline = context->uiMaterial.pipeline;
+		uiDrawBatch.pipelineLayout = context->uiMaterial.pipelineLayout;
 
 		textDrawBatch.meshBuffers = uiGeometryBuffers;
-		textDrawBatch.pipeline = context->fontPipeline;
-		textDrawBatch.pipelineLayout = context->fontPipelineLayout;
+		textDrawBatch.pipeline = context->uiTextMaterial.pipeline;
+		textDrawBatch.pipelineLayout = context->uiTextMaterial.pipelineLayout;
 
 		viewportDrawBatch.meshBuffers = uiGeometryBuffers;
-		viewportDrawBatch.pipeline = context->viewportPipeline;
-		viewportDrawBatch.pipelineLayout = context->viewportPipelineLayout;
+		viewportDrawBatch.pipeline = context->uiViewportMaterial.pipeline;
+		viewportDrawBatch.pipelineLayout = context->uiViewportMaterial.pipelineLayout;
 
 		uint32_t uiDrawIdCount{ 0 }, textDrawIdCount{ 0 }, viewportDrawIdCount{ 0 };
 
@@ -952,14 +1089,13 @@ void buildUIDrawBatches(VulkanRendererContext* context, FixedArray<UI::UIWindowB
 			.stride = sizeof(UIIndirectCommand)
 		};
 
-		std::vector<DrawBatchDescriptor> descriptors;
-		descriptors.emplace_back(0, batch->window->uiData, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-		descriptors.emplace_back(1, uiDrawCommandsBuffer, sizeof(UIIndirectCommand) * uiDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		descriptors.emplace_back(2, uiDrawDataBuffer, sizeof(UIDrawData) * uiDrawData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		descriptors.emplace_back(3, uiMaterialDataBuffer, sizeof(UIMaterialData) * uiMaterialData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		uiDrawBatch.material = createMaterialInstance(&context->uiMaterial);
 
-		uiDrawBatch.descriptors = descriptors;
-		uiDrawBatch.descriptorSetLayout = context->uiDescriptorLayout;
+		uiDrawBatch.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, uiDrawBatch.material.material->descriptorLayouts.at(0));
+		writeUniform(context, &uiDrawBatch.material, 0, 0, batch->window->uiData.buffer, sizeof(UIUniformData), 0);
+		writeUniform(context, &uiDrawBatch.material, 0, 1, uiDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * uiDrawCommands.size(), 0);
+		writeUniform(context, &uiDrawBatch.material, 0, 2, uiDrawDataBuffer.buffer, sizeof(UIDrawData) * uiDrawData.size(), 0);
+		writeUniform(context, &uiDrawBatch.material, 0, 3, uiMaterialDataBuffer.buffer, sizeof(UIMaterialData) * uiMaterialData.size(), 0);
 
 		windowBatch.drawBatches.push_back(uiDrawBatch);
 
@@ -978,17 +1114,15 @@ void buildUIDrawBatches(VulkanRendererContext* context, FixedArray<UI::UIWindowB
 				.stride = sizeof(UIIndirectCommand)
 			};
 
-			std::vector<DrawBatchDescriptor> textDescriptors;
-			textDescriptors.emplace_back(0, batch->window->fontData, sizeof(FontUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-			textDescriptors.emplace_back(2, textDrawCommandsBuffer, sizeof(UIIndirectCommand) * textDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-			textDescriptors.emplace_back(3, textTransformDataBuffer, sizeof(glm::mat4) * textTransformData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+			textDrawBatch.material = createMaterialInstance(&context->uiTextMaterial);
 
-			std::vector<DrawBatchImageDescriptor> textImageDescriptors;
-			textImageDescriptors.emplace_back(1, context->sourceCodeFontTexture.imageView, context->sourceCodeFontTexture.sampler, context->sourceCodeFontTexture.imageLayout, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+			// NOTE(piero): Allocate a frame descriptor set and write uniforms for this material.
+			textDrawBatch.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, textDrawBatch.material.material->descriptorLayouts.at(0));
+			writeUniform(context, &textDrawBatch.material, 0, 0, batch->window->fontData.buffer, sizeof(FontUniformData), 0);
+			writeUniform(context, &textDrawBatch.material, 0, 1, context->sourceCodeFontTexture.imageView, context->sourceCodeFontTexture.sampler, context->sourceCodeFontTexture.imageLayout);
+			writeUniform(context, &textDrawBatch.material, 0, 2, textDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * textDrawCommands.size(), 0);
+			writeUniform(context, &textDrawBatch.material, 0, 3, textTransformDataBuffer.buffer, sizeof(glm::mat4) * textTransformData.size(), 0);
 
-			textDrawBatch.descriptors = textDescriptors;
-			textDrawBatch.imageDescriptors = textImageDescriptors;
-			textDrawBatch.descriptorSetLayout = context->fontDescriptorLayout;
 
 			windowBatch.drawBatches.push_back(textDrawBatch);
 
@@ -1013,13 +1147,12 @@ void buildUIDrawBatches(VulkanRendererContext* context, FixedArray<UI::UIWindowB
 				.stride = sizeof(UIIndirectCommand)
 			};
 
-			std::vector<DrawBatchDescriptor> viewportDescriptors;
-			viewportDescriptors.emplace_back(0, batch->window->uiData, sizeof(UIUniformData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-			viewportDescriptors.emplace_back(1, viewportDrawCommandsBuffer, sizeof(UIIndirectCommand) * viewportDrawCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-			viewportDescriptors.emplace_back(2, viewportTransformDataBuffer, sizeof(ViewportDrawData) * viewportDrawData.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+			viewportDrawBatch.material = context->uiViewportMaterialInstance;
 
-			viewportDrawBatch.descriptors = viewportDescriptors;
-			viewportDrawBatch.descriptorSetLayout = context->viewportDescriptorLayout;
+			viewportDrawBatch.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, viewportDrawBatch.material.material->descriptorLayouts.at(0));
+			writeUniform(context, &viewportDrawBatch.material, 0, 0, batch->window->uiData.buffer, sizeof(UIUniformData), 0);
+			writeUniform(context, &viewportDrawBatch.material, 0, 1, viewportDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * viewportDrawCommands.size(), 0);
+			writeUniform(context, &viewportDrawBatch.material, 0, 2, viewportTransformDataBuffer.buffer, sizeof(ViewportDrawData) * viewportDrawData.size(), 0);
 
 			windowBatch.drawBatches.push_back(viewportDrawBatch);
 
@@ -1056,24 +1189,18 @@ void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models
 	double genTime{};
 	for (auto model : models) {
 		auto start = std::chrono::high_resolution_clock::now();
-		// std::vector<Entity*> entities{};
-		// Entity_flattenHierarchy(model.root, glm::mat4{ 1.0f }, entities);
 
-		auto startGen = std::chrono::high_resolution_clock::now();
 		DrawBatch opaque{ .type = DrawBatchType::MESH_BATCH };
 		opaque.meshBuffers = model.modelBuffers;
-		opaque.pipeline = context->opaquePipeline.pipeline;
-		opaque.pipelineLayout = context->opaquePipeline.layout;
+		opaque.material = createMaterialInstance(&context->opaqueMaterial);
 
 		DrawBatch transparent{ .type = DrawBatchType::MESH_BATCH };
 		transparent.meshBuffers = model.modelBuffers;
-		transparent.pipeline = context->transparentPipeline.pipeline;
-		transparent.pipelineLayout = context->transparentPipeline.layout;
+		transparent.material = createMaterialInstance(&context->transparentMaterial);
 
 		DrawBatch doubleSided{ .type = DrawBatchType::MESH_BATCH };
 		doubleSided.meshBuffers = model.modelBuffers;
-		doubleSided.pipeline = context->doubleSidedPipeline.pipeline;
-		doubleSided.pipelineLayout = context->doubleSidedPipeline.layout;
+		doubleSided.material = createMaterialInstance(&context->doubleSidedMaterial);
 
 		auto opaqueCommands = std::vector<MeshIndirectCommand>();
 		auto doubleSidedCommands = std::vector<MeshIndirectCommand>();
@@ -1151,15 +1278,29 @@ void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models
 		auto transparentDrawsDataBuffer = createBuffer("meshTransformBuffer Transparent", sizeof(MeshDraw) * transparentDraws.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		memcpy(transparentDrawsDataBuffer.info.pMappedData, transparentDraws.data(), sizeof(MeshDraw) * transparentDraws.size());
 
-		std::vector<DrawBatchDescriptor> doubleSidedDescriptors;
-		doubleSidedDescriptors.emplace_back(0, context->globalMaterialDataBuffer, sizeof(MaterialData) * MaterialCache_size(context->materialCache), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		doubleSidedDescriptors.emplace_back(1, meshIndirectDoubleSidedCommandsBuffer, sizeof(MeshIndirectCommand) * doubleSidedCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		doubleSidedDescriptors.emplace_back(2, doubleSidedDrawsDataBuffer, sizeof(MeshDraw) * doubleSidedDraws.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		// Create buffer for global scene data
+		AllocatedBuffer gpuSceneDataBuffer = createBuffer("gpuSceneDataBuffer", sizeof(GPUSceneData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		memcpy(gpuSceneDataBuffer.info.pMappedData, &context->sceneData, sizeof(GPUSceneData));
 
-		std::vector<DrawBatchDescriptor> transparentDescriptors;
-		transparentDescriptors.emplace_back(0, context->globalMaterialDataBuffer, sizeof(MaterialData) * MaterialCache_size(context->materialCache), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		transparentDescriptors.emplace_back(1, meshIndirectTransparentCommandsBuffer, sizeof(MeshIndirectCommand) * transparentCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		transparentDescriptors.emplace_back(2, transparentDrawsDataBuffer, sizeof(MeshDraw) * transparentDraws.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		getCurrentFrame(context).deletionQueue.push([gpuSceneDataBuffer, context]() {
+			destroyBuffer(context->vmaAllocator, gpuSceneDataBuffer);
+		});
+
+		doubleSided.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, doubleSided.material.material->descriptorLayouts.at(0));
+		writeUniform(context, &doubleSided.material, 0, 0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0);
+
+		doubleSided.material.descriptorSets.at(2) = getCurrentFrame(context).frameDescriptor.allocate(context->device, doubleSided.material.material->descriptorLayouts.at(2));
+		writeUniform(context, &doubleSided.material, 2, 0, context->globalMaterialDataBuffer.buffer, sizeof(MaterialData) * MaterialCache_size(context->materialCache), 0);
+		writeUniform(context, &doubleSided.material, 2, 1, meshIndirectDoubleSidedCommandsBuffer.buffer, sizeof(MeshIndirectCommand) * doubleSidedCommands.size(), 0);
+		writeUniform(context, &doubleSided.material, 2, 2, doubleSidedDrawsDataBuffer.buffer, sizeof(MeshDraw) * doubleSidedDraws.size(), 0);
+
+		transparent.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, transparent.material.material->descriptorLayouts.at(0));
+		writeUniform(context, &transparent.material, 0, 0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0);
+
+		transparent.material.descriptorSets.at(2) = getCurrentFrame(context).frameDescriptor.allocate(context->device, transparent.material.material->descriptorLayouts.at(2));
+		writeUniform(context, &transparent.material, 2, 0, context->globalMaterialDataBuffer.buffer, sizeof(MaterialData) * MaterialCache_size(context->materialCache), 0);
+		writeUniform(context, &transparent.material, 2, 1, meshIndirectTransparentCommandsBuffer.buffer, sizeof(MeshIndirectCommand) * transparentCommands.size(), 0);
+		writeUniform(context, &transparent.material, 2, 2, transparentDrawsDataBuffer.buffer, sizeof(MeshDraw) * transparentDraws.size(), 0);
 
 		transparent.commands = {
 			.buffer = meshIndirectTransparentCommandsBuffer,
@@ -1167,8 +1308,6 @@ void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models
 			.size = static_cast<uint32_t>(transparentCommands.size()),
 			.stride = sizeof(MeshIndirectCommand)
 		};
-		transparent.descriptors = transparentDescriptors;
-		transparent.descriptorSetLayout = context->modelDrawDescriptorLayout;
 
 		doubleSided.commands = {
 			.buffer = meshIndirectDoubleSidedCommandsBuffer,
@@ -1176,8 +1315,6 @@ void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models
 			.size = static_cast<uint32_t>(doubleSidedCommands.size()),
 			.stride = sizeof(MeshIndirectCommand)
 		};
-		doubleSided.descriptors = doubleSidedDescriptors;
-		doubleSided.descriptorSetLayout = context->modelDrawDescriptorLayout;
 
 		if (opaqueCommands.size() > 0) {
 			auto meshIndirectOpaqueCommandsBuffer = createBuffer("meshDrawCommandsBuffer Opaque", sizeof(MeshIndirectCommand) * opaqueCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
@@ -1186,10 +1323,13 @@ void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models
 			auto opaqueDrawsDataBuffer = createBuffer("meshTransformBuffer Opaque", sizeof(MeshDraw) * opaqueDraws.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 			memcpy(opaqueDrawsDataBuffer.info.pMappedData, opaqueDraws.data(), sizeof(MeshDraw) * opaqueDraws.size());
 
-			std::vector<DrawBatchDescriptor> opaqueDescriptors;
-			opaqueDescriptors.emplace_back(0, context->globalMaterialDataBuffer, sizeof(MaterialData) * MaterialCache_size(context->materialCache), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-			opaqueDescriptors.emplace_back(1, meshIndirectOpaqueCommandsBuffer, sizeof(MeshIndirectCommand) * opaqueCommands.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-			opaqueDescriptors.emplace_back(2, opaqueDrawsDataBuffer, sizeof(MeshDraw) * opaqueDraws.size(), 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+			opaque.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, opaque.material.material->descriptorLayouts.at(0));
+			writeUniform(context, &opaque.material, 0, 0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0);
+
+			opaque.material.descriptorSets.at(2) = getCurrentFrame(context).frameDescriptor.allocate(context->device, opaque.material.material->descriptorLayouts.at(2));
+			writeUniform(context, &opaque.material, 2, 0, context->globalMaterialDataBuffer.buffer, sizeof(MaterialData) * MaterialCache_size(context->materialCache), 0);
+			writeUniform(context, &opaque.material, 2, 1, meshIndirectOpaqueCommandsBuffer.buffer, sizeof(MeshIndirectCommand) * opaqueCommands.size(), 0);
+			writeUniform(context, &opaque.material, 2, 2, opaqueDrawsDataBuffer.buffer, sizeof(MeshDraw) * opaqueDraws.size(), 0);
 
 			opaque.commands = {
 				.buffer = meshIndirectOpaqueCommandsBuffer,
@@ -1197,8 +1337,6 @@ void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models
 				.size = static_cast<uint32_t>(opaqueCommands.size()),
 				.stride = sizeof(MeshIndirectCommand)
 			};
-			opaque.descriptors = opaqueDescriptors;
-			opaque.descriptorSetLayout = context->modelDrawDescriptorLayout;
 
 			getCurrentFrame(context).drawBatches.push_back(opaque);
 
@@ -1267,6 +1405,7 @@ void rendererDraw(VulkanRendererContext* context) {
 	vkCmdResetQueryPool(commandBuffer, context->timestampPool, 0, 128);
 	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, context->timestampPool, 0);
 
+	/*
 	// transition GBuffer targets so compute can write to them
 	transitionImage(commandBuffer, context->gbuffer.albedo.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	transitionImage(commandBuffer, context->gbuffer.irradiance.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
@@ -1295,6 +1434,7 @@ void rendererDraw(VulkanRendererContext* context) {
 		&range);
 
 	drawToGBuffer(context, commandBuffer);
+	*/
 
 	// transition render targets into correct layouts
 	for (auto& window : PrimalEngine::get().windows) {
@@ -1308,10 +1448,12 @@ void rendererDraw(VulkanRendererContext* context) {
 	vkCmdResetQueryPool(commandBuffer, context->pipelineStatisticsPool, 0, 1);
 	vkCmdBeginQuery(commandBuffer, context->pipelineStatisticsPool, 0, 0);
 
-	// drawGeometry(context, commandBuffer);
+	drawGeometry(context, commandBuffer);
 	// drawTerrain(context, commandBuffer);
+	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	// blit gbuffer to sceneDrawImage
+	/*
 	transitionImage(commandBuffer, context->gbuffer.albedo.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	transitionImage(commandBuffer, context->gbuffer.irradiance.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	transitionImage(commandBuffer, context->gbuffer.depth.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -1320,6 +1462,7 @@ void rendererDraw(VulkanRendererContext* context) {
 	blitGBuffer(context, commandBuffer);
 
 	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	*/
 
 	drawUI(context, commandBuffer);
 
@@ -1495,24 +1638,14 @@ void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 		for (auto& drawBatch : windowBatch.drawBatches) {
-			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipeline);
+			auto materialInstance = drawBatch.material;
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, materialInstance.material->pipeline);
 
-			VkDescriptorSet drawBatchDescriptor = getCurrentFrame(context).frameDescriptor.allocate(context->device, drawBatch.descriptorSetLayout);
-			DescriptorWriter drawBatchDescriptorWriter;
-			for (auto& descriptor : drawBatch.descriptors) {
-				drawBatchDescriptorWriter.writeBuffer(descriptor.binding, descriptor.buffer.buffer, descriptor.size, descriptor.offset, descriptor.type);
-			}
-			for (auto& descriptor : drawBatch.imageDescriptors) {
-				drawBatchDescriptorWriter.writeImage(descriptor.binding, descriptor.imageView, descriptor.sampler, descriptor.imageLayout, descriptor.type);
-			}
-			drawBatchDescriptorWriter.updateSet(context->device, drawBatchDescriptor);
+			for (uint32_t i = 0; i < materialInstance.material->layouts.size(); ++i) {
+				auto layout = materialInstance.material->layouts.at(i);
+				auto instanceDescriptorSet = materialInstance.descriptorSets.at(i);
 
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 0, 1, &drawBatchDescriptor, 0, nullptr);
-
-			// Bind global viewport texture descriptor set
-			// TODO(piero): The batch should include information about the global descriptor sets
-			if (drawBatch.type == DrawBatchType::VIEWPORT_BATCH) {
-				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 1, 1, &context->viewportTextureDescriptorSet, 0, nullptr);
+				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, materialInstance.material->pipelineLayout, layout.set, 1, &instanceDescriptorSet, 0, nullptr);
 			}
 
 			// TODO: Should be included as part of a Batch
@@ -1522,7 +1655,7 @@ void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
 			uiPushConstants.screenHeight = static_cast<float>(extent.height);
 
 			vkCmdBindIndexBuffer(commandBuffer, drawBatch.meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-			vkCmdPushConstants(commandBuffer, drawBatch.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
+			vkCmdPushConstants(commandBuffer, materialInstance.material->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(UIPushConstants), &uiPushConstants);
 			vkCmdDrawIndexedIndirect(commandBuffer, drawBatch.commands.buffer.buffer, drawBatch.commands.offset, drawBatch.commands.size, drawBatch.commands.stride);
 		}
 
@@ -1651,9 +1784,9 @@ void drawGeometry(VulkanRendererContext* context, VkCommandBuffer commandBuffer)
 
 	auto start = std::chrono::system_clock::now();
 
-	// VkClearValue clearColor{ .color = { 0.0f, 0.0f, 0.0f, 1.0f } };
+	VkClearValue clearColor{ .color = { 0.0f, 0.0f, 0.0f, 1.0f } };
 
-	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(context->sceneDrawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	VkRenderingAttachmentInfo colorAttachment = attachmentInfo(context->sceneDrawImage.imageView, &clearColor, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(context->sceneDepthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
 	VkRenderingInfo renderInfo = renderingInfo({ .extent = { .width = context->sceneDrawImage.imageExtent.width, .height = context->sceneDrawImage.imageExtent.height } }, &colorAttachment, &depthAttachment);
@@ -1675,49 +1808,22 @@ void drawGeometry(VulkanRendererContext* context, VkCommandBuffer commandBuffer)
 	scissor.extent.height = context->sceneDrawImage.imageExtent.height;
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-	// allocate a new uniform buffer for the scene data
-	// This should be deleted each frame.
-	AllocatedBuffer gpuSceneDataBuffer = createBuffer("gpuSceneDataBuffer", sizeof(GPUSceneData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-
-	// write the buffer
-	void* sceneUniformData{};
-	memcpy(gpuSceneDataBuffer.info.pMappedData, &context->sceneData, sizeof(GPUSceneData));
-
-	// Create global sceneData descriptor
-	VkDescriptorSet globalDescriptor = getCurrentFrame(context).frameDescriptor.allocate(context->device, context->gpuSceneDataDescriptorLayout);
-
-	getCurrentFrame(context).deletionQueue.push([gpuSceneDataBuffer, context]() {
-		destroyBuffer(context->vmaAllocator, gpuSceneDataBuffer);
-	});
-
-	{
-		DescriptorWriter writer;
-		writer.writeBuffer(0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-		writer.updateSet(context->device, globalDescriptor);
-	}
-
 	uint32_t drawCallCount{};
 
 	// Process this frames draw batches
 	for (auto& drawBatch : getCurrentFrame(context).drawBatches) {
 		drawCallCount += drawBatch.commands.size;
 
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipeline);
+		auto materialInstance = drawBatch.material;
 
-		VkDescriptorSet drawBatchDescriptor = getCurrentFrame(context).frameDescriptor.allocate(context->device, drawBatch.descriptorSetLayout);
-		DescriptorWriter drawBatchDescriptorWriter;
-		for (auto& descriptor : drawBatch.descriptors) {
-			drawBatchDescriptorWriter.writeBuffer(descriptor.binding, descriptor.buffer.buffer, descriptor.size, descriptor.offset, descriptor.type);
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, materialInstance.material->pipeline);
+
+		for (uint32_t i = 0; i < materialInstance.material->layouts.size(); ++i) {
+			auto layout = materialInstance.material->layouts.at(i);
+			auto instanceDescriptorSet = materialInstance.descriptorSets.at(i);
+
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, materialInstance.material->pipelineLayout, layout.set, 1, &instanceDescriptorSet, 0, nullptr);
 		}
-		drawBatchDescriptorWriter.updateSet(context->device, drawBatchDescriptor);
-
-		// Global descriptor sets. Bindings 0 and 1 are reserved.
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 0, 1, &globalDescriptor, 0, nullptr);
-		// TODO: This might not need to be global.
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 1, 1, &context->bindlessTexturesDescriptorSet, 0, nullptr);
-
-		// Draw batch specific descriptor set
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, drawBatch.pipelineLayout, 2, 1, &drawBatchDescriptor, 0, nullptr);
 
 		// TODO: Should be included as part of a Batch
 		GPUDrawPushConstants pushConstants{};
@@ -1725,7 +1831,7 @@ void drawGeometry(VulkanRendererContext* context, VkCommandBuffer commandBuffer)
 		pushConstants.viewPosition = glm::vec4(context->rendererState->mainCamera->position, 1.0f);
 
 		vkCmdBindIndexBuffer(commandBuffer, drawBatch.meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdPushConstants(commandBuffer, drawBatch.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+		vkCmdPushConstants(commandBuffer, materialInstance.material->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 		vkCmdDrawIndexedIndirect(commandBuffer, drawBatch.commands.buffer.buffer, drawBatch.commands.offset, drawBatch.commands.size, drawBatch.commands.stride);
 	}
 
@@ -1765,20 +1871,11 @@ void initDescriptors(VulkanRendererContext* context) {
 		writer.updateSet(context->device, context->drawImageDescriptors);
 	}
 
-	// Vertex/Fragment UBO
+	// Global UBO
 	{
 		DescriptorLayoutBuilder builder;
 		builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 		context->gpuSceneDataDescriptorLayout = builder.build(context->device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT);
-	}
-
-	// Model Draw SSBO
-	{
-		DescriptorLayoutBuilder builder;
-		builder.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		builder.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		builder.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		context->modelDrawDescriptorLayout = builder.build(context->device);
 	}
 
 	// Terrain
@@ -1792,7 +1889,6 @@ void initDescriptors(VulkanRendererContext* context) {
 	context->mainDeletionQueue.push([context]() {
 		vkDestroyDescriptorSetLayout(context->device, context->drawImageDescriptorLayout, nullptr);
 		vkDestroyDescriptorSetLayout(context->device, context->gpuSceneDataDescriptorLayout, nullptr);
-		vkDestroyDescriptorSetLayout(context->device, context->modelDrawDescriptorLayout, nullptr);
 		vkDestroyDescriptorSetLayout(context->device, context->voxelDescriptorLayout, nullptr);
 	});
 
@@ -1812,53 +1908,13 @@ void initDescriptors(VulkanRendererContext* context) {
 			frame.frameDescriptor.destroyPools(context->device);
 		});
 	}
-
-	{
-		DescriptorLayoutBuilder builder;
-		builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		builder.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-		builder.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-		builder.addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-		context->fontDescriptorLayout = builder.build(context->device);
-	}
-
-	context->mainDeletionQueue.push([context]() {
-		vkDestroyDescriptorSetLayout(context->device, context->fontDescriptorLayout, nullptr);
-	});
-
-	// Viewport
-	{
-		DescriptorLayoutBuilder builder;
-		builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-		builder.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-		builder.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		builder.addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-		context->viewportDescriptorLayout = builder.build(context->device);
-	}
-
-	context->mainDeletionQueue.push([context]() {
-		vkDestroyDescriptorSetLayout(context->device, context->viewportDescriptorLayout, nullptr);
-	});
-
-	{
-		DescriptorLayoutBuilder builder;
-		builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		builder.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-		builder.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		builder.addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
-		context->uiDescriptorLayout = builder.build(context->device);
-	}
-
-	context->mainDeletionQueue.push([context]() {
-		vkDestroyDescriptorSetLayout(context->device, context->uiDescriptorLayout, nullptr);
-	});
 }
 
 void initPipelines(VulkanRendererContext* context) {
 	VkPipelineCacheCreateInfo cacheCreateInfo{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO };
 	vkCreatePipelineCache(context->device, &cacheCreateInfo, nullptr, &context->pipelineCache);
 
-	buildDefaultPipelines(context);
+	initMeshPipelines(context);
 	initUIPipeline(context);
 	initFontPipeline(context);
 	initViewportPipeline(context);
@@ -1866,172 +1922,33 @@ void initPipelines(VulkanRendererContext* context) {
 }
 
 void initUIPipeline(VulkanRendererContext* context) {
-	VkShaderModule uiFragShader{};
-	if (!loadShaderModule("res/shaders/ui.frag.spv", context->device, &uiFragShader)) {
-		std::cout << std::format("Error when building the UI fragment shader module\n");
-	}
-
-	VkShaderModule uiVertexShader{};
-	if (!loadShaderModule("res/shaders/ui.vert.spv", context->device, &uiVertexShader)) {
-		std::cout << std::format("Error when building the UI vertex shader module\n");
-	}
-
-	VkDescriptorSetLayout layouts[] = {
-		context->uiDescriptorLayout
-	};
-
-	VkPushConstantRange pushConstantRange{};
-	pushConstantRange.offset = 0;
-	pushConstantRange.size = sizeof(UIPushConstants);
-	pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-	VkPipelineLayoutCreateInfo uiLayoutInfo = pipelineLayoutCreateInfo();
-	uiLayoutInfo.pPushConstantRanges = &pushConstantRange;
-	uiLayoutInfo.pushConstantRangeCount = 1;
-	uiLayoutInfo.setLayoutCount = 1;
-	uiLayoutInfo.pSetLayouts = layouts;
-
-	VK_CHECK(vkCreatePipelineLayout(context->device, &uiLayoutInfo, nullptr, &context->uiPipelineLayout));
+	context->uiMaterial = createMaterial(context, "res/materials/UI.Default.json");
 
 	context->mainDeletionQueue.push([context]() {
-		vkDestroyPipelineLayout(context->device, context->uiPipelineLayout, nullptr);
+		destroyMaterial(context, context->uiMaterial);
 	});
-
-	PipelineBuilder pipelineBuilder;
-	pipelineBuilder.setPipelineLayout(context->uiPipelineLayout);
-	pipelineBuilder.setShaders(uiVertexShader, uiFragShader);
-	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
-	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-	pipelineBuilder.setMultisamplingNone();
-	pipelineBuilder.enableBackgroundBlending();
-	pipelineBuilder.disableDepthTest();
-
-	pipelineBuilder.setColorAttachmentFormat(context->rendererState->window->renderTarget.imageFormat);
-	pipelineBuilder.setDepthFormat(context->rendererState->window->depthTarget.imageFormat);
-
-	context->uiPipeline = pipelineBuilder.buildPipeline(context->device, context->pipelineCache);
-
-	context->mainDeletionQueue.push([context]() {
-		vkDestroyPipeline(context->device, context->uiPipeline, nullptr);
-	});
-
-	vkDestroyShaderModule(context->device, uiFragShader, nullptr);
-	vkDestroyShaderModule(context->device, uiVertexShader, nullptr);
 }
 
 void initViewportPipeline(VulkanRendererContext* context) {
-	VkShaderModule viewportFragShader{};
-	if (!loadShaderModule("res/shaders/ui_texture.frag.spv", context->device, &viewportFragShader)) {
-		std::cout << std::format("Error when building the viewport fragment shader module") << '\n';
-	}
+	context->uiViewportMaterial = createMaterial(context, "res/materials/UIViewport.Default.json");
 
-	VkShaderModule viewportVertexShader{};
-	if (!loadShaderModule("res/shaders/ui_texture.vert.spv", context->device, &viewportVertexShader)) {
-		std::cout << std::format("Error when building the viewport vertex shader module") << '\n';
-	}
-
-	VkDescriptorSetLayout layouts[] = {
-		context->viewportDescriptorLayout,
-		context->viewportTextureSetLayout
-	};
-
-	VkPushConstantRange pushConstantRange{};
-	pushConstantRange.offset = 0;
-	pushConstantRange.size = sizeof(UIPushConstants);
-	pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-	VkPipelineLayoutCreateInfo viewportLayoutInfo = pipelineLayoutCreateInfo();
-	viewportLayoutInfo.pPushConstantRanges = &pushConstantRange;
-	viewportLayoutInfo.pushConstantRangeCount = 1;
-	viewportLayoutInfo.setLayoutCount = 2;
-	viewportLayoutInfo.pSetLayouts = layouts;
-
-	VK_CHECK(vkCreatePipelineLayout(context->device, &viewportLayoutInfo, nullptr, &context->viewportPipelineLayout));
+	// TODO(piero): This material has a bindless texture buffer. Because of the way the system works now, we need a material instance to be able to write to a descriptor set,
+	//              even though the material already holds a descriptor set (since `createMaterial` initializes any "global" descriptor sets needed when creating the material)
+	//              Should we allow writing to base materials? This would work because when creating an instance, we copy over any existing descriptor sets, so all instances of the
+	//              material would just share the same set (and the layout of course). Which seems to be exactly what we want since its a "global" texture array for this material.
+	context->uiViewportMaterialInstance = createMaterialInstance(&context->uiViewportMaterial);
 
 	context->mainDeletionQueue.push([context]() {
-		vkDestroyPipelineLayout(context->device, context->viewportPipelineLayout, nullptr);
+		destroyMaterial(context, context->uiViewportMaterial);
 	});
-
-	PipelineBuilder pipelineBuilder;
-	pipelineBuilder.setPipelineLayout(context->viewportPipelineLayout);
-	pipelineBuilder.setShaders(viewportVertexShader, viewportFragShader);
-	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
-	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-	pipelineBuilder.setMultisamplingNone();
-	pipelineBuilder.disableBlending();
-	pipelineBuilder.disableDepthTest();
-
-	// TODO(piero): This is wrong. This works right now because all viewports use the same formats for color and depth.
-	//              We should set this dynamically and create a pipeline for each color/depth combination.
-	//              I don't think we are going to use different formats for now but still good to keep this in mind.
-	pipelineBuilder.setColorAttachmentFormat(context->rendererState->window->renderTarget.imageFormat);
-	pipelineBuilder.setDepthFormat(context->rendererState->window->depthTarget.imageFormat);
-
-	context->viewportPipeline = pipelineBuilder.buildPipeline(context->device, context->pipelineCache);
-
-	context->mainDeletionQueue.push([context]() {
-		vkDestroyPipeline(context->device, context->viewportPipeline, nullptr);
-	});
-
-	vkDestroyShaderModule(context->device, viewportFragShader, nullptr);
-	vkDestroyShaderModule(context->device, viewportVertexShader, nullptr);
 }
 
 void initFontPipeline(VulkanRendererContext* context) {
-	VkShaderModule fontFragShader{};
-	if (!loadShaderModule("res/shaders/sdf_text.frag.spv", context->device, &fontFragShader)) {
-		std::cout << std::format("Error when building the font fragment shader module") << '\n';
-	}
-
-	VkShaderModule fontVertexShader{};
-	if (!loadShaderModule("res/shaders/sdf_text.vert.spv", context->device, &fontVertexShader)) {
-		std::cout << std::format("Error when building the font vertex shader module") << '\n';
-	}
-
-	VkDescriptorSetLayout layouts[] = {
-		context->fontDescriptorLayout
-	};
-
-	VkPushConstantRange pushConstantRange{};
-	pushConstantRange.offset = 0;
-	pushConstantRange.size = sizeof(UIPushConstants);
-	pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-	VkPipelineLayoutCreateInfo fontLayoutInfo = pipelineLayoutCreateInfo();
-	fontLayoutInfo.pPushConstantRanges = &pushConstantRange;
-	fontLayoutInfo.pushConstantRangeCount = 1;
-	fontLayoutInfo.setLayoutCount = 1;
-	fontLayoutInfo.pSetLayouts = layouts;
-
-	VK_CHECK(vkCreatePipelineLayout(context->device, &fontLayoutInfo, nullptr, &context->fontPipelineLayout));
+	context->uiTextMaterial = createMaterial(context, "res/materials/UIText.Default.json");
 
 	context->mainDeletionQueue.push([context]() {
-		vkDestroyPipelineLayout(context->device, context->fontPipelineLayout, nullptr);
+		destroyMaterial(context, context->uiTextMaterial);
 	});
-
-	PipelineBuilder pipelineBuilder;
-	pipelineBuilder.setPipelineLayout(context->fontPipelineLayout);
-	pipelineBuilder.setShaders(fontVertexShader, fontFragShader);
-	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
-	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-	pipelineBuilder.setMultisamplingNone();
-	pipelineBuilder.enableBlendingAlphablend();
-	pipelineBuilder.disableDepthTest();
-
-	pipelineBuilder.setColorAttachmentFormat(context->rendererState->window->renderTarget.imageFormat);
-	pipelineBuilder.setDepthFormat(context->rendererState->window->depthTarget.imageFormat);
-
-	context->fontPipeline = pipelineBuilder.buildPipeline(context->device, context->pipelineCache);
-
-	context->mainDeletionQueue.push([context]() {
-		vkDestroyPipeline(context->device, context->fontPipeline, nullptr);
-	});
-
-	vkDestroyShaderModule(context->device, fontFragShader, nullptr);
-	vkDestroyShaderModule(context->device, fontVertexShader, nullptr);
 }
 
 void initVoxelPipeline(VulkanRendererContext* context) {
@@ -2115,8 +2032,10 @@ void immediateSubmit(VulkanRendererContext* context, std::function<void(VkComman
 	VK_CHECK(vkWaitForFences(context->device, 1, &context->immFence, true, 9999999999));
 }
 
-void initBindlessTextureDescriptor(VulkanRendererContext* context, VkDescriptorPool& pool, VkDescriptorSetLayout& descriptorSetLayout, VkDescriptorSet& descriptorSet) {
+void initBindlessTextureDescriptor(VulkanRendererContext* context, VkDescriptorSetLayout& descriptorSetLayout, VkDescriptorSet& descriptorSet) {
 	constexpr uint32_t maxBindlessTextureResources = 1000;
+
+	VkDescriptorPool pool{};
 
 	VkDescriptorPoolSize poolSizesBindless[] = {
 		{ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = maxBindlessTextureResources }
@@ -2139,16 +2058,16 @@ void initBindlessTextureDescriptor(VulkanRendererContext* context, VkDescriptorP
 	layoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 	layoutBinding.pImmutableSamplers = nullptr;
 
-	VkDescriptorSetLayoutBindingFlagsCreateInfo extended_info{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO, nullptr };
-	extended_info.bindingCount = 1;
-	extended_info.pBindingFlags = &bindlessFlags;
+	VkDescriptorSetLayoutBindingFlagsCreateInfo extendedInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO, nullptr };
+	extendedInfo.bindingCount = 1;
+	extendedInfo.pBindingFlags = &bindlessFlags;
 
 	VkDescriptorSetLayoutCreateInfo bindlessTextureLayoutInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
 	bindlessTextureLayoutInfo.bindingCount = 1;
 	bindlessTextureLayoutInfo.pBindings = &layoutBinding;
 	bindlessTextureLayoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 
-	bindlessTextureLayoutInfo.pNext = &extended_info;
+	bindlessTextureLayoutInfo.pNext = &extendedInfo;
 
 	vkCreateDescriptorSetLayout(context->device, &bindlessTextureLayoutInfo, nullptr, &descriptorSetLayout);
 
@@ -2165,103 +2084,21 @@ void initBindlessTextureDescriptor(VulkanRendererContext* context, VkDescriptorP
 
 	VK_CHECK(vkAllocateDescriptorSets(context->device, &setAllocateInfo, &descriptorSet));
 
-	context->mainDeletionQueue.push([context, descriptorSetLayout, pool]() {
-		vkDestroyDescriptorSetLayout(context->device, descriptorSetLayout, nullptr);
+	context->mainDeletionQueue.push([context, pool]() {
 		vkDestroyDescriptorPool(context->device, pool, nullptr);
 	});
 }
 
-void buildDefaultPipelines(VulkanRendererContext* context) {
-	VkShaderModule meshFragShader{};
-	if (!loadShaderModule("res/shaders/mesh.frag.spv", context->device, &meshFragShader)) {
-		std::cout << std::format("Error when building the mesh fragment shader module") << '\n';
-	}
+void initMeshPipelines(VulkanRendererContext* context) {
+	context->opaqueMaterial = createMaterial(context, "res/materials/Mesh_Opaque.Default.json", true);
+	context->doubleSidedMaterial = createMaterial(context, "res/materials/Mesh_DoubleSided.Default.json", true);
+	context->transparentMaterial = createMaterial(context, "res/materials/Mesh_Transparent.Default.json", true);
 
-	VkShaderModule meshVertexShader{};
-	if (!loadShaderModule("res/shaders/mesh.vert.spv", context->device, &meshVertexShader)) {
-		std::cout << std::format("Error when building the mesh vertex shader module") << '\n';
-	}
-
-	VkPushConstantRange meshPushConstants{};
-	meshPushConstants.offset = 0;
-	meshPushConstants.size = sizeof(GPUDrawPushConstants);
-	meshPushConstants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-
-	std::array<VkDescriptorSetLayout, 3> layouts = {
-		context->gpuSceneDataDescriptorLayout,
-		context->bindlessTexturesSetLayout,
-		context->modelDrawDescriptorLayout
-	};
-
-	VkPipelineLayoutCreateInfo meshLayoutInfo = pipelineLayoutCreateInfo();
-	meshLayoutInfo.pPushConstantRanges = &meshPushConstants;
-	meshLayoutInfo.pushConstantRangeCount = 1;
-	meshLayoutInfo.setLayoutCount = layouts.size();
-	meshLayoutInfo.pSetLayouts = layouts.data();
-
-	VkPipelineLayout newLayout{};
-	VK_CHECK(vkCreatePipelineLayout(context->device, &meshLayoutInfo, nullptr, &newLayout));
-
-	context->opaquePipeline.layout = newLayout;
-	context->transparentPipeline.layout = newLayout;
-	context->doubleSidedPipeline.layout = newLayout;
-
-	context->mainDeletionQueue.push([context, newLayout]() {
-		vkDestroyPipelineLayout(context->device, newLayout, nullptr);
+	context->mainDeletionQueue.push([context]() {
+		destroyMaterial(context, context->opaqueMaterial);
+		destroyMaterial(context, context->doubleSidedMaterial);
+		destroyMaterial(context, context->transparentMaterial);
 	});
-
-	// build the stage-create-info for both vertex and fragment stages. This lets
-	// the pipeline know the shader modules per stage
-	PipelineBuilder pipelineBuilder;
-	pipelineBuilder.setPipelineLayout(newLayout);
-	pipelineBuilder.setShaders(meshVertexShader, meshFragShader);
-	pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
-	pipelineBuilder.setCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
-	pipelineBuilder.setMultisamplingNone();
-	pipelineBuilder.disableBlending();
-	pipelineBuilder.enableDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-
-	// render format
-	pipelineBuilder.setColorAttachmentFormat(context->sceneDrawImage.imageFormat);
-	pipelineBuilder.setDepthFormat(context->sceneDepthImage.imageFormat);
-
-	// build opaque pipeline
-	context->opaquePipeline.pipeline = pipelineBuilder.buildPipeline(context->device, context->pipelineCache);
-
-	// create the double sided variant
-	pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-	context->doubleSidedPipeline.pipeline = pipelineBuilder.buildPipeline(context->device, context->pipelineCache);
-
-	// create the alpha blending variant
-	pipelineBuilder.enableBlendingAlphablend();
-	context->transparentPipeline.pipeline = pipelineBuilder.buildPipeline(context->device, context->pipelineCache);
-
-	context->mainDeletionQueue.push([context] {
-		vkDestroyPipeline(context->device, context->opaquePipeline.pipeline, nullptr);
-		vkDestroyPipeline(context->device, context->doubleSidedPipeline.pipeline, nullptr);
-		vkDestroyPipeline(context->device, context->transparentPipeline.pipeline, nullptr);
-	});
-
-	vkDestroyShaderModule(context->device, meshFragShader, nullptr);
-	vkDestroyShaderModule(context->device, meshVertexShader, nullptr);
-}
-
-void writeBindlessTextureToGlobalDescriptor(VulkanRendererContext* context, VkDescriptorSet bindlessTextureSet, uint32_t binding, AllocatedImage& image, VkSampler sampler, uint32_t index) {
-	VkDescriptorImageInfo imageInfo = {};
-	imageInfo.imageView = image.imageView;
-	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	imageInfo.sampler = sampler;
-
-	VkWriteDescriptorSet write = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-	write.dstSet = bindlessTextureSet;
-	write.dstBinding = binding;
-	write.dstArrayElement = index;
-	write.descriptorCount = 1;
-	write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	write.pImageInfo = &imageInfo;
-
-	vkUpdateDescriptorSets(context->device, 1, &write, 0, nullptr);
 }
 
 void updateScene(VulkanRendererContext* context, float deltaTime) {
@@ -2324,7 +2161,7 @@ void updateUIData(VulkanRendererContext* context) {
 		auto h = static_cast<float>(window.height);
 		uiUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
 
-		memcpy(window.uiData.info.pMappedData, &uiUniformData, sizeof(FontUniformData));
+		memcpy(window.uiData.info.pMappedData, &uiUniformData, sizeof(UIUniformData));
 	}
 
 	auto& rendererState = context->rendererState;
@@ -2553,7 +2390,8 @@ void initUI(VulkanRendererContext* context) {
 
 	// Register image to UI system
 	context->sceneTextureId = registerImage(context, &context->sceneDrawImage);
-	writeBindlessTextureToGlobalDescriptor(context, context->viewportTextureDescriptorSet, 0, context->sceneDrawImage, context->defaultSamplerLinear, context->sceneTextureId);
+
+	writeUniform(context, &context->uiViewportMaterialInstance, 1, 0, context->sceneDrawImage.imageView, context->defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, context->sceneTextureId);
 
 	for (auto& window : PrimalEngine::get().windows) {
 		window.uiData = createBuffer(std::format("uiUniformBuffer-{}", window.id), sizeof(UIUniformData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);

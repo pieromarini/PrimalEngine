@@ -1,0 +1,62 @@
+{
+  "name": "UIText.Default",
+	"pipeline": {
+		"type": "graphics",
+		"cull_mode": "none",
+		"front_face": "counter_clockwise",
+		"blend_mode": "alphablend",
+		"depth_test": false,
+		"shaders": [
+			{
+				"type": "vertex",
+				"path": "res/shaders/sdf_text.vert.spv"
+			},
+			{
+				"type": "fragment",
+				"path": "res/shaders/sdf_text.frag.spv"
+			}
+		]
+	},
+  "push_constants": {
+    "debug_name": "PushConstants",
+    "size_in_bytes": 16,
+    "stages": ["vertex"]
+  },
+  "layouts": [
+    {
+      "set": 0,
+      "bindings": [
+        {
+          "debug_name": "UBO",
+          "binding": 0,
+          "type": "uniform",
+          "readonly": false,
+          "size_in_bytes": 128,
+          "stages": ["vertex", "fragment"]
+        },
+				{
+          "debug_name": "MSDFTexture",
+          "binding": 1,
+          "type": "combined_image_sampler",
+          "stages": ["vertex", "fragment"]
+				},
+        {
+          "debug_name": "DrawCommands",
+          "binding": 2,
+          "type": "storage_array",
+          "readonly": true,
+          "size_in_bytes": 24,
+          "stages": ["vertex"]
+        },
+        {
+          "debug_name": "Transform",
+          "binding": 3,
+          "type": "storage_array",
+          "readonly": true,
+          "size_in_bytes": 64,
+          "stages": ["vertex"]
+        }
+      ]
+    }
+  ]
+}

@@ -222,6 +222,13 @@ std::optional<Model> loadGLTF(VulkanRendererContext* context, std::string_view f
 	// NOTE: Add new textures starting from 1. 0 is default texture
 	uint32_t bindlessTextureIndex = 1;
 	for (fastgltf::Material& mat : gltf.materials) {
+		MaterialPass passType = MaterialPass::MainColor;
+		if (mat.alphaMode == fastgltf::AlphaMode::Blend) {
+			passType = MaterialPass::Transparent;
+		} else if (mat.doubleSided) {
+			passType = MaterialPass::DoubleSided;
+		}
+
 		Material newMat{};
 		newMat.name = mat.name;
 
@@ -233,18 +240,22 @@ std::optional<Model> loadGLTF(VulkanRendererContext* context, std::string_view f
 		newMat.materialData.metalRoughFactors.x = mat.pbrData.metallicFactor;
 		newMat.materialData.metalRoughFactors.y = mat.pbrData.roughnessFactor;
 
-		MaterialPass passType = MaterialPass::MainColor;
-		if (mat.alphaMode == fastgltf::AlphaMode::Blend) {
-			passType = MaterialPass::Transparent;
-		} else if (mat.doubleSided) {
-			passType = MaterialPass::DoubleSided;
-		}
-
 		// Set textures to "Default"
 		newMat.materialData.albedoTexture = 0;
 		newMat.materialData.normalTexture = 0;
 		newMat.materialData.specularTexture = 0;
 		newMat.materialData.emissiveTexture = 0;
+
+		// build material
+		newMat.passType = passType;
+
+		if (passType == MaterialPass::Transparent) {
+			newMat.material = createMaterialInstance(&context->transparentMaterial);
+		} else if (passType == MaterialPass::DoubleSided) {
+			newMat.material = createMaterialInstance(&context->doubleSidedMaterial);
+		} else {
+			newMat.material = createMaterialInstance(&context->opaqueMaterial);
+		}
 
 		// grab textures from gltf file
 		// TODO: Set rest of the textures
@@ -264,23 +275,12 @@ std::optional<Model> loadGLTF(VulkanRendererContext* context, std::string_view f
 			auto imageSampler = model.images[img].sampler ? model.images[img].sampler : model.samplers[sampler];
 
 			// TODO: We are writing textures 1 by 1. We should batch these.
-			writeBindlessTextureToGlobalDescriptor(context, context->bindlessTexturesDescriptorSet, 0, model.images[img], imageSampler, bindlessTextureIndex);
+			writeUniform(context, &newMat.material, 1, 0, model.images[img].imageView, imageSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, bindlessTextureIndex);
 			bindlessTextureIndex++;
 		}
 
 		// write material data to buffer
 		sceneMaterialData[materialDataIndex] = newMat.materialData;
-
-		// build material
-		newMat.passType = passType;
-
-		if (passType == MaterialPass::Transparent) {
-			newMat.pipeline = &context->transparentPipeline;
-		} else if (passType == MaterialPass::DoubleSided) {
-			newMat.pipeline = &context->doubleSidedPipeline;
-		} else {
-			newMat.pipeline = &context->opaquePipeline;
-		}
 
 		model.materials.push_back(newMat);
 

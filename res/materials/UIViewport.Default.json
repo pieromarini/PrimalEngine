@@ -1,0 +1,71 @@
+{
+  "name": "UIViewport.Default",
+	"pipeline": {
+		"type": "graphics",
+		"cull_mode": "none",
+		"front_face": "counter_clockwise",
+		"blend_mode": "background",
+		"depth_test": false,
+		"shaders": [
+			{
+				"type": "vertex",
+				"path": "res/shaders/ui_texture.vert.spv"
+			},
+			{
+				"type": "fragment",
+				"path": "res/shaders/ui_texture.frag.spv"
+			}
+		]
+	},
+  "push_constants": {
+    "debug_name": "PushConstants",
+    "size_in_bytes": 16,
+    "stages": ["vertex"]
+  },
+  "layouts": [
+    {
+      "set": 0,
+      "bindings": [
+        {
+          "debug_name": "UBO",
+          "binding": 0,
+          "type": "uniform",
+          "readonly": false,
+          "size_in_bytes": 128,
+          "stages": ["vertex"]
+        },
+        {
+          "debug_name": "DrawCommands",
+          "binding": 1,
+          "type": "storage_array",
+          "readonly": true,
+          "size_in_bytes": 24,
+          "stages": ["vertex"]
+        },
+        {
+          "debug_name": "Draws",
+          "binding": 2,
+          "type": "storage_array",
+          "readonly": true,
+          "size_in_bytes": 80,
+          "stages": ["vertex", "fragment"]
+        }
+      ]
+    },
+		{
+			"set": 1,
+			"global": true,
+			"bindless_name": "BindlessViewportTextures",
+			"bindings": [
+				{
+					"debug_name": "viewportTextures",
+					"binding": 0,
+					"type": "bindless_image_samplers",
+					"readonly": false,
+					"sampler_type": "linear",
+					"stages": ["fragment"]
+				}
+			]
+		}
+  ]
+}

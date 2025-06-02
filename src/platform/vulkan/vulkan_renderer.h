@@ -2,13 +2,18 @@
 
 #include "assets/asset.h"
 #include "material.h"
+#include "renderer/material.h"
 #include "terrain/voxel.h"
 #include "vulkan_loader.h"
 #include <SDL3/SDL.h>
 #include <VkBootstrap.h>
+#include <string>
+#include <unordered_map>
+#include <utility>
 #include <vulkan/vulkan.h>
 
 #include <ranges>
+#include <vulkan/vulkan_core.h>
 
 #include "camera.h"
 #include "vk_types.h"
@@ -99,6 +104,9 @@ struct DrawBatch {
 	std::vector<DrawBatchDescriptor> descriptors{};
 	std::vector<DrawBatchImageDescriptor> imageDescriptors{};
 	GPUMeshBuffers meshBuffers{};
+
+	MaterialInstance material;
+
 	VkPipeline pipeline{};
 	VkPipelineLayout pipelineLayout{};
 	VkDescriptorSetLayout descriptorSetLayout{};
@@ -248,11 +256,7 @@ struct VulkanRendererContext {
 
 	// Descriptor set Layouts
 	VkDescriptorSetLayout gpuSceneDataDescriptorLayout{};
-	VkDescriptorSetLayout modelDrawDescriptorLayout{};
 	VkDescriptorSetLayout drawImageDescriptorLayout{};
-	VkDescriptorSetLayout viewportDescriptorLayout{};
-	VkDescriptorSetLayout fontDescriptorLayout{};
-	VkDescriptorSetLayout uiDescriptorLayout{};
 
 	// Descriptor sets
 	VkDescriptorSet drawImageDescriptors{};
@@ -262,11 +266,6 @@ struct VulkanRendererContext {
 	VkDescriptorPool bindlessPool;
 	VkDescriptorSetLayout bindlessTexturesSetLayout{};
 	VkDescriptorSet bindlessTexturesDescriptorSet{};
-
-	// Viewport textures
-	VkDescriptorPool viewportDescriptorPool{};
-	VkDescriptorSetLayout viewportTextureSetLayout{};
-	VkDescriptorSet viewportTextureDescriptorSet{};
 
 	// Viewport rendering
 	VkPipelineLayout viewportPipelineLayout{};
@@ -310,9 +309,9 @@ struct VulkanRendererContext {
 	AllocatedImage sourceCodeFontTexture{};
 
 	// Default 3d pipelines
-	MaterialPipeline opaquePipeline{};
-	MaterialPipeline transparentPipeline{};
-	MaterialPipeline doubleSidedPipeline{};
+	PrimalMaterial opaqueMaterial;
+	PrimalMaterial doubleSidedMaterial;
+	PrimalMaterial transparentMaterial;
 
 	// Storage
 	MaterialCache materialCache{};
@@ -342,6 +341,14 @@ struct VulkanRendererContext {
 	GPUMeshBuffers voxelMeshBuffers;
 	AllocatedBuffer voxelDrawCommandsBuffer;
 	uint32_t voxelDrawCommandsCount;
+
+	// Material test
+	PrimalMaterial uiMaterial;
+	PrimalMaterial uiViewportMaterial;
+	MaterialInstance uiViewportMaterialInstance;
+	PrimalMaterial uiTextMaterial;
+
+	std::unordered_map<std::string, std::pair<VkDescriptorSetLayout, VkDescriptorSet>> bindlessTextureArrays;
 
 	// GBuffer
 	GBuffer gbuffer;
@@ -393,7 +400,7 @@ void initQueryPools(VulkanRendererContext* context);
 
 void initFontData(VulkanRendererContext* context);
 void initUI(VulkanRendererContext* context);
-void initBindlessTextureDescriptor(VulkanRendererContext* context, VkDescriptorPool& pool, VkDescriptorSetLayout& descriptorSetLayout, VkDescriptorSet& descriptotSet);
+void initBindlessTextureDescriptor(VulkanRendererContext* context, VkDescriptorSetLayout& descriptorSetLayout, VkDescriptorSet& descriptotSet);
 
 void resizeSwapchain(VulkanRendererContext* context, PrimalWindow* window);
 void resizeRenderTargets(VulkanRendererContext* context);
@@ -403,11 +410,9 @@ void resizeRenderTargets(VulkanRendererContext* context);
 void initFontPipeline(VulkanRendererContext* context);
 void initViewportPipeline(VulkanRendererContext* context);
 void initUIPipeline(VulkanRendererContext* context);
-void buildDefaultPipelines(VulkanRendererContext* context);
+void initMeshPipelines(VulkanRendererContext* context);
 
 void initVoxelPipeline(VulkanRendererContext* context);
-
-void writeBindlessTextureToGlobalDescriptor(VulkanRendererContext* context, VkDescriptorSet bindlessTextureSet, uint32_t binding, AllocatedImage& image, VkSampler sampler, uint32_t index);
 
 GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<UI::UIVertex> vertices, std::string name);
 GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<Vertex> vertices, std::string name);
@@ -444,8 +449,13 @@ void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMou
 
 
 // Voxel stuff
-void initGBuffer(VulkanRendererContext* context);
+void setupVoxelRaycastRenderer(VulkanRendererContext* context);
 void createGBuffer(VulkanRendererContext* context);
 void destroyGBuffer(VulkanRendererContext* context);
+
+// Material stuff
+PrimalMaterial createMaterial(VulkanRendererContext* context, std::string_view materialConfig, bool flag = false);
+void destroyMaterial(VulkanRendererContext* context, PrimalMaterial& material);
+
 
 }// namespace pm

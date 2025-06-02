@@ -5,6 +5,7 @@
 namespace pm {
 
 
+VkPipelineStageFlags2 getPipelineStageFlags2(VkImageLayout layout);
 VkPipelineStageFlags getPipelineStageFlags(VkImageLayout layout);
 
 void transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout);

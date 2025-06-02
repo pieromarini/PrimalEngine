@@ -1,0 +1,64 @@
+{
+  "name": "UI.Default",
+	"pipeline": {
+		"type": "graphics",
+		"cull_mode": "none",
+		"front_face": "counter_clockwise",
+		"blend_mode": "disabled",
+		"depth_test": false,
+		"shaders": [
+			{
+				"type": "vertex",
+				"path": "res/shaders/ui.vert.spv"
+			},
+			{
+				"type": "fragment",
+				"path": "res/shaders/ui.frag.spv"
+			}
+		]
+	},
+  "push_constants": {
+    "debug_name": "PushConstants",
+    "size_in_bytes": 16,
+    "stages": ["vertex"]
+  },
+  "layouts": [
+    {
+      "set": 0,
+      "bindings": [
+        {
+          "debug_name": "UBO",
+          "binding": 0,
+          "type": "uniform",
+          "readonly": false,
+          "size_in_bytes": 128,
+          "stages": ["vertex", "fragment"]
+        },
+        {
+          "debug_name": "DrawCommands",
+          "binding": 1,
+          "type": "storage_array",
+          "readonly": true,
+          "size_in_bytes": 24,
+          "stages": ["vertex"]
+        },
+        {
+          "debug_name": "Draws",
+          "binding": 2,
+          "type": "storage_array",
+          "readonly": true,
+          "size_in_bytes": 80,
+          "stages": ["vertex", "fragment"]
+        },
+        {
+          "debug_name": "Materials",
+          "binding": 3,
+          "type": "storage_array",
+          "readonly": true,
+          "size_in_bytes": 32,
+          "stages": ["fragment"]
+        }
+      ]
+    }
+  ]
+}

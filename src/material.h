@@ -1,5 +1,6 @@
 #pragma once
 
+#include "renderer/material.h"
 #include "vk_types.h"
 #include <cstdint>
 #include <glm/glm.hpp>
@@ -37,7 +38,8 @@ struct Material {
 	std::string name;
 	MaterialData materialData;
 
-	MaterialPipeline* pipeline;
+	MaterialInstance material;
+	// MaterialPipeline* pipeline;
 	MaterialPass passType;
 };
 
