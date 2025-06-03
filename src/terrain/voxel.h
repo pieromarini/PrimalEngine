@@ -9,7 +9,7 @@ namespace pm {
 constexpr uint32_t TERRAIN_DIMENSION = 16;
 
 constexpr uint32_t VOXEL_CHUNK_SIZE = 16;
-constexpr uint32_t VOXEL_CHUNK_SIZE_Y = 64;
+constexpr uint32_t VOXEL_CHUNK_SIZE_Y = 16;
 constexpr uint32_t VOXEL_CHUNK_COUNT = VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE_Y;
 
 constexpr uint8_t VOXEL_SIZE = 1;
@@ -58,6 +58,8 @@ struct VoxelTerrain {
 };
 
 uint32_t getVoxelIndex(uint32_t localX, uint32_t y, uint32_t localZ, uint32_t chunkX, uint32_t chunkZ);
+
+uint32_t getChunkVoxelIndex(uint32_t x, uint32_t y, uint32_t z);
 
 void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& vertices, std::vector<uint32_t>& indices);
 VoxelTerrain generateTerrain();

@@ -8,7 +8,6 @@
 
 #include "vk_types.h"
 
-#include <limits>
 #include <queue>
 #include <vk_mem_alloc.h>
 
@@ -66,15 +65,17 @@ void rendererSetup(VulkanRendererContext* context) {
 	context->sceneData.sunlightColor = glm::vec4(1.f, 1.0, 1.0f, 1.0f);
 	context->sceneData.sunlightDirection = glm::vec4(0.38f, 1.0f, 0.97f, 1.f);
 
+	/*
 	auto start = std::chrono::system_clock::now();
 	context->voxelTerrain = generateTerrain();
 	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start);
 	std::cout << std::format("Generated terrain in {:.4f} ms\n", static_cast<float>(elapsed.count()));
 
-	// setupVoxelRaycastRenderer(context);
+	setupVoxelRaycastRenderer(context);
+	*/
 
-	loadTestScene(context);
-	// terrainTest(context);
+	// loadTestScene(context);
+	terrainTest(context);
 }
 
 // NOTE(piero): not using this right now.
@@ -819,8 +820,6 @@ void rendererCleanup(VulkanRendererContext* context) {
 		frame.deletionQueue.flush();
 	}
 
-	vkDestroyDescriptorSetLayout(context->device, context->bindlessTexturesSetLayout, nullptr);
-
 	// destroy sceneDrawImage
 	destroyImage(context->device, context->vmaAllocator, context->sceneDrawImage);
 	destroyImage(context->device, context->vmaAllocator, context->sceneDepthImage);
@@ -1405,8 +1404,8 @@ void rendererDraw(VulkanRendererContext* context) {
 	vkCmdResetQueryPool(commandBuffer, context->timestampPool, 0, 128);
 	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, context->timestampPool, 0);
 
-	/*
 	// transition GBuffer targets so compute can write to them
+	/*
 	transitionImage(commandBuffer, context->gbuffer.albedo.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	transitionImage(commandBuffer, context->gbuffer.irradiance.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	transitionImage(commandBuffer, context->gbuffer.depth.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
@@ -1448,8 +1447,8 @@ void rendererDraw(VulkanRendererContext* context) {
 	vkCmdResetQueryPool(commandBuffer, context->pipelineStatisticsPool, 0, 1);
 	vkCmdBeginQuery(commandBuffer, context->pipelineStatisticsPool, 0, 0);
 
-	drawGeometry(context, commandBuffer);
-	// drawTerrain(context, commandBuffer);
+	// drawGeometry(context, commandBuffer);
+	drawTerrain(context, commandBuffer);
 	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	// blit gbuffer to sceneDrawImage

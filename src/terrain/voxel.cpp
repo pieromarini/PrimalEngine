@@ -201,6 +201,7 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 	}
 }
 
+// returns an index relative to the world
 uint32_t getVoxelIndex(uint32_t localX, uint32_t y, uint32_t localZ, uint32_t chunkX, uint32_t chunkZ) {
 	uint32_t globalX = localX + (chunkX * VOXEL_CHUNK_SIZE);
 	uint32_t globalZ = localZ + (chunkZ * VOXEL_CHUNK_SIZE);
@@ -209,6 +210,11 @@ uint32_t getVoxelIndex(uint32_t localX, uint32_t y, uint32_t localZ, uint32_t ch
 	uint32_t totalZSize = TERRAIN_DIMENSION * VOXEL_CHUNK_SIZE;
 
 	return globalX + (globalZ * totalXSize) + (y * totalXSize * totalZSize);
+}
+
+// returns an index relative to a chunk
+uint32_t getChunkVoxelIndex(uint32_t x, uint32_t y, uint32_t z) {
+	return x + (z * VOXEL_CHUNK_SIZE) + (y * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE);
 }
 
 VoxelTerrain generateTerrain() {
@@ -222,7 +228,7 @@ VoxelTerrain generateTerrain() {
 	constexpr float HEIGHT_SCALE = 35.0f;
 	constexpr float NOISE_SCALE = 0.03f;
 
-	// TODO(piero): handle multiple chunks
+	/* For raytrace rendering
 	terrain.grid.minBound = glm::vec3(0.0f, 0.0f, 0.0f);
 	terrain.grid.maxBound = glm::vec3(VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION, VOXEL_CHUNK_SIZE_Y, VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION);
 	terrain.grid.gridSize = terrain.grid.maxBound - terrain.grid.minBound;
@@ -231,6 +237,7 @@ VoxelTerrain generateTerrain() {
 	terrain.grid.numVoxelsZ = VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION;
 
 	terrain.voxelData.resize(VOXEL_CHUNK_COUNT * TERRAIN_DIMENSION * TERRAIN_DIMENSION);
+	*/
 
 	for (uint32_t chunkZ = 0; chunkZ < TERRAIN_DIMENSION; ++chunkZ) {
 		for (uint32_t chunkX = 0; chunkX < TERRAIN_DIMENSION; ++chunkX) {
@@ -289,20 +296,18 @@ VoxelTerrain generateTerrain() {
 							terrain.voxelCount++;
 						}
 
-						uint32_t vi = getVoxelIndex(x, y, z, chunkX, chunkZ);
-						terrain.voxelData[vi] = materialIndex;
+						// uint32_t vi = getVoxelIndex(x, y, z, chunkX, chunkZ);
+						// terrain.voxelData[vi] = materialIndex;
 
-						// Set voxel properties
-						/*
-						voxelChunk.voxels[voxelIndex] = {
-							.id = voxelIndex,
+						uint32_t vi = getChunkVoxelIndex(x, y, z);
+						voxelChunk.voxels[vi] = {
+							.id = vi,
 							.x = (uint8_t)x,
 							.y = (uint8_t)y,
 							.z = (uint8_t)z,
 							.color = voxelColor,
 							.empty = !isVoxelActive
 						};
-						*/
 					}
 				}
 			}
