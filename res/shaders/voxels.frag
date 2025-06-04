@@ -18,7 +18,9 @@ layout (location = 0) out vec4 outFragColor;
 
 struct VoxelVertex {
 	vec3 normal;
-	uint data;
+	float paddding1;
+	vec3 position;
+	float paddding2;
 	vec4 color;
 };
 

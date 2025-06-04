@@ -22,7 +22,9 @@ vec3 unpackPosition(uint packed) {
 
 struct VoxelVertex {
 	vec3 normal;
-	uint data;
+	float paddding1;
+	vec3 position;
+	float paddding2;
 	vec4 color;
 };
 
@@ -54,7 +56,7 @@ void main() {
 
 	VoxelVertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
 
-	vec3 unpackedPos = unpackPosition(v.data);
+	vec3 unpackedPos = v.position;
 	vec4 position = vec4(unpackedPos, 1.0f);
 
 	// TODO(piero): Calculate Normal matrix on CPU

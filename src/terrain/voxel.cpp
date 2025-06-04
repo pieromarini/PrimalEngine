@@ -1,9 +1,48 @@
 #include "voxel.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "math/noise.h"
+#include "vk_types.h"
 #include <iostream>
+#include <cmath>
+#include <limits>
 
 namespace pm {
+
+const std::array<glm::ivec3, 8> CUBE_CORNERS = {{
+    {0, 0, 0},
+    {1, 0, 0},
+    {0, 1, 0},
+    {1, 1, 0},
+    {0, 0, 1},
+    {1, 0, 1},
+    {0, 1, 1},
+    {1, 1, 1},
+}};
+const std::array<glm::vec3, 8> CUBE_CORNER_VECTORS = {{
+    {0.0, 0.0, 0.0},
+    {1.0, 0.0, 0.0},
+    {0.0, 1.0, 0.0},
+    {1.0, 1.0, 0.0},
+    {0.0, 0.0, 1.0},
+    {1.0, 0.0, 1.0},
+    {0.0, 1.0, 1.0},
+    {1.0, 1.0, 1.0},
+}};
+
+const std::array<glm::ivec2, 12> CUBE_EDGES = {{
+    {0b000, 0b001},
+    {0b000, 0b010},
+    {0b000, 0b100},
+    {0b001, 0b011},
+    {0b001, 0b101},
+    {0b010, 0b011},
+    {0b010, 0b110},
+    {0b011, 0b111},
+    {0b100, 0b101},
+    {0b100, 0b110},
+    {0b101, 0b111},
+    {0b110, 0b111},
+}};
 
 uint32_t packPosition(uint8_t x, uint8_t y, uint8_t z) {
 	return (z << 10) | (y << 5) | x;
@@ -15,7 +54,113 @@ void unpackPosition(uint32_t packed, uint8_t& x, uint8_t& y, uint8_t& z) {
 	z = (packed >> 10) & 0x1F;
 }
 
+auto const implicit_function = [](float x, float y, float z) -> float {
+	const siv::PerlinNoise::seed_type seed = 728492752u;
+	const siv::PerlinNoise perlin{ seed };
+
+	auto heightValue = 5.0f * static_cast<float>(perlin.normalizedOctave2D_01(x * 0.3f, z * 0.3f, 8));
+	return static_cast<float>(y - heightValue);
+};
+
+// Calculate normal vector as the gradient of the SDF
+static glm::vec3 sdfGradient(std::array<float, 8>& dists, glm::vec3& s) {
+	auto p00 = glm::vec3{ dists[0b001], dists[0b010], dists[0b100] };
+	auto n00 = glm::vec3{ dists[0b000], dists[0b000], dists[0b000] };
+
+	auto p10 = glm::vec3{ dists[0b101], dists[0b011], dists[0b110] };
+	auto n10 = glm::vec3{ dists[0b100], dists[0b001], dists[0b010] };
+
+	auto p01 = glm::vec3{ dists[0b011], dists[0b110], dists[0b101] };
+	auto n01 = glm::vec3{ dists[0b010], dists[0b100], dists[0b001] };
+
+	auto p11 = glm::vec3{ dists[0b111], dists[0b111], dists[0b111] };
+	auto n11 = glm::vec3{ dists[0b110], dists[0b101], dists[0b011] };
+
+	auto d00 = p00 - n00; // Edges (0b00x, 0b0y0, 0bz00)
+	auto d10 = p10 - n10; // Edges (0b10x, 0b0y1, 0bz10)
+	auto d01 = p01 - n01; // Edges (0b01x, 0b1y0, 0bz01)
+	auto d11 = p11 - n11; // Edges (0b11x, 0b1y1, 0bz11)
+
+	auto neg = glm::vec3{ 1.0f } - s;
+
+	glm::vec3 negYZX{ neg.y, neg.z, neg.x };
+	glm::vec3 negZXY{ neg.z, neg.x, neg.y };
+
+	glm::vec3 sYZX{ s.y, s.z, s.x };
+	glm::vec3 sZXY{ s.z, s.x, s.y };
+
+	// billinear interpolation between 4 edges in each dimension
+	return glm::normalize(negYZX * negZXY * d00
+        + negYZX * sZXY * d10
+        + sYZX * negZXY * d01
+        + sYZX * sZXY * d11);
+}
+
+static void tryMakeQuad(
+		std::vector<float>& sdf, std::vector<uint32_t>& strideToIndex,
+		std::vector<VoxelVertex>& vertices, std::vector<uint32_t>& indices, 
+		uint32_t p1, uint32_t p2, uint32_t axisBStride, uint32_t axisCStride) {
+
+	auto d1 = sdf.at(p1);
+	auto d2 = sdf.at(p2);
+	bool negativeFace{};
+	if (d1 < 0.0 && !(d2 < 0.0)) {
+		negativeFace = false;
+	} else if (!(d1 < 0.0) && d2 < 0.0) {
+		negativeFace = true;	
+	} else {
+		return;
+	}
+
+	// The triangle points, viewed face-front, look like this:
+	// v1 v3
+	// v2 v4
+	auto v1 = strideToIndex[p1];
+	auto v2 = strideToIndex[p1 - axisBStride];
+	auto v3 = strideToIndex[p1 - axisCStride];
+	auto v4 = strideToIndex[p1 - axisBStride - axisCStride];
+
+	auto pos1 = vertices.at(v1).position;
+	auto pos2 = vertices.at(v2).position;
+	auto pos3 = vertices.at(v3).position;
+	auto pos4 = vertices.at(v4).position;
+	// Split the quad along the shorter axis, rather than the longer one.
+	if (glm::distance2(pos1, pos4) < glm::distance2(pos2, pos3)) {
+		if (negativeFace) {
+			indices.push_back(v1);
+			indices.push_back(v4);
+			indices.push_back(v2);
+			indices.push_back(v1);
+			indices.push_back(v3);
+			indices.push_back(v4);
+		} else {
+			indices.push_back(v1);
+			indices.push_back(v2);
+			indices.push_back(v4);
+			indices.push_back(v1);
+			indices.push_back(v4);
+			indices.push_back(v3);
+		}
+	} else if (negativeFace) {
+		indices.push_back(v2);
+		indices.push_back(v3);
+		indices.push_back(v4);
+		indices.push_back(v2);
+		indices.push_back(v1);
+		indices.push_back(v3);
+	} else {
+		indices.push_back(v2);
+		indices.push_back(v4);
+		indices.push_back(v3);
+		indices.push_back(v2);
+		indices.push_back(v3);
+		indices.push_back(v1);
+	};
+}
+
+
 void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& vertices, std::vector<uint32_t>& indices) {
+	/*
 	std::unordered_map<int64_t, bool> voxelMap;
 
 	// Fill the voxel lookup map
@@ -43,6 +188,7 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 		return voxel != voxelMap.end() ? voxel->second : false;
 	};
 
+
 	for (auto& chunk : terrain.chunks) {
 		auto chunkOffset = glm::vec3(chunk.transform[3]);// Extract translation
 
@@ -51,154 +197,119 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 
 		size_t indicesBeforeChunk = indices.size();
 
-		auto baseIndex = 0;
-
-		for (auto& voxel : chunk.voxels) {
-			if (voxel.empty) {
-				continue;
-			}
-			uint8_t size = VOXEL_SIZE;
-
-			// Calculate world position
-			int32_t worldX = static_cast<int32_t>(chunkOffset.x) + voxel.x;
-			int32_t worldY = static_cast<int32_t>(chunkOffset.y) + voxel.y;
-			int32_t worldZ = static_cast<int32_t>(chunkOffset.z) + voxel.z;
-
-			// Vertex indices for the current voxel
-			auto color = voxel.color;
-
-			// Only generate faces that are not obscured by adjacent voxels
-
-			// Front face (Z+) red
-			if (!voxelExists(worldX, worldY, worldZ + 1)) {
-				if (DEBUG_VOXEL_COLORS) {
-					color = { 1.0f, 0.0f, 0.0f, 1.0f };
-				}
-				vertices.push_back({ .normal = glm::vec3(0.0f, 0.0f, 1.0f), .data = packPosition(voxel.x, voxel.y, voxel.z + size), .color = color });
-				vertices.push_back({ .normal = glm::vec3(0.0f, 0.0f, 1.0f), .data = packPosition(voxel.x + size, voxel.y, voxel.z + size), .color = color });
-				vertices.push_back({ .normal = glm::vec3(0.0f, 0.0f, 1.0f), .data = packPosition(voxel.x + size, voxel.y + size, voxel.z + size), .color = color });
-				vertices.push_back({ .normal = glm::vec3(0.0f, 0.0f, 1.0f), .data = packPosition(voxel.x, voxel.y + size, voxel.z + size), .color = color });
-
-				indices.push_back(baseIndex);
-				indices.push_back(baseIndex + 1);
-				indices.push_back(baseIndex + 2);
-
-				indices.push_back(baseIndex);
-				indices.push_back(baseIndex + 2);
-				indices.push_back(baseIndex + 3);
-
-				baseIndex += 4;
-			}
-
-			// Back face (Z-) blue
-			if (!voxelExists(worldX, worldY, worldZ - 1)) {
-				if (DEBUG_VOXEL_COLORS) {
-					color = { 0.0f, 0.0f, 1.0f, 1.0f };
-				}
-				vertices.push_back({ .normal = glm::vec3(0.0f, 0.0f, -1.0f), .data = packPosition(voxel.x, voxel.y, voxel.z), .color = color });
-				vertices.push_back({ .normal = glm::vec3(0.0f, 0.0f, -1.0f), .data = packPosition(voxel.x, voxel.y + size, voxel.z), .color = color });
-				vertices.push_back({ .normal = glm::vec3(0.0f, 0.0f, -1.0f), .data = packPosition(voxel.x + size, voxel.y + size, voxel.z), .color = color });
-				vertices.push_back({ .normal = glm::vec3(0.0f, 0.0f, -1.0f), .data = packPosition(voxel.x + size, voxel.y, voxel.z), .color = color });
-
-				indices.push_back(baseIndex);
-				indices.push_back(baseIndex + 1);
-				indices.push_back(baseIndex + 2);
-
-				indices.push_back(baseIndex);
-				indices.push_back(baseIndex + 2);
-				indices.push_back(baseIndex + 3);
-
-				baseIndex += 4;
-			}
-
-			// Right face (X+) green
-			if (!voxelExists(worldX + 1, worldY, worldZ)) {
-				if (DEBUG_VOXEL_COLORS) {
-					color = { 0.0f, 1.0f, 0.0f, 1.0f };
-				}
-				vertices.push_back({ .normal = glm::vec3(1.0f, 0.0f, 0.0f), .data = packPosition(voxel.x + size, voxel.y, voxel.z), .color = color });
-				vertices.push_back({ .normal = glm::vec3(1.0f, 0.0f, 0.0f), .data = packPosition(voxel.x + size, voxel.y + size, voxel.z), .color = color });
-				vertices.push_back({ .normal = glm::vec3(1.0f, 0.0f, 0.0f), .data = packPosition(voxel.x + size, voxel.y + size, voxel.z + size), .color = color });
-				vertices.push_back({ .normal = glm::vec3(1.0f, 0.0f, 0.0f), .data = packPosition(voxel.x + size, voxel.y, voxel.z + size), .color = color });
-
-				indices.push_back(baseIndex);
-				indices.push_back(baseIndex + 1);
-				indices.push_back(baseIndex + 2);
-
-				indices.push_back(baseIndex);
-				indices.push_back(baseIndex + 2);
-				indices.push_back(baseIndex + 3);
-
-				baseIndex += 4;
-			}
-
-			// Left face (X-) cyan
-			if (!voxelExists(worldX - 1, worldY, worldZ)) {
-				if (DEBUG_VOXEL_COLORS) {
-					color = { 0.0f, 1.0f, 1.0f, 1.0f };
-				}
-				vertices.push_back({ .normal = glm::vec3(-1.0f, 0.0f, 0.0f), .data = packPosition(voxel.x, voxel.y, voxel.z), .color = color });
-				vertices.push_back({ .normal = glm::vec3(-1.0f, 0.0f, 0.0f), .data = packPosition(voxel.x, voxel.y, voxel.z + size), .color = color });
-				vertices.push_back({ .normal = glm::vec3(-1.0f, 0.0f, 0.0f), .data = packPosition(voxel.x, voxel.y + size, voxel.z + size), .color = color });
-				vertices.push_back({ .normal = glm::vec3(-1.0f, 0.0f, 0.0f), .data = packPosition(voxel.x, voxel.y + size, voxel.z), .color = color });
-
-				indices.push_back(baseIndex);
-				indices.push_back(baseIndex + 1);
-				indices.push_back(baseIndex + 2);
-
-				indices.push_back(baseIndex);
-				indices.push_back(baseIndex + 2);
-				indices.push_back(baseIndex + 3);
-
-				baseIndex += 4;
-			}
-
-			// Top face (Y+) yellow
-			if (!voxelExists(worldX, worldY + 1, worldZ)) {
-				if (DEBUG_VOXEL_COLORS) {
-					color = { 1.0f, 1.0f, 0.0f, 1.0f };
-				}
-				vertices.push_back({ .normal = glm::vec3(0.0f, 1.0f, 0.0f), .data = packPosition(voxel.x, voxel.y + size, voxel.z), .color = color });
-				vertices.push_back({ .normal = glm::vec3(0.0f, 1.0f, 0.0f), .data = packPosition(voxel.x, voxel.y + size, voxel.z + size), .color = color });
-				vertices.push_back({ .normal = glm::vec3(0.0f, 1.0f, 0.0f), .data = packPosition(voxel.x + size, voxel.y + size, voxel.z + size), .color = color });
-				vertices.push_back({ .normal = glm::vec3(0.0f, 1.0f, 0.0f), .data = packPosition(voxel.x + size, voxel.y + size, voxel.z), .color = color });
-
-				indices.push_back(baseIndex);
-				indices.push_back(baseIndex + 1);
-				indices.push_back(baseIndex + 2);
-
-				indices.push_back(baseIndex);
-				indices.push_back(baseIndex + 2);
-				indices.push_back(baseIndex + 3);
-
-				baseIndex += 4;
-			}
-
-			// Bottom face (Y-) white
-			if (!voxelExists(worldX, worldY - 1, worldZ)) {
-				if (DEBUG_VOXEL_COLORS) {
-					color = { 1.0f, 1.0f, 1.0f, 1.0f };
-				}
-				vertices.push_back({ .normal = glm::vec3(0.0f, -1.0f, 0.0f), .data = packPosition(voxel.x, voxel.y, voxel.z), .color = color });
-				vertices.push_back({ .normal = glm::vec3(0.0f, -1.0f, 0.0f), .data = packPosition(voxel.x + size, voxel.y, voxel.z), .color = color });
-				vertices.push_back({ .normal = glm::vec3(0.0f, -1.0f, 0.0f), .data = packPosition(voxel.x + size, voxel.y, voxel.z + size), .color = color });
-				vertices.push_back({ .normal = glm::vec3(0.0f, -1.0f, 0.0f), .data = packPosition(voxel.x, voxel.y, voxel.z + size), .color = color });
-
-				indices.push_back(baseIndex);
-				indices.push_back(baseIndex + 1);
-				indices.push_back(baseIndex + 2);
-
-				indices.push_back(baseIndex);
-				indices.push_back(baseIndex + 2);
-				indices.push_back(baseIndex + 3);
-
-				baseIndex += 4;
-			}
-		}
-
 		// Update the index count for this chunk based on actual generated faces
 		chunk.indexCount = indices.size() - indicesBeforeChunk;
 	}
+	*/
+
+	size_t indicesBeforeChunk = indices.size();
+
+	// Surface nets
+
+	uint32_t minZ = 0, minY = 0, minX = 0;
+	uint32_t maxZ = VOXEL_CHUNK_SIZE, maxY = VOXEL_CHUNK_SIZE_Y, maxX = VOXEL_CHUNK_SIZE;
+
+	std::vector<float> sdf;
+	sdf.resize((VOXEL_CHUNK_SIZE + 1) * (VOXEL_CHUNK_SIZE + 1) * (VOXEL_CHUNK_SIZE + 1));
+
+	// auxiliary structures
+	std::vector<glm::vec3> surfacePoints;
+	std::vector<uint32_t> surfaceStrides;
+	std::vector<uint32_t> strideToIndex;
+	strideToIndex.resize(sdf.size());
+
+	for (uint32_t z = minZ; z < maxZ; ++z) {
+		for (uint32_t y = minY; y < maxY; ++y) {
+			for (uint32_t x = minX; x < maxX; ++x) {
+				auto linearIndex = getChunkVoxelIndex(x, y, z);
+				sdf.at(linearIndex) = implicit_function((float)x, (float)y, (float)z);
+			}
+		}
+	}
+
+	for (uint32_t z = minZ; z < maxZ; ++z) {
+		for (uint32_t y = minY; y < maxY; ++y) {
+			for (uint32_t x = minX; x < maxX; ++x) {
+				auto linearIndex = getChunkVoxelIndex(x, y, z);
+				glm::vec3 p{ x, y, z };
+
+				std::array<float, 8> cornerDists{};
+				uint32_t numNegative = 0;
+
+				for(uint32_t i = 0; i < cornerDists.size(); ++i) {
+					auto cubeCorner = CUBE_CORNERS.at(i);
+					auto cubeIndex = getChunkVoxelIndex(cubeCorner.x, cubeCorner.y, cubeCorner.z);
+					auto d = sdf.at(linearIndex + cubeIndex);
+					cornerDists.at(i) = d;
+					if (d < 0.0f) {
+						numNegative++;
+					}
+				}
+
+				// no edge crossings
+				if (numNegative == 0 || numNegative == 8) {
+					strideToIndex.at(linearIndex) = std::numeric_limits<uint32_t>::max();
+					continue;
+				}
+
+				uint32_t count = 0;
+				glm::vec3 sum{ 0.0f };
+
+				for (auto& edge : CUBE_EDGES) {
+					auto d1 = cornerDists.at(edge.x);
+					auto d2 = cornerDists.at(edge.y);
+
+					// Detect 0 crossing
+					if ((d1 < 0.0) != (d2 < 0.0)) {
+						count++;
+
+						// edge interpolation
+						float interp1 = d1 / (d1 - d2);
+						float interp2 = 1.0f - interp1;
+						sum += interp2 * CUBE_CORNER_VECTORS.at(edge.x) + interp1 * CUBE_CORNER_VECTORS.at(edge.y);
+					}
+				}
+
+				// get centroid
+				auto c = sum * (1.0f / (float)count);
+
+				vertices.push_back({ .normal = sdfGradient(cornerDists, c), .position = p + c, .color = { 0.42f, 0.42f, 0.42f, 1.0f } });
+				strideToIndex.at(linearIndex) = vertices.size() - 1;
+				surfacePoints.emplace_back(x, y, z);
+				surfaceStrides.push_back(linearIndex);
+			}
+		}
+	}
+
+	// Generate triangles
+	glm::vec3 xyzStrides = {
+		getChunkVoxelIndex(1, 0, 0),
+		getChunkVoxelIndex(0, 1, 0),
+		getChunkVoxelIndex(0, 0, 1)
+	};
+
+	for (uint32_t i = 0; i < surfacePoints.size(); ++i) {
+		auto sp = surfacePoints.at(i);
+		auto stride = surfaceStrides.at(i);
+
+		auto x = sp.x;
+		auto y = sp.y;
+		auto z = sp.z;
+
+		if ((y != minY) && (z != minZ) && (x != (maxX - 1))) {
+			tryMakeQuad(sdf, strideToIndex, vertices, indices, stride, stride + xyzStrides.x, xyzStrides.y, xyzStrides.z);
+		}
+
+		if ((x != minX) && (z != minZ) && (y != (maxY - 1))) {
+			tryMakeQuad(sdf, strideToIndex, vertices, indices, stride, stride + xyzStrides.y, xyzStrides.z, xyzStrides.x);
+		}
+
+		if ((x != minX) && (y != minY) && (z != (maxZ - 1))) {
+			tryMakeQuad(sdf, strideToIndex, vertices, indices, stride, stride + xyzStrides.z, xyzStrides.x, xyzStrides.y);
+		}
+	}
+	assert(terrain.chunks.size() == 1);
+	terrain.chunks[0].indexCount = indices.size() - indicesBeforeChunk;
 }
 
 // returns an index relative to the world
@@ -228,7 +339,6 @@ VoxelTerrain generateTerrain() {
 	constexpr float HEIGHT_SCALE = 35.0f;
 	constexpr float NOISE_SCALE = 0.03f;
 
-	/* For raytrace rendering
 	terrain.grid.minBound = glm::vec3(0.0f, 0.0f, 0.0f);
 	terrain.grid.maxBound = glm::vec3(VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION, VOXEL_CHUNK_SIZE_Y, VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION);
 	terrain.grid.gridSize = terrain.grid.maxBound - terrain.grid.minBound;
@@ -236,8 +346,8 @@ VoxelTerrain generateTerrain() {
 	terrain.grid.numVoxelsY = VOXEL_CHUNK_SIZE_Y;
 	terrain.grid.numVoxelsZ = VOXEL_CHUNK_SIZE * TERRAIN_DIMENSION;
 
-	terrain.voxelData.resize(VOXEL_CHUNK_COUNT * TERRAIN_DIMENSION * TERRAIN_DIMENSION);
-	*/
+	// Use for raytraced rendering of voxels
+	// terrain.voxelData.resize(VOXEL_CHUNK_COUNT * TERRAIN_DIMENSION * TERRAIN_DIMENSION);
 
 	for (uint32_t chunkZ = 0; chunkZ < TERRAIN_DIMENSION; ++chunkZ) {
 		for (uint32_t chunkX = 0; chunkX < TERRAIN_DIMENSION; ++chunkX) {
@@ -305,6 +415,7 @@ VoxelTerrain generateTerrain() {
 							.x = (uint8_t)x,
 							.y = (uint8_t)y,
 							.z = (uint8_t)z,
+							// .value = implicit_function(x, y, z),
 							.color = voxelColor,
 							.empty = !isVoxelActive
 						};

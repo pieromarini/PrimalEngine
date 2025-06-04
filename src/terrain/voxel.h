@@ -6,7 +6,7 @@
 
 namespace pm {
 
-constexpr uint32_t TERRAIN_DIMENSION = 16;
+constexpr uint32_t TERRAIN_DIMENSION = 1;
 
 constexpr uint32_t VOXEL_CHUNK_SIZE = 16;
 constexpr uint32_t VOXEL_CHUNK_SIZE_Y = 16;
@@ -20,13 +20,16 @@ constexpr bool DEBUG_CHUNK_COLORS = false;
 struct Voxel {
 	uint32_t id;
 	uint8_t x, y, z;
+	float value;
 	glm::vec4 color;
 	bool empty { true };
 };
  
  struct VoxelVertex {
  	glm::vec3 normal{ 0.0f };
- 	uint32_t data;
+	float padding;
+	glm::vec3 position;
+	float padding2;
 	glm::vec4 color;
 };
 
