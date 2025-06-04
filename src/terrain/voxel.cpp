@@ -54,11 +54,11 @@ void unpackPosition(uint32_t packed, uint8_t& x, uint8_t& y, uint8_t& z) {
 	z = (packed >> 10) & 0x1F;
 }
 
-auto const implicit_function = [](float x, float y, float z) -> float {
-	const siv::PerlinNoise::seed_type seed = 728492752u;
-	const siv::PerlinNoise perlin{ seed };
+static const siv::PerlinNoise::seed_type seed = 728492752u;
+static const siv::PerlinNoise perlin{ seed };
 
-	auto heightValue = 5.0f * static_cast<float>(perlin.normalizedOctave2D_01(x * 0.3f, z * 0.3f, 8));
+auto const implicit_function = [](float x, float y, float z) -> float {
+	auto heightValue = 6.0f * static_cast<float>(perlin.normalizedOctave2D_01(x * 0.3f, z * 0.3f, 8));
 	return static_cast<float>(y - heightValue);
 };
 
@@ -358,6 +358,7 @@ VoxelTerrain generateTerrain() {
 			float worldX = (float)chunkX * VOXEL_CHUNK_SIZE;
 			float worldZ = (float)chunkZ * VOXEL_CHUNK_SIZE;
 
+			/*
 			for (uint32_t z = 0; z < VOXEL_CHUNK_SIZE; ++z) {
 				for (uint32_t x = 0; x < VOXEL_CHUNK_SIZE; ++x) {
 					float wx = (worldX + (float)x) * NOISE_SCALE;
@@ -422,6 +423,7 @@ VoxelTerrain generateTerrain() {
 					}
 				}
 			}
+			*/
 
 			voxelChunk.transform = glm::translate(glm::mat4{ 1.0f }, glm::vec3{ chunkX * VOXEL_CHUNK_SIZE, 0.0f, chunkZ * VOXEL_CHUNK_SIZE });
 			terrain.chunks.push_back(voxelChunk);
