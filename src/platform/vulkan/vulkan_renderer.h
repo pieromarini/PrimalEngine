@@ -20,9 +20,10 @@
 #include "vulkan_descriptor.h"
 #include "vulkan_texture.h"
 
+#include "memory/arena.h"
 #include "platform/window.h"
 #include "ui/ui_types.h"
-#include "memory/arena.h"
+
 
 
 namespace pm {
@@ -189,7 +190,7 @@ struct FrameData {
 	std::vector<DrawBatch> drawBatches{};
 	std::vector<UIWindowBatch> uiWindowBatches{};
 
-	MemoryArena perFrameArena; // TODO(piero): use arena for per-frame allocations
+	MemoryArena perFrameArena;// TODO(piero): use arena for per-frame allocations
 	FixedArray<UI::UIWindowBatchCommands> uiWindowBatchCommands{};
 };
 
@@ -336,11 +337,16 @@ struct VulkanRendererContext {
 
 	// Terrain test
 	VoxelTerrain voxelTerrain;
+
+	bool voxelWireframeActive{ false };
 	MaterialPipeline voxelPipeline;
+	MaterialPipeline voxelWireframePipeline;
+
 	VkDescriptorSetLayout voxelDescriptorLayout;
 	GPUMeshBuffers voxelMeshBuffers;
 	AllocatedBuffer voxelDrawCommandsBuffer;
 	uint32_t voxelDrawCommandsCount;
+	TerrainParams terrainParams;
 
 	// Material test
 	PrimalMaterial uiMaterial;
@@ -386,7 +392,9 @@ void rendererSetInitialState(VulkanRendererContext* context, VulkanRendererConfi
 void rendererInitMemory(VulkanRendererContext* context);
 
 void loadTestScene(VulkanRendererContext* context);
+
 void terrainTest(VulkanRendererContext* context);
+void cleanupTerrain(VulkanRendererContext* context);
 
 void rendererInitDefaultData(VulkanRendererContext* context);
 

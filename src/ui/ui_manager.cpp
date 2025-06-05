@@ -4,6 +4,7 @@
 #include "primal.h"
 #include "ui/ui_types.h"
 #include "utils/fonts.h"
+#include <algorithm>
 #include <chrono>
 #include <format>
 #include <iostream>
@@ -147,7 +148,7 @@ void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMou
 		}
 
 		// Stop interacting
-		// TODO(piero): This seems weird. We were setting this when setting the pointerState to "Released" but we need to 
+		// TODO(piero): This seems weird. We were setting this when setting the pointerState to "Released" but we need to
 		//              store the interacted element to process clicks when releasing a click.
 		context->interactionState.elementId = 0;
 	}
@@ -178,19 +179,19 @@ void handleDragValue(UILayoutElement* element) {
 	switch (element->data.dataType) {
 	case INT: {
 		if (element->data.valueInt) {
-			*element->data.valueInt = std::min(static_cast<int>(*element->data.valueInt + context->pointerState.xRel * 0.01f), std::max(element->data.minInt, element->data.maxInt));
+			*element->data.valueInt = std::min(std::max(static_cast<int>(*element->data.valueInt + context->pointerState.xRel * 0.01f), element->data.minInt), element->data.maxInt);
 		}
 		break;
 	}
 	case FLOAT: {
 		if (element->data.valueFloat) {
-			*element->data.valueFloat = std::min(*element->data.valueFloat + context->pointerState.xRel * 0.01f, std::max(element->data.minFloat, element->data.maxFloat));
+			*element->data.valueFloat = std::min(std::max(*element->data.valueFloat + context->pointerState.xRel * 0.01f, element->data.minFloat), element->data.maxFloat);
 		}
 		break;
 	}
 	case DOUBLE: {
 		if (element->data.valueDouble) {
-			*element->data.valueDouble = std::min(*element->data.valueDouble + context->pointerState.xRel * 0.01, std::max(element->data.minDouble, element->data.maxDouble));
+			*element->data.valueDouble = std::min(std::max(*element->data.valueDouble + context->pointerState.xRel * 0.01, element->data.minDouble), element->data.maxDouble);
 		}
 		break;
 	}

@@ -18,7 +18,7 @@ namespace pm {
 static PrimalEngine* loadedEngine = nullptr;
 
 PrimalEngine& PrimalEngine::get() {
-	return *loadedEngine; 
+	return *loadedEngine;
 }
 
 PrimalEngine::PrimalEngine() {
@@ -181,6 +181,9 @@ void PrimalEngine::run() {
 					createGBuffer(&rendererContext);
 
 					m_mainCamera.onWindowResize(mainWindow->width, mainWindow->height);
+				} else if (e.key.key == SDLK_G) {// regenerate terrain
+					cleanupTerrain(&rendererContext);
+					terrainTest(&rendererContext);
 				} else if (e.key.key == SDLK_0) {
 					rendererContext.gbufferDebugChannel = 0;
 				} else if (e.key.key == SDLK_1) {

@@ -386,7 +386,7 @@ void createGBuffer(VulkanRendererContext* context) {
 		writer.writeImage(0, context->gbuffer.albedo.imageView, context->defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		writer.writeImage(1, context->gbuffer.irradiance.imageView, context->defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		writer.writeImage(2, context->gbuffer.depth.imageView, context->defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-		writer.writeImage(3, context->sceneDrawImage.imageView, VK_NULL_HANDLE,  VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		writer.writeImage(3, context->sceneDrawImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 		writer.updateSet(context->device, context->resolveDescriptorSet);
 	}
 }
@@ -404,8 +404,10 @@ void destroyGBuffer(VulkanRendererContext* context) {
 }
 
 void terrainTest(VulkanRendererContext* context) {
+	vkDeviceWaitIdle(context->device);
+
 	auto start = std::chrono::system_clock::now();
-	context->voxelTerrain = generateTerrain();
+	context->voxelTerrain = generateTerrain(&context->terrainParams);
 	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start);
 	std::cout << std::format("Generated terrain in {:.4f} ms\n", static_cast<float>(elapsed.count()));
 
@@ -424,11 +426,11 @@ void terrainTest(VulkanRendererContext* context) {
 	context->voxelMeshBuffers = uploadMesh(context, indices, vertices, "voxelMeshBuffers");
 
 	std::cout << std::format("Terrain Memory Usage: Vertex {:.2f} MB | Indices {:.2f} MB\n", static_cast<double>(context->voxelMeshBuffers.vertexBuffer.info.size) * 1e-6, static_cast<double>(context->voxelMeshBuffers.indexBuffer.info.size) * 1e-6);
+}
 
-	context->mainDeletionQueue.push([context]() {
-		destroyBuffer(context->vmaAllocator, context->voxelMeshBuffers.vertexBuffer);
-		destroyBuffer(context->vmaAllocator, context->voxelMeshBuffers.indexBuffer);
-	});
+void cleanupTerrain(VulkanRendererContext* context) {
+	destroyBuffer(context->vmaAllocator, context->voxelMeshBuffers.vertexBuffer);
+	destroyBuffer(context->vmaAllocator, context->voxelMeshBuffers.indexBuffer);
 }
 
 void loadTestScene(VulkanRendererContext* context) {
@@ -823,6 +825,8 @@ void rendererCleanup(VulkanRendererContext* context) {
 	// destroy sceneDrawImage
 	destroyImage(context->device, context->vmaAllocator, context->sceneDrawImage);
 	destroyImage(context->device, context->vmaAllocator, context->sceneDepthImage);
+
+	cleanupTerrain(context);
 
 	// destroyGBuffer(context);
 
@@ -1755,17 +1759,19 @@ void drawTerrain(VulkanRendererContext* context, VkCommandBuffer commandBuffer) 
 		writer.updateSet(context->device, terrainBatchDescriptor);
 	}
 
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context->voxelPipeline.pipeline);
+	auto voxelPipeline = context->voxelWireframeActive ? context->voxelWireframePipeline : context->voxelPipeline;
 
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context->voxelPipeline.layout, 0, 1, &globalDescriptor, 0, nullptr);
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context->voxelPipeline.layout, 1, 1, &terrainBatchDescriptor, 0, nullptr);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, voxelPipeline.pipeline);
+
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, voxelPipeline.layout, 0, 1, &globalDescriptor, 0, nullptr);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, voxelPipeline.layout, 1, 1, &terrainBatchDescriptor, 0, nullptr);
 
 	GPUDrawPushConstants pushConstants{};
 	pushConstants.vertexBuffer = context->voxelMeshBuffers.vertexBufferAddress;
 	pushConstants.viewPosition = glm::vec4(context->rendererState->mainCamera->position, 1.0f);
 
 	vkCmdBindIndexBuffer(commandBuffer, context->voxelMeshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-	vkCmdPushConstants(commandBuffer, context->voxelPipeline.layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+	vkCmdPushConstants(commandBuffer, voxelPipeline.layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 	vkCmdDrawIndexedIndirect(commandBuffer, commandsBuffer.buffer, offsetof(MeshIndirectCommand, command), drawCommands.size(), sizeof(MeshIndirectCommand));
 
 	vkCmdEndRendering(commandBuffer);
@@ -1978,10 +1984,7 @@ void initVoxelPipeline(VulkanRendererContext* context) {
 	voxelLayoutInfo.pSetLayouts = layouts.data();
 
 	VK_CHECK(vkCreatePipelineLayout(context->device, &voxelLayoutInfo, nullptr, &context->voxelPipeline.layout));
-
-	context->mainDeletionQueue.push([context]() {
-		vkDestroyPipelineLayout(context->device, context->voxelPipeline.layout, nullptr);
-	});
+	VK_CHECK(vkCreatePipelineLayout(context->device, &voxelLayoutInfo, nullptr, &context->voxelWireframePipeline.layout));
 
 	PipelineBuilder pipelineBuilder;
 	pipelineBuilder.setPipelineLayout(context->voxelPipeline.layout);
@@ -1999,8 +2002,15 @@ void initVoxelPipeline(VulkanRendererContext* context) {
 
 	context->voxelPipeline.pipeline = pipelineBuilder.buildPipeline(context->device, context->pipelineCache);
 
+	pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_LINE);
+	context->voxelWireframePipeline.pipeline = pipelineBuilder.buildPipeline(context->device, context->pipelineCache);
+
 	context->mainDeletionQueue.push([context] {
+		vkDestroyPipelineLayout(context->device, context->voxelPipeline.layout, nullptr);
+		vkDestroyPipelineLayout(context->device, context->voxelWireframePipeline.layout, nullptr);
+
 		vkDestroyPipeline(context->device, context->voxelPipeline.pipeline, nullptr);
+		vkDestroyPipeline(context->device, context->voxelWireframePipeline.pipeline, nullptr);
 	});
 
 	vkDestroyShaderModule(context->device, voxelFragShader, nullptr);
@@ -2209,27 +2219,27 @@ void updateUIData(VulkanRendererContext* context) {
 
 		// Title bar
 		UI::openElement();
-			UI::pushBox({ .width = { .size = static_cast<float>(rendererState->window->width), .sizingMode = UI::UISizingMode::STATIC },
-				.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
-				.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-				.backgroundColor = { 0.678f, 0.678f, 0.678f, 1.0f } });
+		UI::pushBox({ .width = { .size = static_cast<float>(rendererState->window->width), .sizingMode = UI::UISizingMode::STATIC },
+			.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
+			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
+			.backgroundColor = { 0.678f, 0.678f, 0.678f, 1.0f } });
 
-			// Show renderer stats
-			UI::openElement();
-				UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-					.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::FIT },
-					.layoutDirection = UI::UILayoutDirection::VERTICAL,
-					.backgroundColor = { 0.0f, 0.0f, 0.0f, 0.0f },
-					.padding = 10.0f,
-					.childGap = 10.0f });
-				UI::openTextElement();
-				UI::pushText({ .text = stats });
-				UI::closeTextElement();
+		// Show renderer stats
+		UI::openElement();
+		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
+			.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::FIT },
+			.layoutDirection = UI::UILayoutDirection::VERTICAL,
+			.backgroundColor = { 0.0f, 0.0f, 0.0f, 0.0f },
+			.padding = 10.0f,
+			.childGap = 10.0f });
+		UI::openTextElement();
+		UI::pushText({ .text = stats });
+		UI::closeTextElement();
 
-				UI::openTextElement();
-					UI::pushText({ .text = otherStats });
-				UI::closeTextElement();
-			UI::closeElement();
+		UI::openTextElement();
+		UI::pushText({ .text = otherStats });
+		UI::closeTextElement();
+		UI::closeElement();
 
 		UI::closeElement();
 
@@ -2333,6 +2343,31 @@ void updateUIData(VulkanRendererContext* context) {
 		UI::closeElement();
 
 		UI::sliderFloat4(&sceneData.sunlightColor, 0.0f, 1.0f);
+
+		UI::openTextElement();
+		UI::pushText({ .padding = UI::UIPadding{ 0.0f, 20.0f, 0.0f, 0.0f }, .text = "Noise Params" });
+		UI::closeTextElement();
+
+		UI::openTextElement();
+		UI::pushText({ .text = "Height Scale" });
+		UI::closeTextElement();
+		UI::sliderFloat(&context->terrainParams.heightScale, 0.1f, 100.0f);
+
+		UI::openTextElement();
+		UI::pushText({ .text = "Height Multiplier" });
+		UI::closeTextElement();
+		UI::sliderFloat(&context->terrainParams.heightMultiplier, 0.1f, 100.0f);
+
+		UI::openTextElement();
+		UI::pushText({ .text = "Noise Scale" });
+		UI::closeTextElement();
+		UI::sliderFloat(&context->terrainParams.noiseScale, 0.1f, 100.0f);
+
+		UI::openTextElement();
+		UI::pushText({ .text = "Wireframe Mode" });
+		UI::closeTextElement();
+		UI::checkbox(&context->voxelWireframeActive);
+
 		UI::closeDockSpaceElement();
 		UI::closeElement();
 
