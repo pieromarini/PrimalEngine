@@ -1,13 +1,16 @@
-#include "vulkan_descriptor.h"
 #include <algorithm>
 #include <cstdint>
+
+#include "platform/vk_types.h"
+#include "vulkan_descriptor.h"
+
 
 void DescriptorLayoutBuilder::addBinding(uint32_t binding, VkDescriptorType type, VkShaderStageFlags flags) {
 	VkDescriptorSetLayoutBinding newbind{};
 	newbind.binding = binding;
 	newbind.descriptorCount = 1;
 	newbind.descriptorType = type;
-  newbind.stageFlags = flags;
+	newbind.stageFlags = flags;
 
 	bindings.push_back(newbind);
 }

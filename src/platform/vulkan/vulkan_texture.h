@@ -1,7 +1,7 @@
 #include <string>
 #include <vulkan/vulkan.h>
 
-#include "vk_types.h"
+#include "platform/vk_types.h"
 
 #include "ktx.h"
 

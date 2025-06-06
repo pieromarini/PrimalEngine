@@ -8,12 +8,12 @@
 #include "vulkan_loader.h"
 
 #include "platform/vulkan/buffers.h"
-#include "vk_types.h"
+#include "platform/vk_types.h"
 #include "vulkan_renderer.h"
 #include <filesystem>
 #include <glm/gtx/quaternion.hpp>
 
-#include "geometry.h"
+#include "core/math/geometry.h"
 
 
 namespace pm {

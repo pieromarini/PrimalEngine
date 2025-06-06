@@ -1,14 +1,11 @@
 #pragma once
 
-#include "memory/data_structures/fixed_array.h"
+#include "core/data_structures/fixed_array.h"
 #include "platform/window.h"
 #include <string>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtx/quaternion.hpp>
 #include <vector>
-
-#include "memory/data_structures/primal_string.h"
+#include "core/math/math.h"
+#include "core/data_structures/primal_string.h"
 
 namespace pm::UI {
 
@@ -44,9 +41,9 @@ struct BoundingRect {
 };
 
 struct UIVertex {
-	glm::vec3 position;
+	vec3 position;
 	float uv_x;
-	glm::vec3 color;
+	vec3 color;
 	float uv_y;
 };
 
@@ -87,7 +84,7 @@ struct UIRenderCommand {
 
 	BoundingRect boundingRect;
 
-	glm::vec4 backgroundColor;
+	vec4 backgroundColor;
 
 	UIBorder border{ 0.0f };
 
@@ -176,7 +173,7 @@ struct UILayoutElement {
 	UIAxisSize height;
 
 	UILayoutDirection layoutDirection;
-	glm::vec4 backgroundColor;
+	vec4 backgroundColor;
 
 	UIPadding padding;
 	float childGap;
@@ -213,7 +210,7 @@ struct UIElementOptions {
 	UIAxisSize height;
 
 	UILayoutDirection layoutDirection{};
-	glm::vec4 backgroundColor { 0.0f, 0.0f, 0.0f, 0.0f };
+	vec4 backgroundColor { 0.0f, 0.0f, 0.0f, 0.0f };
 
 	UIPadding padding;
 	float childGap;
@@ -245,7 +242,7 @@ struct UIElement {
 
 struct UITextElement {
 	BoundingRect boundingBox;
-	glm::vec4 backgroundColor;
+	vec4 backgroundColor;
 
 	std::string text;
 

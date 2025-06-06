@@ -15,12 +15,10 @@
 #include <vulkan/vulkan.h>
 
 #include <vk_mem_alloc.h>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/quaternion.hpp>
-#include <glm/mat4x4.hpp>
-#include <glm/vec3.hpp>
 
 #include <vulkan/vk_enum_string_helper.h>
+
+#include "core/math/math.h"
 
 namespace pm {
 
@@ -42,12 +40,12 @@ struct AllocatedImage {
 };
 
 struct Vertex {
-	glm::vec3 position;
+	vec3 position;
 	float uv_x;
-	glm::vec3 normal;
+	vec3 normal;
 	float uv_y;
-	glm::vec4 color;
-	glm::vec4 tangent;
+	vec4 color;
+	vec4 tangent;
 };
 
 // holds the resources needed for a mesh
@@ -59,27 +57,27 @@ struct GPUMeshBuffers {
 
 // push constants for our mesh object draws
 struct alignas(16) GPUDrawPushConstants {
-	glm::vec4 viewPosition;
-	glm::vec4 padding;
-	glm::vec4 padding1;
-	glm::vec4 padding2;
+	vec4 viewPosition;
+	vec4 padding;
+	vec4 padding1;
+	vec4 padding2;
 	VkDeviceAddress vertexBuffer;
 };
 
 struct FontUniformData {
 	// Scene matrices
-	glm::mat4 projection;
-	glm::mat4 view;
+	mat4 projection;
+	mat4 view;
 
 	// Font display options
-	glm::vec4 outlineColor{ 1.0f, 0.0f, 0.0f, 0.0f };
+	vec4 outlineColor{ 1.0f, 0.0f, 0.0f, 0.0f };
 	float outlineWidth{ 0.6f };
 	float outline{ true };
 };
 
 struct UIUniformData {
-	glm::mat4 projection;
-	glm::mat4 view;
+	mat4 projection;
+	mat4 view;
 };
 
 

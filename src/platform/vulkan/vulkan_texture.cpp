@@ -10,7 +10,6 @@
 #include <format>
 #include <iostream>
 #include <ktx.h>
-#include <ranges>
 
 namespace pm {
 void getValidFilters(VkPhysicalDevice physicalDevice, VkFormat format, VkFilter* filter, VkSamplerMipmapMode* mipmapMode) {

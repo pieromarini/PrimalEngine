@@ -1,14 +1,9 @@
 #include "ui_manager.h"
-#include "memory/arena.h"
-#include "memory/data_structures/fixed_array.h"
-#include "primal.h"
+#include "core/data_structures/fixed_array.h"
+#include "core/memory/arena.h"
 #include "ui/ui_types.h"
 #include "utils/fonts.h"
 #include <algorithm>
-#include <chrono>
-#include <format>
-#include <iostream>
-
 
 namespace pm::UI {
 
@@ -199,13 +194,6 @@ void handleDragValue(UILayoutElement* element) {
 		break;
 	}
 	}
-}
-
-PrimalWindow* createWindow(std::string_view name, int32_t width, int32_t height) {
-	auto engine = PrimalEngine::get();
-	auto window = engine.createWindow(name, width, height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
-
-	return window;
 }
 
 void beginWindow(PrimalWindow* window) {

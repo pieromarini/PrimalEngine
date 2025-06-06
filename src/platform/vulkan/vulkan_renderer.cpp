@@ -1,20 +1,21 @@
 #include "assets/image_loader.h"
 #include "platform/vulkan/buffers.h"
 #include "platform/window.h"
-#include "primal.h"
+#include "primal_engine.h"
 #include "renderer/material_config.h"
 #include "terrain/voxel.h"
+#include "ui/primitives.h"
 #include "ui/ui_manager.h"
 
-#include "vk_types.h"
+#include "platform/vk_types.h"
 
 #include <queue>
 #include <vk_mem_alloc.h>
 
 #include "assets/font_loader.h"
-#include "config.h"
-#include "memory/arena.h"
-#include "memory/data_structures/fixed_array.h"
+#include "core/config.h"
+#include "core/memory/arena.h"
+#include "core/data_structures/fixed_array.h"
 #include "swapchain.h"
 #include "ui/ui_types.h"
 #include "ui/widgets.h"
@@ -23,11 +24,9 @@
 #include <vulkan/vulkan_core.h>
 
 
-#include "entity.h"
 #include "platform/vulkan/vulkan_descriptor.h"
 #include "platform/vulkan/vulkan_images.h"
 #include "platform/vulkan/vulkan_loader.h"
-#include "ui/primitives.h"
 #include "vulkan_pipeline.h"
 #include "vulkan_renderer.h"
 #include "vulkan_shader.h"

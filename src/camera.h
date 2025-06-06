@@ -1,7 +1,7 @@
 #pragma once
 
 #include <SDL3/SDL_events.h>
-#include <vk_types.h>
+#include "core/math/math.h"
 
 namespace pm {
 
@@ -11,11 +11,11 @@ public:
 	Camera() = delete;
 	Camera(uint32_t windowW, uint32_t windowH) : windowWidth{ windowW }, windowHeight{ windowH } {}
 
-	glm::mat4 getViewMatrix();
-	glm::mat4 getRotationMatrix();
+	mat4 getViewMatrix();
+	mat4 getRotationMatrix();
 
-	glm::mat4 getPerspectiveProjection();
-	glm::mat4 getOrthographicProjection();
+	mat4 getPerspectiveProjection();
+	mat4 getOrthographicProjection();
 
 	void processSDLEvent(SDL_Event& e);
 
@@ -26,8 +26,8 @@ public:
 	void setMouseControlEnabled(bool flag);
 
 	uint32_t windowWidth, windowHeight;
-	glm::vec3 velocity{};
-	glm::vec3 position{};
+	vec3 velocity{};
+	vec3 position{};
 	float pitch{ 0.f };
 	float yaw{ 0.f };
 

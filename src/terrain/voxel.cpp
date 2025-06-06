@@ -1,10 +1,12 @@
 #include "voxel.h"
+#include "core/math/math.h"
+#include "core/math/noise.h"
 #include "glm/ext/matrix_transform.hpp"
-#include "math/noise.h"
-#include "vk_types.h"
-#include <cmath>
+#include <array>
+#include <format>
 #include <iostream>
 #include <limits>
+
 
 
 namespace pm {
@@ -19,7 +21,7 @@ const std::array<glm::ivec3, 8> CUBE_CORNERS = { {
 	{ 0, 1, 1 },
 	{ 1, 1, 1 },
 } };
-const std::array<glm::vec3, 8> CUBE_CORNER_VECTORS = { {
+const std::array<vec3, 8> CUBE_CORNER_VECTORS = { {
 	{ 0.0, 0.0, 0.0 },
 	{ 1.0, 0.0, 0.0 },
 	{ 0.0, 1.0, 0.0 },
@@ -64,31 +66,31 @@ auto const heightMap = [](float x, float y, float z, float heightMultiplier) -> 
 };
 
 // Calculate normal vector as the gradient of the SDF
-static glm::vec3 sdfGradient(std::array<float, 8>& dists, glm::vec3& s) {
-	auto p00 = glm::vec3{ dists[0b001], dists[0b010], dists[0b100] };
-	auto n00 = glm::vec3{ dists[0b000], dists[0b000], dists[0b000] };
+static vec3 sdfGradient(std::array<float, 8>& dists, vec3& s) {
+	auto p00 = vec3{ dists[0b001], dists[0b010], dists[0b100] };
+	auto n00 = vec3{ dists[0b000], dists[0b000], dists[0b000] };
 
-	auto p10 = glm::vec3{ dists[0b101], dists[0b011], dists[0b110] };
-	auto n10 = glm::vec3{ dists[0b100], dists[0b001], dists[0b010] };
+	auto p10 = vec3{ dists[0b101], dists[0b011], dists[0b110] };
+	auto n10 = vec3{ dists[0b100], dists[0b001], dists[0b010] };
 
-	auto p01 = glm::vec3{ dists[0b011], dists[0b110], dists[0b101] };
-	auto n01 = glm::vec3{ dists[0b010], dists[0b100], dists[0b001] };
+	auto p01 = vec3{ dists[0b011], dists[0b110], dists[0b101] };
+	auto n01 = vec3{ dists[0b010], dists[0b100], dists[0b001] };
 
-	auto p11 = glm::vec3{ dists[0b111], dists[0b111], dists[0b111] };
-	auto n11 = glm::vec3{ dists[0b110], dists[0b101], dists[0b011] };
+	auto p11 = vec3{ dists[0b111], dists[0b111], dists[0b111] };
+	auto n11 = vec3{ dists[0b110], dists[0b101], dists[0b011] };
 
 	auto d00 = p00 - n00;// Edges (0b00x, 0b0y0, 0bz00)
 	auto d10 = p10 - n10;// Edges (0b10x, 0b0y1, 0bz10)
 	auto d01 = p01 - n01;// Edges (0b01x, 0b1y0, 0bz01)
 	auto d11 = p11 - n11;// Edges (0b11x, 0b1y1, 0bz11)
 
-	auto neg = glm::vec3{ 1.0f } - s;
+	auto neg = vec3{ 1.0f } - s;
 
-	glm::vec3 negYZX{ neg.y, neg.z, neg.x };
-	glm::vec3 negZXY{ neg.z, neg.x, neg.y };
+	vec3 negYZX{ neg.y, neg.z, neg.x };
+	vec3 negZXY{ neg.z, neg.x, neg.y };
 
-	glm::vec3 sYZX{ s.y, s.z, s.x };
-	glm::vec3 sZXY{ s.z, s.x, s.y };
+	vec3 sYZX{ s.y, s.z, s.x };
+	vec3 sZXY{ s.z, s.x, s.y };
 
 	// billinear interpolation between 4 edges in each dimension
 	return glm::normalize(negYZX * negZXY * d00
@@ -172,7 +174,7 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 	// Fill the voxel lookup map
 	for (auto& chunk : terrain.chunks) {
 		// Extract translation from transform matrix
-		auto chunkOffset = glm::vec3(chunk.transform[3]);
+		auto chunkOffset = vec3(chunk.transform[3]);
 
 		for (auto& voxel : chunk.voxels) {
 			// Calculate world position
@@ -187,7 +189,6 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 		}
 	}
 	*/
-
 	// Surface nets
 
 	uint32_t minZ = 0;
@@ -199,15 +200,14 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 	uint32_t maxX = VOXEL_CHUNK_SIZE;
 
 	for (auto& chunk : terrain.chunks) {
-		auto chunkOffset = glm::vec3(chunk.transform[3]);
-		std::cout << std::format("{} {} {}\n", chunkOffset.x, chunkOffset.y, chunkOffset.z);
+		auto chunkOffset = vec3(chunk.transform[3]);
 
 		chunk.firstIndex = indices.size();
 		chunk.vertexOffset = static_cast<int32_t>(vertices.size());
 		size_t indicesBeforeChunk = indices.size();
 
 		// auxiliary structures
-		std::vector<glm::vec3> surfacePoints;
+		std::vector<vec3> surfacePoints;
 		std::vector<uint32_t> surfaceStrides;
 		std::vector<uint32_t> strideToIndex;
 		strideToIndex.resize(chunk.voxels.size());
@@ -216,7 +216,7 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 			for (uint32_t y = minY; y < maxY; ++y) {
 				for (uint32_t x = minX; x < maxX; ++x) {
 					auto linearIndex = getChunkVoxelIndex(x, y, z, VOXEL_CHUNK_SIZE);
-					glm::vec3 p{ x, y, z };
+					vec3 p{ x, y, z };
 
 					std::array<float, 8> cornerDists{};
 					uint32_t numNegative = 0;
@@ -239,7 +239,7 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 					}
 
 					uint32_t count = 0;
-					glm::vec3 sum{ 0.0f };
+					vec3 sum{ 0.0f };
 
 					for (auto& edge : CUBE_EDGES) {
 						auto d1 = cornerDists.at(edge.x);
@@ -269,7 +269,7 @@ void generateTerrainGeometry(VoxelTerrain& terrain, std::vector<VoxelVertex>& ve
 
 
 		// Generate triangles
-		glm::vec3 xyzStrides = {
+		vec3 xyzStrides = {
 			getChunkVoxelIndex(1, 0, 0, VOXEL_CHUNK_SIZE),
 			getChunkVoxelIndex(0, 1, 0, VOXEL_CHUNK_SIZE),
 			getChunkVoxelIndex(0, 0, 1, VOXEL_CHUNK_SIZE)
@@ -335,9 +335,8 @@ VoxelTerrain generateTerrain(TerrainParams* terrainParams) {
 
 					for (uint32_t y = 0; y < VOXEL_CHUNK_SIZE_Y + 1; ++y) {
 						auto terrainHeight = terrainParams->heightScale * heightMap(wx, y, wz, terrainParams->heightMultiplier);
-						// std::cout << y << ' ' << terrainHeight << '\n';
 
-						glm::vec4 voxelColor = { 0.42f, 0.42f, 0.42f, 1.0f };
+						vec4 voxelColor = { 0.42f, 0.42f, 0.42f, 1.0f };
 
 						if (y < terrainHeight) {
 							if (y == terrainHeight - 1) {
@@ -365,7 +364,7 @@ VoxelTerrain generateTerrain(TerrainParams* terrainParams) {
 				}
 			}
 
-			voxelChunk.transform = glm::translate(glm::mat4{ 1.0f }, glm::vec3{ worldX, 0.0f, worldZ });
+			voxelChunk.transform = glm::translate(mat4{ 1.0f }, vec3{ worldX, 0.0f, worldZ });
 			terrain.chunks.push_back(voxelChunk);
 		}
 	}

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "vk_types.h"
 #include <fastgltf/glm_element_traits.hpp>
 #include <fastgltf/parser.hpp>
 #include <fastgltf/tools.hpp>
 
+#include "platform/vk_types.h"
 #include "entity.h"
 
 namespace pm {

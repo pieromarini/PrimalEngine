@@ -1,12 +1,12 @@
 #pragma once
 
-#include "renderer/material.h"
-#include "vk_types.h"
 #include <cstdint>
-#include <glm/glm.hpp>
 #include <string>
 #include <unordered_map>
 #include <vulkan/vulkan.h>
+
+#include "core/math/math.h"
+#include "renderer/material.h"
 
 namespace pm {
 
@@ -30,8 +30,8 @@ struct alignas(16) MaterialData {
 	uint32_t normalTexture{};
 	uint32_t specularTexture{};
 	uint32_t emissiveTexture{};
-	glm::vec4 colorFactors;
-	glm::vec4 metalRoughFactors;
+	vec4 colorFactors;
+	vec4 metalRoughFactors;
 };
 
 struct Material {

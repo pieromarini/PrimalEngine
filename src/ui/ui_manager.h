@@ -1,11 +1,10 @@
 #pragma once
 
-#include "utils/fonts.h"
+#include "assets/asset.h"
+#include "core/data_structures/fixed_array.h"
+#include "core/memory/arena.h"
 #include "ui_types.h"
-#include "utils/geometry.h"
-#include "memory/data_structures/fixed_array.h"
-#include "memory/arena.h"
-#include "vk_types.h"
+
 
 namespace pm::UI {
 
@@ -17,7 +16,7 @@ struct UIContext {
 	FixedArray<UIRenderCommand> renderCommands;
 
 	FixedArray<uint32_t> layoutElementChildrenIndices;
-	FixedArray<uint32_t> openLayoutElements; // elements with an open Layout
+	FixedArray<uint32_t> openLayoutElements;// elements with an open Layout
 
 	// Interactions
 	PointerState pointerState;
@@ -58,7 +57,6 @@ void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMou
 void clearPerFrameContext();
 void clearPerLayoutContext();
 
-PrimalWindow* createWindow(std::string_view name, int32_t width, int32_t height);
 void beginWindow(PrimalWindow* window);
 void endWindow();
 void beginFrame();
@@ -87,8 +85,8 @@ void setFont(FontAsset* font);
 
 void pushText(UIElementOptions options);
 void pushBox(UIElementOptions options);
-void pushCircle(float radius, uint32_t segments, float thickness, glm::vec4 color);
-void pushCircleFilled(float radius, uint32_t segments, glm::vec4 color);
+void pushCircle(float radius, uint32_t segments, float thickness, vec4 color);
+void pushCircleFilled(float radius, uint32_t segments, vec4 color);
 
 void pushPanel(UIElementOptions options);
 

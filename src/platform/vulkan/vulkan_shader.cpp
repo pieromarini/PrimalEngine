@@ -1,7 +1,7 @@
 #include <fstream>
+#include <vector>
 
 #include "vulkan_shader.h"
-#include "vulkan_structures_helpers.h"
 
 namespace pm {
 bool loadShaderModule(const char* filePath, VkDevice device, VkShaderModule* outShaderModule) {

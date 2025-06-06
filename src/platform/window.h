@@ -1,6 +1,6 @@
 #pragma once
 
-#include "SDL3/SDL_video.h"
+#include <SDL3/SDL_video.h>
 #include "platform/vulkan/swapchain.h"
 #include "vk_types.h"
 #include <string_view>

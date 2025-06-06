@@ -16,11 +16,11 @@
 #include <vulkan/vulkan_core.h>
 
 #include "camera.h"
-#include "vk_types.h"
+#include "platform/vk_types.h"
 #include "vulkan_descriptor.h"
 #include "vulkan_texture.h"
 
-#include "memory/arena.h"
+#include "core/memory/arena.h"
 #include "platform/window.h"
 #include "ui/ui_types.h"
 

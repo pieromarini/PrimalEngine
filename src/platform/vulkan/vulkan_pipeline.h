@@ -1,6 +1,7 @@
 #pragma once
 
-#include "vk_types.h"
+#include <vulkan/vulkan.h>
+#include <vector>
 
 namespace pm {
 

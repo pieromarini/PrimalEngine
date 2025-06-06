@@ -1,6 +1,9 @@
 #pragma once
 
-#include "vk_types.h"
+#include <span>
+#include <vector>
+#include <deque>
+#include <vulkan/vulkan.h>
 
 struct DescriptorLayoutBuilder {
 		void addBinding(uint32_t binding, VkDescriptorType type, VkShaderStageFlags flags = 0);

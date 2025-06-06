@@ -1,9 +1,9 @@
 #pragma once
 
 #include "camera.h"
-#include "vk_types.h"
-#include "platform/window.h"
 #include "platform/vulkan/vulkan_renderer.h"
+#include "platform/window.h"
+
 
 namespace pm {
 
@@ -28,7 +28,7 @@ private:
 	bool windowRelativeMouseMode{ false };
 
 	PrimalWindow* mainWindow;
-  Camera m_mainCamera{ m_windowExtent.width, m_windowExtent.height };
+	Camera m_mainCamera{ m_windowExtent.width, m_windowExtent.height };
 
 	bool quitRequested{ false };
 

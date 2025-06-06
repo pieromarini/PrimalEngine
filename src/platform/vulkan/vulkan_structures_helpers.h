@@ -1,6 +1,6 @@
 #pragma once
 
-#include "vk_types.h"
+#include "platform/vk_types.h"
 
 inline VkCommandPoolCreateInfo commandPoolCreateInfo(uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags) {
 	VkCommandPoolCreateInfo createInfo = {};
