@@ -1,6 +1,7 @@
 #pragma once
 
-#include "material.h"
+#include "assets/material_cache.h"
+#include "renderer/material.h"
 #include <cstdint>
 
 namespace pm {

@@ -5,7 +5,7 @@
 
 #include "core/math/geometry.h"
 #include "core/math/math.h"
-#include "material.h"
+#include "renderer/material.h"
 
 
 namespace pm {

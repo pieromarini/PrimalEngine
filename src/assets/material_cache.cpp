@@ -1,4 +1,5 @@
-#include "material.h"
+#include "material_cache.h"
+
 #include <format>
 #include <iostream>
 
@@ -43,4 +44,4 @@ Material& MaterialCache_get(MaterialCache& cache, MaterialIndex index) {
 	return cache.at(index);
 }
 
-}// namespace pm
+}

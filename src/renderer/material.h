@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/math/math.h"
 #include <string>
 #include <vector>
 #include <vulkan/vulkan.h>
@@ -95,6 +96,38 @@ struct PrimalMaterial {
 struct MaterialInstance {
 	PrimalMaterial* material;
 	std::vector<VkDescriptorSet> descriptorSets;
+};
+
+// TODO(piero): Refactor this
+enum class MaterialPass : uint8_t {
+	MainColor,
+	Transparent,
+	DoubleSided,
+	Other
+};
+
+struct MaterialPipeline {
+	VkPipeline pipeline;
+	VkPipelineLayout layout;
+};
+
+// NOTE: this struct is sent to the shader as global material data
+struct alignas(16) MaterialData {
+	uint32_t albedoTexture{};
+	uint32_t normalTexture{};
+	uint32_t specularTexture{};
+	uint32_t emissiveTexture{};
+	vec4 colorFactors;
+	vec4 metalRoughFactors;
+};
+
+struct Material {
+	std::string name;
+	MaterialData materialData;
+
+	MaterialInstance material;
+	// MaterialPipeline* pipeline;
+	MaterialPass passType;
 };
 
 MaterialInstance createMaterialInstance(PrimalMaterial* material);

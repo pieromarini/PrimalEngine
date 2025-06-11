@@ -2,7 +2,7 @@
 #include "entity.h"
 #include "fastgltf/parser.hpp"
 #include "fastgltf/types.hpp"
-#include "material.h"
+#include "renderer/material.h"
 #include <ratio>
 #include <vulkan/vulkan_core.h>
 #include "vulkan_loader.h"

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "assets/asset.h"
-#include "material.h"
+#include "assets/material_cache.h"
 #include "renderer/material.h"
 #include "terrain/voxel.h"
 #include "ui/ui_manager.h"
