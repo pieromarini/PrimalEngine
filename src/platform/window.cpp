@@ -6,25 +6,22 @@
 
 namespace pm {
 
-PrimalWindow createPrimalWindow(std::string_view title, int32_t width, int32_t height, SDL_WindowFlags flags) {
+PrimalWindow* createPrimalWindow(Arena* arena, std::string_view title, int32_t width, int32_t height, SDL_WindowFlags flags) {
+	auto window = PushStruct(arena, PrimalWindow);
+	window->width = width;
+	window->height = height;
+	window->windowFlags = flags;
+	window->mouseFocus = false;
+	window->keyboardFocus = false;
+	window->shown = false;
+	window->isMinimized = false;
 
-	PrimalWindow window{
-		.width = width,
-		.height = height,
-		.windowFlags = flags,
-		.mouseFocus = false,
-		.keyboardFocus = false,
-		.shown = false,
-		.isMinimized = false
-	};
+	window->handle = SDL_CreateWindow(title.data(), width, height, flags);
 
-	window.handle = SDL_CreateWindow(title.data(), width, height, flags);
-
-	window.id = SDL_GetWindowID(window.handle);
+	window->id = SDL_GetWindowID(window->handle);
 
 	return window;
 }
-
 
 void destroyPrimalWindow(PrimalWindow* window, VmaAllocator& allocator, VkDevice device, VkInstance instance, VkAllocationCallbacks* callbacks) {
 	// TODO(piero): Maybe we shouldn't destroy render targets here?

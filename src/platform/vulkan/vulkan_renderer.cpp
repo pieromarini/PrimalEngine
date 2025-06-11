@@ -1,10 +1,12 @@
 #include "assets/image_loader.h"
+#include "core/core.h"
+#include "core/math/math.h"
 #include "platform/vulkan/buffers.h"
 #include "platform/window.h"
 #include "primal_engine.h"
 #include "renderer/material_config.h"
 #include "terrain/voxel.h"
-#include "ui/primitives.h"
+#include "ui/generated.h"
 #include "ui/ui_manager.h"
 
 #include "platform/vk_types.h"
@@ -15,10 +17,7 @@
 #include "assets/font_loader.h"
 #include "core/config.h"
 #include "core/memory/arena.h"
-#include "core/data_structures/fixed_array.h"
 #include "swapchain.h"
-#include "ui/ui_types.h"
-#include "ui/widgets.h"
 #include <chrono>
 #include <ratio>
 #include <vulkan/vulkan_core.h>
@@ -27,6 +26,9 @@
 #include "platform/vulkan/vulkan_descriptor.h"
 #include "platform/vulkan/vulkan_images.h"
 #include "platform/vulkan/vulkan_loader.h"
+#include "ui/ui_types.h"
+#include "ui/ui_widgets.h"
+#include "utils/fonts.h"
 #include "vulkan_pipeline.h"
 #include "vulkan_renderer.h"
 #include "vulkan_shader.h"
@@ -80,7 +82,7 @@ void rendererSetup(VulkanRendererContext* context) {
 // NOTE(piero): not using this right now.
 void rendererInitMemory(VulkanRendererContext* context) {
 	for (auto& frame : context->frames) {
-		// frame.perFrameArena = MemoryArena_create(MEGABYTE(256));
+		// frame.perFrameArena = arenaAlloc(Megabytes(256));
 	}
 }
 
@@ -507,7 +509,7 @@ void resizeSwapchain(VulkanRendererContext* context, PrimalWindow* window) {
 	window->renderTarget = createImage(nRT, newWindowExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
 	window->depthTarget = createImage(nDT, newWindowExtent, context->device, context->vmaAllocator, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
 
-	UI::onResizeCallback(static_cast<float>(window->width), static_cast<float>(window->height));
+	// onResizeCallback(static_cast<float>(window->width), static_cast<float>(window->height));
 
 	window->width = newWidth;
 	window->height = newHeight;
@@ -750,17 +752,9 @@ void initRenderTargets(VulkanRendererContext* context) {
 	drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
 
-	auto testWindow = &PrimalEngine::get().windows[1];
-	VkExtent3D testWindowExtent{
-		static_cast<uint32_t>(testWindow->width),
-		static_cast<uint32_t>(testWindow->height),
-		1
-	};
-
 	// Create render targets
 	// TODO(piero): Refactor this. Create a system that does this automatically based on a config file?
 	context->rendererState->window->renderTarget = createImage("drawImage", drawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
-	testWindow->renderTarget = createImage("scene window drawImage", testWindowExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
 
 	context->sceneDrawImage = createImage("scene drawImage", sceneDrawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
 
@@ -768,7 +762,6 @@ void initRenderTargets(VulkanRendererContext* context) {
 	depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
 	context->rendererState->window->depthTarget = createImage("depthImage", drawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
-	testWindow->depthTarget = createImage("scene window depthImage", testWindowExtent, context->device, context->vmaAllocator, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
 
 	context->sceneDepthImage = createImage("scene depthImage", sceneDrawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
 }
@@ -840,344 +833,16 @@ void rendererCleanup(VulkanRendererContext* context) {
 
 	context->mainDeletionQueue.flush();
 
-	UI::cleanupRenderContext();
+	UI_destroyContext(context->mainUIContext);
 
-	for (auto& window : PrimalEngine::get().windows) {
-		destroyPrimalWindow(&window, context->vmaAllocator, context->device, context->instance, nullptr);
+	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
+		destroyPrimalWindow(window, context->vmaAllocator, context->device, context->instance, nullptr);
 	}
 
 	vmaDestroyAllocator(context->vmaAllocator);
 	vkDestroyDevice(context->device, nullptr);
 	vkb::destroy_debug_utils_messenger(context->instance, context->debugMessenger);
 	vkDestroyInstance(context->instance, nullptr);
-}
-
-std::vector<UI::UIElement> buildUIGeometry(VulkanRendererContext* context, FixedArray<UI::UIRenderCommand>& renderCommands, std::vector<UI::UIVertex>& vertices, std::vector<uint32_t>& indices) {
-	std::vector<UI::UIElement> elements;
-
-	for (uint32_t i = 0; i < renderCommands.length; ++i) {
-		auto renderCommand = FixedArray_get(renderCommands, i);
-		switch (renderCommand->commandType) {
-		case UI::UIRenderCommandType::RECTANGLE: {
-			elements.push_back(UI::box(vertices, indices));
-			break;
-		}
-		case UI::UIRenderCommandType::TITLEBAR: {
-			elements.push_back(UI::box(vertices, indices));
-			break;
-		}
-		case UI::UIRenderCommandType::VIEWPORT: {
-			elements.push_back(UI::box(vertices, indices));
-			break;
-		}
-		case UI::UIRenderCommandType::PANEL: {
-			elements.push_back(UI::box(vertices, indices));
-			break;
-		}
-		case UI::UIRenderCommandType::DOCKSPACE: {
-			elements.push_back(UI::box(vertices, indices));
-			break;
-		}
-		case UI::UIRenderCommandType::CIRCLE: {
-			if (renderCommand->circleType == UI::CircleType::FILLED) {
-				elements.push_back(UI::circleFilled(renderCommand->radius, renderCommand->segments, vertices, indices));
-			} else {
-				elements.push_back(UI::circle(renderCommand->radius, renderCommand->segments, renderCommand->thickness, vertices, indices));
-			}
-			break;
-		}
-		case pm::UI::UIRenderCommandType::TEXT: {
-			elements.push_back(UI::text(renderCommand->text, 16.0f, &context->sourceCodeFont, &vertices, &indices));
-			break;
-		}
-		}
-	}
-
-	return elements;
-}
-
-void buildUIDrawBatches(VulkanRendererContext* context, FixedArray<UI::UIWindowBatchCommands>& windowBatches) {
-	auto start = std::chrono::system_clock::now();
-
-	getCurrentFrame(context).uiWindowBatches.clear();
-
-	for (uint32_t i = 0; i < windowBatches.length; ++i) {
-
-		auto batch = FixedArray_get(windowBatches, i);
-		auto& renderCommands = batch->renderCommands;
-
-		UIWindowBatch windowBatch{
-			.window = batch->window
-		};
-		windowBatch.drawBatches.reserve(renderCommands.length);
-
-		std::vector<UIDrawData> uiDrawData;
-		std::vector<glm::mat4> textTransformData;
-		std::vector<ViewportDrawData> viewportDrawData;
-
-		std::vector<UIIndirectCommand> uiDrawCommands;
-		std::vector<UIIndirectCommand> textDrawCommands;
-		std::vector<UIIndirectCommand> viewportDrawCommands;
-
-		std::vector<uint32_t> viewportImageViewIds;
-
-		DrawBatch uiDrawBatch{ .type = DrawBatchType::UI_BATCH };
-		DrawBatch textDrawBatch{ .type = DrawBatchType::TEXT_BATCH };
-		DrawBatch viewportDrawBatch{ .type = DrawBatchType::VIEWPORT_BATCH };
-
-		std::vector<UI::UIVertex> vertices;
-		std::vector<uint32_t> indices;
-
-		auto elements = buildUIGeometry(context, renderCommands, vertices, indices);
-
-		// We use one Vertex/index buffer for all UI geometry in each window
-		auto uiGeometryBuffers = uploadMesh(context, indices, vertices, std::format("uiMeshBuffers-{}", batch->window->id));
-
-		std::vector<UIMaterialData> uiMaterialData;
-
-		uiDrawBatch.meshBuffers = uiGeometryBuffers;
-		uiDrawBatch.pipeline = context->uiMaterial.pipeline;
-		uiDrawBatch.pipelineLayout = context->uiMaterial.pipelineLayout;
-
-		textDrawBatch.meshBuffers = uiGeometryBuffers;
-		textDrawBatch.pipeline = context->uiTextMaterial.pipeline;
-		textDrawBatch.pipelineLayout = context->uiTextMaterial.pipelineLayout;
-
-		viewportDrawBatch.meshBuffers = uiGeometryBuffers;
-		viewportDrawBatch.pipeline = context->uiViewportMaterial.pipeline;
-		viewportDrawBatch.pipelineLayout = context->uiViewportMaterial.pipelineLayout;
-
-		uint32_t uiDrawIdCount{ 0 }, textDrawIdCount{ 0 }, viewportDrawIdCount{ 0 };
-
-		for (uint32_t i = 0; i < elements.size(); ++i) {
-			auto renderCommand = FixedArray_get(renderCommands, i);
-			auto& uiElement = elements.at(i);
-
-			auto& rect = renderCommand->boundingRect;
-			auto transform = glm::mat4{ 1.0f };
-
-			switch (renderCommand->commandType) {
-			case UI::UIRenderCommandType::RECTANGLE: {
-				transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
-				// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-				transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
-				uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
-					.command = {
-						.indexCount = uiElement.indexCount,
-						.instanceCount = 1,
-						.firstIndex = uiElement.firstIndex,
-						.vertexOffset = uiElement.vertexOffset,
-						.firstInstance = uiDrawIdCount } });
-				uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor, .horizontalBorder = renderCommand->border.horizontalBorder, .verticalBorder = renderCommand->border.verticalBorder });
-				uiDrawIdCount++;
-				break;
-			}
-			case UI::UIRenderCommandType::VIEWPORT: {
-				transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
-				// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-				transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
-				viewportDrawCommands.push_back({ .drawId = viewportDrawIdCount,
-					.command = {
-						.indexCount = uiElement.indexCount,
-						.instanceCount = 1,
-						.firstIndex = uiElement.firstIndex,
-						.vertexOffset = uiElement.vertexOffset,
-						.firstInstance = viewportDrawIdCount } });
-				viewportDrawData.push_back({ .transform = transform, .textureIndex = renderCommand->textureId });
-				viewportDrawIdCount++;
-				break;
-			}
-			case UI::UIRenderCommandType::PANEL: {
-				transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
-				// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-				transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
-				uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
-					.command = {
-						.indexCount = uiElement.indexCount,
-						.instanceCount = 1,
-						.firstIndex = uiElement.firstIndex,
-						.vertexOffset = uiElement.vertexOffset,
-						.firstInstance = uiDrawIdCount } });
-				uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor, .horizontalBorder = renderCommand->border.horizontalBorder, .verticalBorder = renderCommand->border.verticalBorder });
-				uiDrawIdCount++;
-				break;
-			}
-			case UI::UIRenderCommandType::TITLEBAR: {
-				transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
-				// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-				transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
-				uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
-					.command = {
-						.indexCount = uiElement.indexCount,
-						.instanceCount = 1,
-						.firstIndex = uiElement.firstIndex,
-						.vertexOffset = uiElement.vertexOffset,
-						.firstInstance = uiDrawIdCount } });
-				uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor, .horizontalBorder = renderCommand->border.horizontalBorder, .verticalBorder = renderCommand->border.verticalBorder });
-				uiDrawIdCount++;
-				break;
-			}
-			case UI::UIRenderCommandType::DOCKSPACE: {
-				transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
-				// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-				transform = glm::scale(transform, glm::vec3(rect.width / 2.0f, rect.height / 2.0f, 1.0f));
-				uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
-					.command = {
-						.indexCount = uiElement.indexCount,
-						.instanceCount = 1,
-						.firstIndex = uiElement.firstIndex,
-						.vertexOffset = uiElement.vertexOffset,
-						.firstInstance = uiDrawIdCount } });
-				uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor, .horizontalBorder = renderCommand->border.horizontalBorder, .verticalBorder = renderCommand->border.verticalBorder });
-				uiDrawIdCount++;
-				break;
-			}
-			case UI::UIRenderCommandType::CIRCLE: {
-				transform = glm::translate(transform, glm::vec3(rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f, 0.0f));
-				// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-				transform = glm::scale(transform, glm::vec3(1.0f, 1.0f, 1.0f));
-				uiDrawCommands.push_back({ .drawId = uiDrawIdCount,
-					.command = {
-						.indexCount = uiElement.indexCount,
-						.instanceCount = 1,
-						.firstIndex = uiElement.firstIndex,
-						.vertexOffset = uiElement.vertexOffset,
-						.firstInstance = uiDrawIdCount } });
-				uiDrawData.push_back({ .transform = transform, .materialIndex = uiDrawIdCount });
-				uiMaterialData.push_back({ .backgroundColor = renderCommand->backgroundColor });
-				uiDrawIdCount++;
-				break;
-			}
-			case UI::UIRenderCommandType::TEXT: {
-				transform = glm::translate(transform, glm::vec3(rect.x, rect.y, 0.0f));
-				// transform = glm::rotate(transform, glm::radians(uiElement.rotation), glm::vec3(0.0f, 0.0f, 1.0f));
-				transform = glm::scale(transform, glm::vec3(1.0f, 1.0f, 1.0f));
-				textDrawCommands.push_back({ .drawId = textDrawIdCount,
-					.command = {
-						.indexCount = uiElement.indexCount,
-						.instanceCount = 1,
-						.firstIndex = uiElement.firstIndex,
-						.vertexOffset = uiElement.vertexOffset,
-						.firstInstance = textDrawIdCount } });
-
-				textTransformData.push_back(transform);
-				textDrawIdCount++;
-				break;
-			}
-			default: {
-				std::cout << "Command type not implemented, skipping.\n";
-				break;
-			}
-			}
-		}
-
-		auto uiDrawCommandsBuffer = createBuffer("uiIndirectCommandBuffer", sizeof(UIIndirectCommand) * uiDrawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		memcpy(uiDrawCommandsBuffer.info.pMappedData, uiDrawCommands.data(), sizeof(UIIndirectCommand) * uiDrawCommands.size());
-
-		auto uiDrawDataBuffer = createBuffer("uiDrawDataBuffer", sizeof(UIDrawData) * uiDrawData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		memcpy(uiDrawDataBuffer.info.pMappedData, uiDrawData.data(), sizeof(UIDrawData) * uiDrawData.size());
-
-		auto uiMaterialDataBuffer = createBuffer("uiMaterialDataBuffer", sizeof(UIMaterialData) * uiMaterialData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		memcpy(uiMaterialDataBuffer.info.pMappedData, uiMaterialData.data(), sizeof(UIMaterialData) * uiMaterialData.size());
-
-		uiDrawBatch.commands = {
-			.buffer = uiDrawCommandsBuffer,
-			.offset = offsetof(UIIndirectCommand, command),
-			.size = static_cast<uint32_t>(uiDrawCommands.size()),
-			.stride = sizeof(UIIndirectCommand)
-		};
-
-		uiDrawBatch.material = createMaterialInstance(&context->uiMaterial);
-
-		uiDrawBatch.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, uiDrawBatch.material.material->descriptorLayouts.at(0));
-		writeUniform(context, &uiDrawBatch.material, 0, 0, batch->window->uiData.buffer, sizeof(UIUniformData), 0);
-		writeUniform(context, &uiDrawBatch.material, 0, 1, uiDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * uiDrawCommands.size(), 0);
-		writeUniform(context, &uiDrawBatch.material, 0, 2, uiDrawDataBuffer.buffer, sizeof(UIDrawData) * uiDrawData.size(), 0);
-		writeUniform(context, &uiDrawBatch.material, 0, 3, uiMaterialDataBuffer.buffer, sizeof(UIMaterialData) * uiMaterialData.size(), 0);
-
-		windowBatch.drawBatches.push_back(uiDrawBatch);
-
-		// text
-		if (textDrawCommands.size() > 0) {
-			auto textDrawCommandsBuffer = createBuffer("textIndirectCommandBuffer", sizeof(UIIndirectCommand) * textDrawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			memcpy(textDrawCommandsBuffer.info.pMappedData, textDrawCommands.data(), sizeof(UIIndirectCommand) * textDrawCommands.size());
-
-			auto textTransformDataBuffer = createBuffer("textTransformBuffer", sizeof(glm::mat4) * textTransformData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			memcpy(textTransformDataBuffer.info.pMappedData, textTransformData.data(), sizeof(glm::mat4) * textTransformData.size());
-
-			textDrawBatch.commands = {
-				.buffer = textDrawCommandsBuffer,
-				.offset = offsetof(UIIndirectCommand, command),
-				.size = static_cast<uint32_t>(textDrawCommands.size()),
-				.stride = sizeof(UIIndirectCommand)
-			};
-
-			textDrawBatch.material = createMaterialInstance(&context->uiTextMaterial);
-
-			// NOTE(piero): Allocate a frame descriptor set and write uniforms for this material.
-			textDrawBatch.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, textDrawBatch.material.material->descriptorLayouts.at(0));
-			writeUniform(context, &textDrawBatch.material, 0, 0, batch->window->fontData.buffer, sizeof(FontUniformData), 0);
-			writeUniform(context, &textDrawBatch.material, 0, 1, context->sourceCodeFontTexture.imageView, context->sourceCodeFontTexture.sampler, context->sourceCodeFontTexture.imageLayout);
-			writeUniform(context, &textDrawBatch.material, 0, 2, textDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * textDrawCommands.size(), 0);
-			writeUniform(context, &textDrawBatch.material, 0, 3, textTransformDataBuffer.buffer, sizeof(glm::mat4) * textTransformData.size(), 0);
-
-
-			windowBatch.drawBatches.push_back(textDrawBatch);
-
-			getCurrentFrame(context).deletionQueue.push([context, textDrawCommandsBuffer, textTransformDataBuffer]() {
-				destroyBuffer(context->vmaAllocator, textDrawCommandsBuffer);
-				destroyBuffer(context->vmaAllocator, textTransformDataBuffer);
-			});
-		}
-
-		// viewport
-		if (viewportDrawCommands.size() > 0) {
-			auto viewportDrawCommandsBuffer = createBuffer("viewportIndirectCommandBuffer", sizeof(UIIndirectCommand) * viewportDrawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			memcpy(viewportDrawCommandsBuffer.info.pMappedData, viewportDrawCommands.data(), sizeof(UIIndirectCommand) * viewportDrawCommands.size());
-
-			auto viewportTransformDataBuffer = createBuffer("viewportTransformBuffer", sizeof(ViewportDrawData) * viewportDrawData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			memcpy(viewportTransformDataBuffer.info.pMappedData, viewportDrawData.data(), sizeof(ViewportDrawData) * viewportDrawData.size());
-
-			viewportDrawBatch.commands = {
-				.buffer = viewportDrawCommandsBuffer,
-				.offset = offsetof(UIIndirectCommand, command),
-				.size = static_cast<uint32_t>(viewportDrawCommands.size()),
-				.stride = sizeof(UIIndirectCommand)
-			};
-
-			viewportDrawBatch.material = context->uiViewportMaterialInstance;
-
-			viewportDrawBatch.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, viewportDrawBatch.material.material->descriptorLayouts.at(0));
-			writeUniform(context, &viewportDrawBatch.material, 0, 0, batch->window->uiData.buffer, sizeof(UIUniformData), 0);
-			writeUniform(context, &viewportDrawBatch.material, 0, 1, viewportDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * viewportDrawCommands.size(), 0);
-			writeUniform(context, &viewportDrawBatch.material, 0, 2, viewportTransformDataBuffer.buffer, sizeof(ViewportDrawData) * viewportDrawData.size(), 0);
-
-			windowBatch.drawBatches.push_back(viewportDrawBatch);
-
-			getCurrentFrame(context).deletionQueue.push([context, viewportDrawCommandsBuffer, viewportTransformDataBuffer]() {
-				destroyBuffer(context->vmaAllocator, viewportDrawCommandsBuffer);
-				destroyBuffer(context->vmaAllocator, viewportTransformDataBuffer);
-			});
-		}
-
-		getCurrentFrame(context).deletionQueue.push([context, uiDrawCommandsBuffer, uiDrawDataBuffer, uiMaterialDataBuffer, uiGeometryBuffers]() {
-			destroyBuffer(context->vmaAllocator, uiDrawCommandsBuffer);
-			destroyBuffer(context->vmaAllocator, uiDrawDataBuffer);
-			destroyBuffer(context->vmaAllocator, uiMaterialDataBuffer);
-			destroyBuffer(context->vmaAllocator, uiGeometryBuffers.vertexBuffer);
-			destroyBuffer(context->vmaAllocator, uiGeometryBuffers.indexBuffer);
-		});
-
-		getCurrentFrame(context).uiWindowBatches.push_back(windowBatch);
-	}
-
-	auto genTime = std::chrono::duration<double, std::micro>(std::chrono::system_clock::now() - start).count();
-
-	context->rendererState->rendererStats.uiDrawBatchGenerationTimeAvg = context->rendererState->rendererStats.uiDrawBatchGenerationTimeAvg * 0.95 + genTime * 0.05;
 }
 
 void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models) {
@@ -1192,15 +857,15 @@ void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models
 	for (auto model : models) {
 		auto start = std::chrono::high_resolution_clock::now();
 
-		DrawBatch opaque{ .type = DrawBatchType::MESH_BATCH };
+		DrawBatch opaque{ .type = DrawBatchType::DRAW_BATCH_MESH };
 		opaque.meshBuffers = model.modelBuffers;
 		opaque.material = createMaterialInstance(&context->opaqueMaterial);
 
-		DrawBatch transparent{ .type = DrawBatchType::MESH_BATCH };
+		DrawBatch transparent{ .type = DrawBatchType::DRAW_BATCH_MESH };
 		transparent.meshBuffers = model.modelBuffers;
 		transparent.material = createMaterialInstance(&context->transparentMaterial);
 
-		DrawBatch doubleSided{ .type = DrawBatchType::MESH_BATCH };
+		DrawBatch doubleSided{ .type = DrawBatchType::DRAW_BATCH_MESH };
 		doubleSided.meshBuffers = model.modelBuffers;
 		doubleSided.material = createMaterialInstance(&context->doubleSidedMaterial);
 
@@ -1369,7 +1034,7 @@ void rendererUpdate(VulkanRendererContext* context, float deltaTime) {
 	context->rendererState->rendererStats.frameCount++;
 
 	updateScene(context, deltaTime);
-	updateUIData(context);
+	updateUIData(context, deltaTime);
 	updateFontData(context);
 }
 
@@ -1382,10 +1047,10 @@ void rendererDraw(VulkanRendererContext* context) {
 
 	// Get next swapchain image for each swapchain/window we render to
 	auto currentFrameIndex = getCurrentFrameIndex(context);
-	for (auto& window : PrimalEngine::get().windows) {
-		auto e = vkAcquireNextImageKHR(context->device, window.swapchain.handle, 1000000000, window.swapchain.swapchainSemaphores.at(currentFrameIndex), nullptr, &window.nextImageIndex);
+	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
+		auto e = vkAcquireNextImageKHR(context->device, window->swapchain.handle, 1000000000, window->swapchain.swapchainSemaphores.at(currentFrameIndex), nullptr, &window->nextImageIndex);
 		if (e == VK_ERROR_OUT_OF_DATE_KHR) {
-			window.resizeRequested = true;
+			window->resizeRequested = true;
 			return;
 		}
 	}
@@ -1394,7 +1059,6 @@ void rendererDraw(VulkanRendererContext* context) {
 
 	// Build draw batches
 	buildDrawBatches(context, context->loadedModels);
-	buildUIDrawBatches(context, getCurrentFrame(context).uiWindowBatchCommands);
 
 	auto commandBuffer = getCurrentFrame(context).commandBuffer;
 
@@ -1439,9 +1103,9 @@ void rendererDraw(VulkanRendererContext* context) {
 	*/
 
 	// transition render targets into correct layouts
-	for (auto& window : PrimalEngine::get().windows) {
-		transitionImage(commandBuffer, window.renderTarget.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-		transitionImage(commandBuffer, window.depthTarget.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
+		transitionImage(commandBuffer, window->renderTarget.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		transitionImage(commandBuffer, window->depthTarget.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 	}
 
 	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -1471,21 +1135,21 @@ void rendererDraw(VulkanRendererContext* context) {
 	vkCmdEndQuery(commandBuffer, context->pipelineStatisticsPool, 0);
 
 	// transition the render targets into their correct transfer layouts
-	for (auto& window : PrimalEngine::get().windows) {
-		transitionImage(commandBuffer, window.renderTarget.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
+		transitionImage(commandBuffer, window->renderTarget.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 	}
 
 	// Copy render target to swapchain image
-	for (auto& window : PrimalEngine::get().windows) {
+	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
 		// get all swapchains ready to be copied to
-		transitionImage(commandBuffer, window.swapchain.images[window.nextImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		transitionImage(commandBuffer, window->swapchain.images[window->nextImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 		// execute a copy from the draw image into the swapchain
-		VkExtent2D sourceImageSize{ .width = window.renderTarget.imageExtent.width, .height = window.renderTarget.imageExtent.height };
-		copyImageToImage(commandBuffer, window.renderTarget.image, window.swapchain.images[window.nextImageIndex], sourceImageSize, window.swapchain.extent);
+		VkExtent2D sourceImageSize{ .width = window->renderTarget.imageExtent.width, .height = window->renderTarget.imageExtent.height };
+		copyImageToImage(commandBuffer, window->renderTarget.image, window->swapchain.images[window->nextImageIndex], sourceImageSize, window->swapchain.extent);
 
 		// set swapchain image layout to Present so we can show it on the screen
-		transitionImage(commandBuffer, window.swapchain.images[window.nextImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+		transitionImage(commandBuffer, window->swapchain.images[window->nextImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 	}
 
 	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, context->timestampPool, 1);
@@ -1498,14 +1162,14 @@ void rendererDraw(VulkanRendererContext* context) {
 	auto cmdinfo = commandBufferSubmitInfo(commandBuffer);
 
 	std::vector<VkSemaphoreSubmitInfo> waitInfos{};
-	waitInfos.reserve(PrimalEngine::get().windows.size());
+	waitInfos.reserve(1);
 
 	std::vector<VkSemaphoreSubmitInfo> signalInfos{};
-	signalInfos.reserve(PrimalEngine::get().windows.size());
+	signalInfos.reserve(1);
 
-	for (auto& window : PrimalEngine::get().windows) {
-		waitInfos.push_back(semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, window.swapchain.swapchainSemaphores.at(currentFrameIndex)));
-		signalInfos.push_back(semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, window.swapchain.renderSemaphores.at(currentFrameIndex)));
+	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
+		waitInfos.push_back(semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, window->swapchain.swapchainSemaphores.at(currentFrameIndex)));
+		signalInfos.push_back(semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, window->swapchain.renderSemaphores.at(currentFrameIndex)));
 	}
 
 	VkSubmitInfo2 submit = submitInfo(&cmdinfo, &signalInfos, &waitInfos);
@@ -1517,20 +1181,20 @@ void rendererDraw(VulkanRendererContext* context) {
 	// prepare presenting all visible windows
 	// we want to wait on the renderSemaphore for that,
 	// as its necessary that drawing commands have finished before the image is displayed to the user
-	for (auto& window : PrimalEngine::get().windows) {
+	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
 		VkPresentInfoKHR presentInfo = {};
 		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-		presentInfo.pSwapchains = &window.swapchain.handle;
+		presentInfo.pSwapchains = &window->swapchain.handle;
 		presentInfo.swapchainCount = 1;
 
-		presentInfo.pWaitSemaphores = &window.swapchain.renderSemaphores.at(currentFrameIndex);
+		presentInfo.pWaitSemaphores = &window->swapchain.renderSemaphores.at(currentFrameIndex);
 		presentInfo.waitSemaphoreCount = 1;
 
-		presentInfo.pImageIndices = &window.nextImageIndex;
+		presentInfo.pImageIndices = &window->nextImageIndex;
 
 		VkResult presentResult = vkQueuePresentKHR(context->graphicsQueue, &presentInfo);
 		if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
-			window.resizeRequested = true;
+			window->resizeRequested = true;
 		}
 	}
 
@@ -1605,11 +1269,18 @@ void blitGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer) 
 }
 
 void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
+
 	auto uiStart = std::chrono::system_clock::now();
 
 	VkClearValue clearColor{
 		.color = { 0.0, 0.0, 0.0, 1.0 }
 	};
+
+	getCurrentFrame(context).uiWindowBatches.clear();
+
+	UI_draw(context);
+
+	Renderer_submit(context);
 
 	for (auto& windowBatch : getCurrentFrame(context).uiWindowBatches) {
 		auto window = windowBatch.window;
@@ -1639,7 +1310,8 @@ void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
 		scissor.extent.height = extent.height;
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-		for (auto& drawBatch : windowBatch.drawBatches) {
+		for (auto* batchNode = windowBatch.firstDrawBatch; batchNode != nullptr; batchNode = batchNode->next) {
+			auto& drawBatch = batchNode->drawBatch;
 			auto materialInstance = drawBatch.material;
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, materialInstance.material->pipeline);
 
@@ -2129,15 +1801,15 @@ void updateScene(VulkanRendererContext* context, float deltaTime) {
 
 void updateFontData(VulkanRendererContext* context) {
 	// Update uniform for each window
-	for (auto& window : PrimalEngine::get().windows) {
+	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
 		FontUniformData fontUniformData{};
 		fontUniformData.outline = 0.0f;
 		fontUniformData.view = glm::mat4(1.0f);
-		auto w = static_cast<float>(window.width);
-		auto h = static_cast<float>(window.height);
+		auto w = static_cast<float>(window->width);
+		auto h = static_cast<float>(window->height);
 		fontUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
 
-		memcpy(window.fontData.info.pMappedData, &fontUniformData, sizeof(FontUniformData));
+		memcpy(window->fontData.info.pMappedData, &fontUniformData, sizeof(FontUniformData));
 	}
 }
 
@@ -2145,8 +1817,8 @@ void initFontData(VulkanRendererContext* context) {
 	context->sourceCodeFont = loadFontSDF("SauceCodePro-Light", "res/fonts/SauceCodePro-Light.png", "res/fonts/SauceCodePro-Light.json");
 	// arialFont = loadFontSDF("Arial", "res/fonts/arial.png", "res/fonts/arial.json");
 
-	for (auto& window : PrimalEngine::get().windows) {
-		window.fontData = createBuffer(std::format("fontUniformBuffer-{}", window.id), sizeof(FontUniformData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
+		window->fontData = createBuffer(std::format("fontUniformBuffer-{}", window->id), sizeof(FontUniformData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 	}
 
 	auto extents = VkExtent3D{
@@ -2160,16 +1832,16 @@ void initFontData(VulkanRendererContext* context) {
 	updateFontData(context);
 }
 
-void updateUIData(VulkanRendererContext* context) {
+void updateUIData(VulkanRendererContext* context, f32 deltaTime) {
 	// Update uniform for each window
-	for (auto& window : PrimalEngine::get().windows) {
+	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
 		UIUniformData uiUniformData{};
 		uiUniformData.view = glm::mat4(1.0f);
-		auto w = static_cast<float>(window.width);
-		auto h = static_cast<float>(window.height);
+		auto w = static_cast<float>(window->width);
+		auto h = static_cast<float>(window->height);
 		uiUniformData.projection = glm::ortho(0.0f, w, 0.0f, h, -1.0f, 1.0f);
 
-		memcpy(window.uiData.info.pMappedData, &uiUniformData, sizeof(UIUniformData));
+		memcpy(window->uiData.info.pMappedData, &uiUniformData, sizeof(UIUniformData));
 	}
 
 	auto& rendererState = context->rendererState;
@@ -2207,234 +1879,60 @@ void updateUIData(VulkanRendererContext* context) {
 		sceneData.sunlightColor.z,
 		sceneData.sunlightColor.w);
 
-	UI::setFont(&context->sourceCodeFont);
-
 	auto start = std::chrono::high_resolution_clock::now();
 
-	UI::beginFrame();
+	UI_setCurrentContext(context->mainUIContext);
 
-	if (context->fullScreen) {
-		UI::beginWindow(rendererState->window);
+	UI_EventList event{};
+	UI_beginBuild(context->rendererState->window, &event, deltaTime);
 
-		// Title bar
-		UI::openElement();
-		UI::pushBox({ .width = { .size = static_cast<float>(rendererState->window->width), .sizingMode = UI::UISizingMode::STATIC },
-			.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
-			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-			.backgroundColor = { 0.678f, 0.678f, 0.678f, 1.0f } });
+	UI_pushFont(&context->sourceCodeFont);
+	UI_pushFontSize(16.0f);
 
-		// Show renderer stats
-		UI::openElement();
-		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-			.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::FIT },
-			.layoutDirection = UI::UILayoutDirection::VERTICAL,
-			.backgroundColor = { 0.0f, 0.0f, 0.0f, 0.0f },
-			.padding = 10.0f,
-			.childGap = 10.0f });
-		UI::openTextElement();
-		UI::pushText({ .text = stats });
-		UI::closeTextElement();
+	UI_setNextPrefWidth(UI_Pct(1.0f, 1.0f));
+	UI_setNextPrefHeight(UI_Pct(1.0f, 1.0f));
+	UI_setNextChildLayoutAxis(Axis2D_X);
+	UIElement* panelElement = UIElement_create(UIElementFlag_DrawBorder | UIElementFlag_DrawBackground | UIElementFlag_Floating, "###panel_box_%p", &context->rendererState->window);
+	UI_parent(panelElement) UI_seedKey(panelElement->key) {
+		UI_setNextPrefWidth(UI_Pct(0.1f, 1.0f));
+		UI_Label(Str8L("Label test"));
 
-		UI::openTextElement();
-		UI::pushText({ .text = otherStats });
-		UI::closeTextElement();
-		UI::closeElement();
+		UI_setNextPrefWidth(UI_Pct(0.2f, 1.0f));
+		UI_setNextPrefHeight(UI_Pixels(80.0f, 1.0f));
+		UI_setNextBackgroundColor({ 0.0f, 1.0f, 0.0f, 1.0f });
+		if (UI_Button(Str8L("Button Test")).clicked_left) {
+			std::cout << "Clicked button\n";
+		}
 
-		UI::closeElement();
-
-		// TODO(piero): Refactor this when implementing GROW sizing for UI
-		UI::viewport({ .id = 1000,
-			.width = static_cast<float>(context->rendererState->window->width),
-			.height = static_cast<float>(context->rendererState->window->height - 80),
-			.textureId = context->sceneTextureId });
-
-		UI::endWindow();
-	} else {
-		// TODO(piero): Refactor this
-		auto testWindow = &PrimalEngine::get().windows[1];
-
-		UI::beginWindow(rendererState->window);
-
-		// Title bar
-		UI::openElement();
-		UI::pushBox({ .width = { .size = 2048.0f, .sizingMode = UI::UISizingMode::STATIC },
-			.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::STATIC },
-			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-			.backgroundColor = { 0.678f, 0.678f, 0.678f, 1.0f } });
-
-		// Show renderer stats
-		UI::openElement();
-		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-			.height = { .size = 80.0f, .sizingMode = UI::UISizingMode::FIT },
-			.layoutDirection = UI::UILayoutDirection::VERTICAL,
-			.backgroundColor = { 0.0f, 0.0f, 0.0f, 0.0f },
-			.padding = 10.0f,
-			.childGap = 10.0f });
-
-		UI::openTextElement();
-		UI::pushText({ .text = stats });
-		UI::closeTextElement();
-
-		UI::openTextElement();
-		UI::pushText({ .text = otherStats });
-		UI::closeTextElement();
-		UI::closeElement();
-
-		UI::closeElement();
-
-		UI::openElement();
-		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-			.height = { .sizingMode = UI::UISizingMode::FIT },
-			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-			.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
-
-		// Viewport + Asset browser
-		UI::openElement();
-		UI::pushPanel({ .width = { .sizingMode = UI::UISizingMode::FIT },
-			.height = { .sizingMode = UI::UISizingMode::FIT },
-			.layoutDirection = UI::UILayoutDirection::VERTICAL,
-			.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
-
-		// Viewport
-		UI::pushDockSpace({ .width = { .sizingMode = UI::UISizingMode::FIT },
-			.height = { .sizingMode = UI::UISizingMode::FIT },
-			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-			.backgroundColor = { 0.3294f, 0.3294f, 0.3294f, 1.0f } });
-
-		UI::viewport({ .id = 1000,
-			.width = 1448.0f,
-			.height = 700.0f,
-			.textureId = context->sceneTextureId });
-
-		UI::closeDockSpaceElement();
-
-		// Asset browser
-		UI::pushDockSpace({ .width = { .size = 1448.0f, .sizingMode = UI::UISizingMode::STATIC },
-			.height = { .size = 300.0f, .sizingMode = UI::UISizingMode::STATIC },
-			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-			.backgroundColor = { 0.3294f, 0.3294f, 0.3294f, 1.0f } });
-
-		UI::closeDockSpaceElement();
-		UI::closeElement();
-
-		// Info Panel
-		UI::pushDockSpace({ .width = { .size = 600.0f, .sizingMode = UI::UISizingMode::STATIC },
-			.height = { .size = 980.0f, .sizingMode = UI::UISizingMode::STATIC },
-			.layoutDirection = UI::UILayoutDirection::VERTICAL,
-			.backgroundColor = { 0.41960784313f, 0.41960784313f, 0.41960784313f, 1.0f },
-			.padding = 10.0f,
-			.childGap = 10.0f });
-
-		UI::sliderFloat3(&rendererState->mainCamera->position);
-		UI::sliderFloat4(&sceneData.sunlightDirection, 0.0f, 1.0f);
-		UI::checkbox(&context->testBool);
-
-		UI::openElement();
-		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-			.height = { .sizingMode = UI::UISizingMode::FIT },
-			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-			.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
-			.padding = 10.0f,
-			.childGap = 20.0f });
-
-		UI::pushCircleFilled(80.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
-		UI::pushCircle(80.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
-		UI::closeElement();
-
-		UI::sliderFloat4(&sceneData.sunlightColor, 0.0f, 1.0f);
-
-		UI::openTextElement();
-		UI::pushText({ .padding = UI::UIPadding{ 0.0f, 20.0f, 0.0f, 0.0f }, .text = "Noise Params" });
-		UI::closeTextElement();
-
-		UI::openTextElement();
-		UI::pushText({ .text = "Height Scale" });
-		UI::closeTextElement();
-		UI::sliderFloat(&context->terrainParams.heightScale, 0.1f, 100.0f);
-
-		UI::openTextElement();
-		UI::pushText({ .text = "Height Multiplier" });
-		UI::closeTextElement();
-		UI::sliderFloat(&context->terrainParams.heightMultiplier, 0.1f, 100.0f);
-
-		UI::openTextElement();
-		UI::pushText({ .text = "Noise Scale" });
-		UI::closeTextElement();
-		UI::sliderFloat(&context->terrainParams.noiseScale, 0.1f, 100.0f);
-
-		UI::openTextElement();
-		UI::pushText({ .text = "Wireframe Mode" });
-		UI::closeTextElement();
-		UI::checkbox(&context->voxelWireframeActive);
-
-		UI::closeDockSpaceElement();
-		UI::closeElement();
-
-		UI::endWindow();
-
-		UI::beginWindow(testWindow);
-
-		UI::openElement();
-		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-			.height = { .sizingMode = UI::UISizingMode::FIT },
-			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-			.backgroundColor = { 0.0f, 1.0f, 0.0f, 0.0f } });
-
-		UI::pushDockSpace({ .width = { .size = 400.0f, .sizingMode = UI::UISizingMode::STATIC },
-			.height = { .size = 800.0f, .sizingMode = UI::UISizingMode::STATIC },
-			.layoutDirection = UI::UILayoutDirection::VERTICAL,
-			.backgroundColor = { 0.41960784313f, 0.41960784313f, 0.41960784313f, 1.0f },
-			.padding = 10.0f,
-			.childGap = 10.0f });
-
-		UI::sliderFloat3(&rendererState->mainCamera->position);
-		UI::sliderFloat4(&sceneData.sunlightDirection, 0.0f, 1.0f);
-
-		UI::openElement();
-		UI::pushBox({ .width = { .sizingMode = UI::UISizingMode::FIT },
-			.height = { .sizingMode = UI::UISizingMode::FIT },
-			.layoutDirection = UI::UILayoutDirection::HORIZONTAL,
-			.backgroundColor = { 0.0f, 0.0f, 0.0f, 1.0f },
-			.padding = 10.0f,
-			.childGap = 20.0f });
-
-		UI::pushCircleFilled(50.0f, 32, { 1.0f, 0.0f, 0.0f, 1.0f });
-		UI::pushCircle(50.0f, 32, 10.0f, { 0.0f, 1.0f, 0.0f, 1.0f });
-		UI::closeElement();
-
-		UI::sliderFloat4(&sceneData.sunlightColor, 0.0f, 1.0f);
-		UI::closeDockSpaceElement();
-		UI::closeElement();
-
-
-		UI::endWindow();
+		UI_setNextFixedRect({ .min = { 200.0f, 600.0f }, .max = { 650.0f, 310.0f } });
+		UI_setNextBackgroundColor({ 1.0f, 1.0f, 0.0f, 1.0f });
+		if (UI_Button(Str8L("Button Test")).clicked_left) {
+			std::cout << "Clicked button\n";
+		}
 	}
 
-	// NOTE(piero): We are not making a deep copy of this data. We are still referencing the arena memory.
-	getCurrentFrame(context).uiWindowBatchCommands = UI::endFrame();
+	UI_endBuild();
 
 	auto uiLayoutTime = std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - start).count();
 	context->rendererState->rendererStats.uiLayoutTimeAvg = context->rendererState->rendererStats.uiLayoutTimeAvg * 0.95 + uiLayoutTime * 0.05;
 }
 
 void initUI(VulkanRendererContext* context) {
-	context->uiMemoryArena = MemoryArena_create(MEGABYTE(20));
-	UI::initRenderContext(&context->uiMemoryArena);
+	context->mainUIContext = UI_createContext();
 
 	// Register image to UI system
 	context->sceneTextureId = registerImage(context, &context->sceneDrawImage);
 
 	writeUniform(context, &context->uiViewportMaterialInstance, 1, 0, context->sceneDrawImage.imageView, context->defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, context->sceneTextureId);
 
-	for (auto& window : PrimalEngine::get().windows) {
-		window.uiData = createBuffer(std::format("uiUniformBuffer-{}", window.id), sizeof(UIUniformData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
+		window->uiData = createBuffer(std::format("uiUniformBuffer-{}", window->id), sizeof(UIUniformData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 	}
 
-	updateUIData(context);
+	updateUIData(context, 0.0f);
 }
 
 void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown) {
-	UI::setPointerState(windowId, mouseX, mouseY, relMouseX, relMouseY, isPointerDown);
 }
 
 // TODO(piero): Rework this. Right now we are just using this to keep track of the indices in which we upload to the global descriptor for textures.
@@ -2449,8 +1947,8 @@ uint32_t registerImage(VulkanRendererContext* context, AllocatedImage* image) {
  * Create a staging buffer in CPU memory to hold the vertex + index buffer data.
  * Copy it to a GPU buffer.
  */
-GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<UI::UIVertex> vertices, std::string name) {
-	const auto vertexBufferSize = vertices.size() * sizeof(UI::UIVertex);
+GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<UIVertex> vertices, std::string name) {
+	const auto vertexBufferSize = vertices.size() * sizeof(UIVertex);
 	const auto indexBufferSize = indices.size() * sizeof(uint32_t);
 
 	GPUMeshBuffers newSurface{};
@@ -2588,6 +2086,180 @@ GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> in
 	destroyBuffer(context->vmaAllocator, staging);
 
 	return newSurface;
+}
+
+DrawBatchNode* Renderer_getBatch(VulkanRendererContext* context, DrawBatchType type) {
+	if (getCurrentFrame(context).uiWindowBatches.size() <= 0) {
+		return nullptr;
+	}
+
+	for (auto* batchNode = getCurrentFrame(context).uiWindowBatches[0].firstDrawBatch; batchNode != nullptr; batchNode = batchNode->next) {
+		auto& batch = batchNode->drawBatch;
+		if (batch.type == type) {
+			return batchNode;
+		}
+	}
+	return nullptr;
+}
+
+DrawBatchNode* Renderer_createBatch(VulkanRendererContext* context, DrawBatchType type) {
+	if (getCurrentFrame(context).uiWindowBatches.size() <= 0) {
+		getCurrentFrame(context).uiWindowBatches.emplace_back(context->rendererState->window);
+	}
+	auto* node = new DrawBatchNode();
+	node->drawBatch.type = type;
+	QueuePush(getCurrentFrame(context).uiWindowBatches[0].firstDrawBatch, getCurrentFrame(context).uiWindowBatches[0].lastDrawBatch, node);
+	return node;
+}
+
+/*
+ *  We should maintain our different batch "types": rectangles, text, viewports (and a separate one for meshes still remains)
+ *  Create an arena for each frame:
+ *    - Allocate 1 batch for each type
+ *    - pushRect/pushText/pushViewport(?) push to their corresponding batch
+ *    - process/render all batches inside of `drawUI`
+ *
+ *  To integrate windows: I think we should rework how we are handling them right now. Feels janky.
+ *  Expose an API so that we can call it from sandbox and have an application loop there?
+ *  Also, refactor renderer so that we don't have to pass the context around for each renderer call.
+ *
+ * NOW: Batch together multiple calls to `pushRect`
+ * Then implement Text
+ * Then implement Viewport
+ *
+ * We should create a vertex/index buffer after all the push* operations.
+ * AKA: Create buffers just before looping over the batches?
+ * Create a new function called `Renderer_Submit()` or something similar to know we've finished processing commands for this frame
+ */
+
+void Renderer_submit(VulkanRendererContext* context) {
+	for (auto* batchNode = getCurrentFrame(context).uiWindowBatches[0].firstDrawBatch; batchNode != nullptr; batchNode = batchNode->next) {
+		auto& batch = batchNode->drawBatch;
+		batch.meshBuffers = uploadMesh(context, batch.indices, batch.vertices, "uiMeshBuffer");
+
+		getCurrentFrame(context).deletionQueue.push([context, batch]() {
+			destroyBuffer(context->vmaAllocator, batch.meshBuffers.vertexBuffer);
+			destroyBuffer(context->vmaAllocator, batch.meshBuffers.indexBuffer);
+		});
+
+		auto window = context->rendererState->window;
+
+		if (batch.type == DRAW_BATCH_UI) {
+			auto uiDrawCommandsBuffer = createBuffer("uiIndirectCommandBuffer", sizeof(UIIndirectCommand) * batch.uiDrawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			memcpy(uiDrawCommandsBuffer.info.pMappedData, batch.uiDrawCommands.data(), sizeof(UIIndirectCommand) * batch.uiDrawCommands.size());
+
+			auto uiDrawDataBuffer = createBuffer("uiDrawDataBuffer", sizeof(UIDrawData) * batch.uiDrawData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			memcpy(uiDrawDataBuffer.info.pMappedData, batch.uiDrawData.data(), sizeof(UIDrawData) * batch.uiDrawData.size());
+
+			auto uiMaterialDataBuffer = createBuffer("uiMaterialDataBuffer", sizeof(UIMaterialData) * batch.uiMaterialData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			memcpy(uiMaterialDataBuffer.info.pMappedData, batch.uiMaterialData.data(), sizeof(UIMaterialData) * batch.uiMaterialData.size());
+
+			batch.commands = {
+				.buffer = uiDrawCommandsBuffer,
+				.offset = offsetof(UIIndirectCommand, command),
+				.size = (u32)batch.uiDrawCommands.size(),
+				.stride = sizeof(UIIndirectCommand)
+			};
+			batch.material = createMaterialInstance(&context->uiMaterial);
+
+			batch.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, batch.material.material->descriptorLayouts.at(0));
+			writeUniform(context, &batch.material, 0, 0, window->uiData.buffer, sizeof(UIUniformData), 0);
+			writeUniform(context, &batch.material, 0, 1, uiDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * batch.uiDrawCommands.size(), 0);
+			writeUniform(context, &batch.material, 0, 2, uiDrawDataBuffer.buffer, sizeof(UIDrawData) * batch.uiDrawData.size(), 0);
+			writeUniform(context, &batch.material, 0, 3, uiMaterialDataBuffer.buffer, sizeof(UIMaterialData) * batch.uiMaterialData.size(), 0);
+
+			getCurrentFrame(context).deletionQueue.push([context, batch, uiDrawCommandsBuffer, uiDrawDataBuffer, uiMaterialDataBuffer]() {
+				destroyBuffer(context->vmaAllocator, uiDrawCommandsBuffer);
+				destroyBuffer(context->vmaAllocator, uiDrawDataBuffer);
+				destroyBuffer(context->vmaAllocator, uiMaterialDataBuffer);
+			});
+		} else if (batch.type == DRAW_BATCH_TEXT) {
+			auto textDrawCommandsBuffer = createBuffer("textIndirectCommandBuffer", sizeof(UIIndirectCommand) * batch.textDrawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			memcpy(textDrawCommandsBuffer.info.pMappedData, batch.textDrawCommands.data(), sizeof(UIIndirectCommand) * batch.textDrawCommands.size());
+
+			auto textTransformDataBuffer = createBuffer("textTransformBuffer", sizeof(glm::mat4) * batch.textTransformData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			memcpy(textTransformDataBuffer.info.pMappedData, batch.textTransformData.data(), sizeof(glm::mat4) * batch.textTransformData.size());
+
+			batch.commands = {
+				.buffer = textDrawCommandsBuffer,
+				.offset = offsetof(UIIndirectCommand, command),
+				.size = static_cast<uint32_t>(batch.textDrawCommands.size()),
+				.stride = sizeof(UIIndirectCommand)
+			};
+
+			batch.material = createMaterialInstance(&context->uiTextMaterial);
+
+			// NOTE(piero): Allocate a frame descriptor set and write uniforms for this material.
+			batch.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, batch.material.material->descriptorLayouts.at(0));
+			writeUniform(context, &batch.material, 0, 0, window->fontData.buffer, sizeof(FontUniformData), 0);
+			writeUniform(context, &batch.material, 0, 1, context->sourceCodeFontTexture.imageView, context->sourceCodeFontTexture.sampler, context->sourceCodeFontTexture.imageLayout);
+			writeUniform(context, &batch.material, 0, 2, textDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * batch.textDrawCommands.size(), 0);
+			writeUniform(context, &batch.material, 0, 3, textTransformDataBuffer.buffer, sizeof(glm::mat4) * batch.textTransformData.size(), 0);
+
+			getCurrentFrame(context).deletionQueue.push([context, textDrawCommandsBuffer, textTransformDataBuffer]() {
+				destroyBuffer(context->vmaAllocator, textDrawCommandsBuffer);
+				destroyBuffer(context->vmaAllocator, textTransformDataBuffer);
+			});
+		}
+	}
+}
+
+void Renderer_pushRect(VulkanRendererContext* context, Rect2D rect, vec4 color) {
+	auto batchNode = Renderer_getBatch(context, DRAW_BATCH_UI);
+	if (!batchNode) {
+		batchNode = Renderer_createBatch(context, DRAW_BATCH_UI);
+	}
+	auto& batch = batchNode->drawBatch;
+
+	auto minX = rect.min.x;
+	auto minY = rect.min.y;
+	auto maxX = rect.max.x;
+	auto maxY = rect.max.y;
+
+	auto drawId = (u32)batch.uiDrawCommands.size();
+	batch.id = 1;
+	batch.uiDrawCommands.push_back({ .drawId = drawId,
+		.command = {
+			.indexCount = 6,
+			.instanceCount = 1,
+			.firstIndex = (u32)batch.indices.size(),
+			.vertexOffset = (i32)batch.vertices.size(),
+			.firstInstance = drawId } });
+	batch.uiDrawData.push_back({ .transform = mat4{ 1.0f }, .materialIndex = drawId });
+	batch.uiMaterialData.push_back({ .backgroundColor = color, .horizontalBorder = 0.0f, .verticalBorder = 0.0f });
+
+	batch.vertices.push_back({ .position = { maxX, maxY, 0.0f }, .uv_x = 1.0f, .color = { 1.0f, 0.0f, 0.0f }, .uv_y = 1.0f });
+	batch.vertices.push_back({ .position = { minX, maxY, 0.0f }, .uv_x = 0.0f, .color = { 0.0f, 1.0f, 0.0f }, .uv_y = 1.0f });
+	batch.vertices.push_back({ .position = { minX, minY, 0.0f }, .uv_x = 0.0f, .color = { 1.0f, 0.0f, 1.0f }, .uv_y = 0.0f });
+	batch.vertices.push_back({ .position = { maxX, minY, 0.0f }, .uv_x = 1.0f, .color = { 0.0f, 1.0f, 1.0f }, .uv_y = 0.0f });
+
+	batch.indices.push_back(0);
+	batch.indices.push_back(1);
+	batch.indices.push_back(2);
+	batch.indices.push_back(2);
+	batch.indices.push_back(3);
+	batch.indices.push_back(0);
+}
+
+void Renderer_pushText(VulkanRendererContext* context, String8 str, vec2 offsetPosition, f32 fontSize) {
+	auto batchNode = Renderer_getBatch(context, DRAW_BATCH_TEXT);
+	if (!batchNode) {
+		batchNode = Renderer_createBatch(context, DRAW_BATCH_TEXT);
+	}
+	auto& batch = batchNode->drawBatch;
+
+	auto drawId = (u32)batch.textDrawCommands.size();
+	batch.id = 1;
+	batch.textDrawCommands.push_back({ .drawId = drawId,
+		.command = {
+			.indexCount = (u32)str.size * 6,
+			.instanceCount = 1,
+			.firstIndex = (u32)batch.indices.size(),
+			.vertexOffset = (i32)batch.vertices.size(),
+			.firstInstance = drawId } });
+	batch.textTransformData.emplace_back(1.0f);
+
+	auto size = generateTextGeometry(str, fontSize, &context->sourceCodeFont, &batch.vertices, &batch.indices, offsetPosition);
 }
 
 }// namespace pm

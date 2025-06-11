@@ -6,7 +6,7 @@
 
 namespace pm {
 
-std::pair<float, float> generateTextGeometry(PrimalString& text, float fontSize, FontAsset* font, std::vector<UI::UIVertex>* vertices, std::vector<uint32_t>* indices) {
+std::pair<float, float> generateTextGeometry(String8 text, float fontSize, FontAsset* font, std::vector<UIVertex>* vertices, std::vector<u32>* indices, vec2 offset) {
 	auto& metadata = font->metadata;
 
 	uint32_t vertexIndex = 0;
@@ -18,6 +18,9 @@ std::pair<float, float> generateTextGeometry(PrimalString& text, float fontSize,
 	// TODO: why do we need this magic number? I'm guessing we are not aligning to the baseline correctly.
 	float baseline{ metadata.metrics.ascender * scale * 0.80f };
 
+	cursorX += offset.x;
+	baseline += offset.y;
+
 	float minY = std::numeric_limits<float>::max();
 	float maxY = std::numeric_limits<float>::lowest();
 
@@ -26,8 +29,8 @@ std::pair<float, float> generateTextGeometry(PrimalString& text, float fontSize,
 
 	float textWidth = 0.0f;
 
-	for (size_t i = 0; i < text.length; i++) {
-		int unicode = static_cast<unsigned char>(text[i]);
+	for (size_t i = 0; i < text.size; i++) {
+		int unicode = static_cast<u8>(text.str[i]);
 
 		if (unicode == '\r') {
 			continue;
@@ -49,8 +52,8 @@ std::pair<float, float> generateTextGeometry(PrimalString& text, float fontSize,
 		auto& glyph = *glyphIt;
 
 		// Apply kerning if there's a next character (and we have kerning)
-		if (i < text.length - 1) {
-			int nextUnicode = static_cast<unsigned char>(text[i + 1]);
+		if (i < text.size - 1) {
+			int nextUnicode = static_cast<u8>(text.str[i + 1]);
 			auto kerningIt = std::ranges::find_if(metadata.kerning, [&unicode, &nextUnicode](const KerningPair& k) { return k.unicode1 == unicode && k.unicode2 == nextUnicode; });
 			if (kerningIt != metadata.kerning.end()) {
 				cursorX += kerningIt->advance * scale;
@@ -78,7 +81,7 @@ std::pair<float, float> generateTextGeometry(PrimalString& text, float fontSize,
 		float y0 = baseline - glyph.planeBounds.top * scale;
 		float x1 = cursorX + glyph.planeBounds.right * scale;
 		float y1 = baseline - glyph.planeBounds.bottom * scale;
-
+		
 		minY = std::min({ minY, y0, y1 });
 		maxY = std::max({ maxY, y0, y1 });
 

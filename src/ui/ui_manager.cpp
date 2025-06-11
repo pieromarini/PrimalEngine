@@ -1,805 +1,1022 @@
-#include "ui_manager.h"
-#include "core/data_structures/fixed_array.h"
+#include <cinttypes>
+#include <cmath>
+
+#include "assets/asset.h"
+#include "core/core.h"
+#include "core/math/math.h"
 #include "core/memory/arena.h"
+#include "core/primal_string.h"
+#include "font_cache/font_cache.h"
+#include "platform/os/os.h"
+#include "primal_engine.h"
 #include "ui/ui_types.h"
+#include "ui/ui_utils.h"
 #include "utils/fonts.h"
-#include <algorithm>
+#include "ui_manager.h"
 
-namespace pm::UI {
 
-void initRenderContext(MemoryArena* arena) {
-	uiContext = MemoryArenaPush(UIContext, 1, arena);
+namespace pm {
 
-	uiContext->arena = arena;
+// Nil values
+static UIElement nilUIElement = { .first = &nilUIElement, .last = &nilUIElement, .next = &nilUIElement, .prev = &nilUIElement, .parent = &nilUIElement };
+static UIElement_TextExt nilUIElementTextExt = {};
+static UIElement_RectStyleExt nilUIElementRectStyleExt = {};
+static UIElement_BucketExt nilUIElementBucketExt = {};
+static UI_Size nilPrefWidth = { .type = UISizeType_Pixels, .value = 200.0f, .strictness = 1.0f };
+static UI_Size nilPrefHeight = { .type = UISizeType_Pixels, .value = 2.0f, .strictness = 1.0f };
+static FontAsset nilFontAsset = {};
 
-	// Persistent data
-	uiContext->hoveredIds = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, arena);
+__declspec(thread) UIContext* uiContext = nullptr;
 
-	// Per-frame data
-	uiContext->perFrameArena = MemoryArena_create(MEGABYTE(40));
-	MemoryArena_commit(&uiContext->perFrameArena, uiContext->perFrameArena.size);
-
-	auto perFrameArena = &uiContext->perFrameArena;
-
-	uiContext->windowCommands = MemoryArenaCreateArray(FixedArray<UIWindowBatchCommands>, UIWindowBatchCommands, maxElementCount, perFrameArena);
-	uiContext->layoutElements = MemoryArenaCreateArray(FixedArray<FixedArray<UILayoutElement>>, FixedArray<UILayoutElement>, maxElementCount, perFrameArena);
-
-	// Per-layout data (a frame can have more than one layout)
-	uiContext->perLayoutArena = MemoryArena_create(MEGABYTE(40));
-	MemoryArena_commit(&uiContext->perLayoutArena, uiContext->perLayoutArena.size);
-
-	auto perLayoutArena = &uiContext->perLayoutArena;
-
-	uiContext->layoutElementChildrenIndices = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, perLayoutArena);
-	uiContext->openLayoutElements = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, perLayoutArena);
+UIKey UI_keyZero() {
+	UIKey key = { 0 };
+	return key;
 }
 
-void cleanupRenderContext() {
-	auto context = getUIContext();
-
-	windowLayoutElementsIndices.clear();
-
-	MemoryArena_destroy(&context->perLayoutArena);
-	MemoryArena_destroy(&context->perFrameArena);
-	MemoryArena_destroy(context->arena);
+void UI_setCurrentContext(UIContext* context) {
+	uiContext = context;
 }
 
-void clearPerLayoutContext() {
-	auto context = getUIContext();
-
-	auto perLayoutArena = &context->perLayoutArena;
-	MemoryArena_clear(perLayoutArena);
-
-	context->layoutElementChildrenIndices = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, perLayoutArena);
-	context->openLayoutElements = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, perLayoutArena);
-}
-
-void clearPerFrameContext() {
-	auto context = getUIContext();
-
-	// Clear temp arena and re-init per-frame arrays
-	auto perFrameArena = &context->perFrameArena;
-	MemoryArena_clear(perFrameArena);
-
-	windowLayoutElementsIndices.clear();
-
-	context->windowCommands = MemoryArenaCreateArray(FixedArray<UIWindowBatchCommands>, UIWindowBatchCommands, maxElementCount, perFrameArena);
-	context->layoutElements = MemoryArenaCreateArray(FixedArray<FixedArray<UILayoutElement>>, FixedArray<UILayoutElement>, maxElementCount, perFrameArena);
-}
-
-UIContext* getUIContext() {
+UIContext* UI_currentContext() {
 	return uiContext;
 }
 
-void onResizeCallback(float width, float height) {
-	auto context = getUIContext();
-	if (!context) {
-		return;
+UIContext* UI_createContext() {
+	Arena* arena = arenaAlloc(Gigabytes(4));
+	auto* context = PushStruct(arena, UIContext);
+	context->arena = arena;
+	context->elementTableSize = 4096;
+	context->elementTable = PushArray(arena, UIElementSlot, context->elementTableSize);
+
+	auto scratch = ScratchBegin();
+	for (u64 idx = 0; idx < ArrayCount(context->buildArenas); idx++) {
+		String8 name = PushStr8F(scratch.arena, "BuildArena %d", idx);
+		context->buildArenas[idx] = arenaAlloc({ .reserveSize = Gigabytes(2), .name = name });
 	}
+	ScratchEnd(scratch);
+
+	context->dragDataArena = arenaAlloc(Megabytes(64));
+
+	// init nil values
+	StackInitNils(context, parent, &nilUIElement);
+	StackInitNils(context, prefWidth, nilPrefWidth);
+	StackInitNils(context, prefHeight, nilPrefHeight);
+	StackInitNils(context, childLayoutAxis, Axis2D_X);
+	StackInitNils(context, fixedX, 0.0f);
+	StackInitNils(context, fixedY, 0.0f);
+	StackInitNils(context, seedKey, UI_keyZero());
+	StackInitNils(context, flags, 0);
+
+	StackInitNils(context, focusHot, UIFocusKind_Null);
+	StackInitNils(context, focusActive, UIFocusKind_Null);
+
+	StackInitNils(context, hoverCursor, 0);
+	StackInitNils(context, opacity, 0.0f);
+
+	StackInitNils(context, backgroundColor, (vec4{ 0.3f, 0.3f, 0.3f, 1.0f }));
+
+	StackInitNils(context, font, &nilFontAsset);
+	StackInitNils(context, fontSize, 12.0f);
+
+	return context;
 }
 
-void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown) {
-	auto context = getUIContext();
+void UI_destroyContext(UIContext* context) {
+	arenaRelease(context->dragDataArena);
+	for (u64 idx = 0; idx < ArrayCount(context->buildArenas); idx++) {
+		arenaRelease(context->buildArenas[idx]);
+	}
+	arenaRelease(context->arena);
+}
 
-	FixedArray_clear(context->hoveredIds);
+Arena* getBuildArena() {
+	return uiContext->buildArenas[uiContext->buildGen % ArrayCount(uiContext->buildArenas)];
+}
 
-	context->pointerState.x = mouseX;
-	context->pointerState.y = mouseY;
-	context->pointerState.xRel = relMouseX;
-	context->pointerState.yRel = relMouseY;
+UIElement_Rec UIElement_recurseDepthFirst(UIElement* element, UIElement* stopper, MemberOffset sib, MemberOffset child) {
+	UIElement_Rec rec = { .next = nullptr };
+	rec.next = &nilUIElement;
 
-	// Set Mouse click state
-	auto& clickState = context->pointerState.pointerClickState;
-	if (isPointerDown) {
-		if (clickState == PointerClickState::PRESSED_THIS_FRAME) {
-			context->pointerState.pointerClickState = PointerClickState::PRESSED;
-			context->interactionState.isDragging = true;
-		} else if (clickState != PointerClickState::PRESSED) {
-			context->pointerState.pointerClickState = PointerClickState::PRESSED_THIS_FRAME;
+	if (!UIElement_isNil(MemberFromOff(element, UIElement*, child))) {
+		rec.next = MemberFromOff(element, UIElement*, child);
+		rec.pushCount = 1;
+	} else
+		for (UIElement* e = element; !UIElement_isNil(e) && e != stopper; e = e->parent) {
+			if (!UIElement_isNil(MemberFromOff(e, UIElement*, sib))) {
+				rec.next = MemberFromOff(e, UIElement*, sib);
+				break;
+			}
+			rec.popCount += 1;
 		}
+	return rec;
+}
+
+// Start UI Element
+
+bool UIElement_isNil(UIElement* element) {
+	return element == nullptr || element == &nilUIElement;
+}
+
+UIElement* UIElement_create(UI_ElementFlags flags, char* fmt, ...) {
+	auto scratch = ScratchBegin();
+
+	va_list args;
+	va_start(args, fmt);
+	String8 string = PushStr8FV(scratch.arena, fmt, args);
+	UIElement* result = UIElement_create(flags, string);
+	va_end(args);
+
+	ScratchEnd(scratch);
+
+	return result;
+}
+
+UIElement* UIElement_create(UI_ElementFlags flags, String8 str) {
+	UIKey seed = UI_topSeedKey();
+
+	// produce a key from the string
+	String8 string_hash_part = UI_HashPartFromKeyString(str);
+	UIKey key = UI_KeyFromString(seed, string_hash_part);
+
+	// build the element from the key
+	UIElement* element = UIElement_createFromKey(flags, key);
+
+	// equip box with text rendering info
+	if (flags & UIElementFlag_DrawText) {
+		String8 text = UI_TextPartFromKeyString(str);
+		UIElement_EquipText(element, text);
+	}
+
+	return element;
+}
+
+UIElement* UIElement_createFromKey(UI_ElementFlags flags, UIKey key) {
+	auto* element = UIElement_fromKey(key);
+
+	if (element->lastGenTouched == uiContext->buildGen) {
+		element = &nilUIElement;
+		key = UI_keyZero();
+	}
+
+	b32 firstFrame = 0;
+	if (UIElement_isNil(element)) {
+		u64 slot = key.v[0] % uiContext->elementTableSize;
+		firstFrame = 1;
+		element = uiContext->firstFreeElement;
+		if (UIElement_isNil(element)) {
+			element = PushStruct(uiContext->arena, UIElement);
+		} else {
+			StackPop(uiContext->firstFreeElement);
+			MemoryZeroStruct(element);
+			uiContext->freeElementListCount -= 1;
+		}
+		DLLPushBack_NPZ(uiContext->elementTable[slot].first, uiContext->elementTable[slot].last, element, hashNext, hashPrev, UIElement_isNil, UIElement_setNil);
+		element->key = key;
+	}
+
+	auto parent = UI_topParent();
+	if (UIElement_isNil(parent)) {
+		uiContext->root = element;
 	} else {
-		if (clickState == PointerClickState::RELEASED_THIS_FRAME) {
-			context->pointerState.pointerClickState = PointerClickState::RELEASED;
-		} else if (clickState != PointerClickState::RELEASED) {
-			context->pointerState.pointerClickState = PointerClickState::RELEASED_THIS_FRAME;
-			context->interactionState.isDragging = false;
+		DLLPushBack_NPZ(parent->first, parent->last, element, next, prev, UIElement_isNil, UIElement_setNil);
+		parent->childCount++;
+		element->parent = parent;
+	}
+
+	if (!UIElement_isNil(element)) {
+		element->childCount = 0;
+		element->first = element->last = &nilUIElement;
+		element->flags = flags | UI_topFlags();
+		element->flags |= UIElementFlag_FocusHot * !!UI_isFocusHot();
+		element->flags |= UIElementFlag_FocusHotDisabled * (!UI_isFocusHot() && uiContext->focusHotStack.top->value == UIFocusKind_On);
+		element->flags |= UIElementFlag_FocusActive * !!UI_isFocusActive();
+		element->flags |= UIElementFlag_FocusActiveDisabled * (!UI_isFocusActive() && uiContext->focusActiveStack.top->value == UIFocusKind_On);
+		element->prefSize[Axis2D_X] = UI_topPrefWidth();
+		element->prefSize[Axis2D_Y] = UI_topPrefHeight();
+		element->childLayoutAxis = UI_topChildLayoutAxis();
+
+		element->hoverCursor = UI_topHoverCursor();
+		element->opacity = UI_topOpacity();
+
+		element->lastGenTouched = uiContext->buildGen;
+
+		element->textEXT = &nilUIElementTextExt;
+		element->rectStyleEXT = &nilUIElementRectStyleExt;
+		element->bucketEXT = &nilUIElementBucketExt;
+
+		if (element->flags & UIElementFlag_DrawText) {
+			auto a = PushStruct(getBuildArena(), UIElement_TextExt);
+			element->textEXT = a;
+			element->textEXT->font = UI_topFont();
+			element->textEXT->fontSize = UI_topFontSize();
+			/*
+			element->textEXT->textAlignment = UI_TopTextAlign();
+			element->textEXT->textEdgePadding = UI_TopTextEdgePadding();
+			element->textEXT->textColor = UI_TopTextColor();
+			*/
+		}
+
+		if (element->flags & (UIElementFlag_DrawBackground | UIElementFlag_DrawBorder | UIElementFlag_DrawOverlay)) {
+			element->rectStyleEXT = PushStruct(getBuildArena(), UIElement_RectStyleExt);
+			element->rectStyleEXT->backgroundColor = UI_topBackgroundColor();
+			/*
+			element->rectStyleEXT->borderColor = UI_TopBorderColor();
+			element->rectStyleEXT->overlayColor = UI_TopOverlayColor();
+			element->rectStyleEXT->cornerRadii[Corner_00] = UI_TopCornerRadius00();
+			element->rectStyleEXT->cornerRadii[Corner_01] = UI_TopCornerRadius01();
+			element->rectStyleEXT->cornerRadii[Corner_10] = UI_TopCornerRadius10();
+			element->rectStyleEXT->cornerRadii[Corner_11] = UI_TopCornerRadius11();
+			element->rectStyleEXT->borderThickness = UI_TopBorderThickness();
+			*/
+		}
+
+		// fill fixed positions
+		element->calcRelPos.x = UI_topFixedX();
+		element->calcRelPos.y = UI_topFixedY();
+
+		// fill first-frame statUI_e
+		if (firstFrame) {
+			element->firstGenTouched = uiContext->buildGen;
+		}
+
+		// is focused -> disable per stack
+		if (element->flags & UIElementFlag_FocusHot && !UI_isFocusHot()) {
+			element->flags |= UIElementFlag_FocusHotDisabled;
+		}
+		if (element->flags & UIElementFlag_FocusActive && !UI_isFocusActive()) {
+			element->flags |= UIElementFlag_FocusActiveDisabled;
 		}
 	}
 
-	// We record the first "click" inside a bounding box.
-	// The point of this is to not bubble up the events up the hierarchy (at least for now, we could add the option to do it).
-	// We iterate the elements in reverse to go up the tree starting from the deepest children
-	// TODO(piero): Probably need to rework this logic when adding floating elements.
-	bool firstEvent{ true };
+	UI_autoPopStacks(uiContext);
 
-	auto& index = windowLayoutElementsIndices.at(windowId);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	for (int32_t i = (int)layoutElements.length - 1; i >= 0; --i) {
-		auto element = FixedArray_get(layoutElements, i);
-		auto rect = BoundingRect{ .x = element->x, .y = element->y, .width = element->width.size, .height = element->height.size };
-		if (isInsideBoundingRect(mouseX, mouseY, rect)) {
-			// Don't process hover callbacks if we are dragging the mouse around.
-			// TODO(piero): Do we actually want this? Maybe make it an option.
-			if (element->onHoverCallback && !context->interactionState.isDragging) {
-				element->onHoverCallback(element->id, context->pointerState);
-			}
-
-			// When we click inside an element, record the interaction
-			if (context->pointerState.pointerClickState == PointerClickState::PRESSED_THIS_FRAME && firstEvent) {
-				context->interactionState.elementId = element->id;
-				firstEvent = false;
-			}
-
-			FixedArray_add(context->hoveredIds, element->id);
-		}
-	}
-
-	// NOTE(piero): Clicks are processed on Mouse UP right now. We can add support for down/up clicks.
-	if (context->pointerState.pointerClickState == PointerClickState::RELEASED_THIS_FRAME) {
-		auto element = FixedArray_get(layoutElements, context->interactionState.elementId);
-		if (element->type == UILayoutElementType::RECT_ELEMENT && element->data.valueBool) {
-			*element->data.valueBool = !(*element->data.valueBool);
-		}
-
-		// Stop interacting
-		// TODO(piero): This seems weird. We were setting this when setting the pointerState to "Released" but we need to
-		//              store the interacted element to process clicks when releasing a click.
-		context->interactionState.elementId = 0;
-	}
-
-	// Value dragging
-	if (context->pointerState.pointerClickState == PointerClickState::PRESSED && context->interactionState.isDragging) {
-		auto element = FixedArray_get(layoutElements, context->interactionState.elementId);
-		switch (element->type) {
-		// NOTE(piero): Right now only text elements have draggable values.
-		case TEXT_ELEMENT:
-			handleDragValue(element);
-			break;
-		case CHECKBOX_ELEMENT:
-		case RECT_ELEMENT:
-		case CIRCLE_ELEMENT:
-		case VIEWPORT_ELEMENT:
-		case PANEL_ELEMENT:
-		case TITLEBAR_ELEMENT:
-		case DOCKSPACE_ELEMENT:
-			break;
-		}
-	}
+	return element;
 }
 
-void handleDragValue(UILayoutElement* element) {
-	auto context = getUIContext();
+// Maps a key to an Element
+UIElement* UIElement_fromKey(UIKey key) {
+	UIElement* result = &nilUIElement;
+	u64 slot = key.v[0] % uiContext->elementTableSize;
+	if (!UI_KeyMatch(key, UI_keyZero())) {
+		for (UIElement* b = uiContext->elementTable[slot].first; !UIElement_isNil(b); b = b->hashNext) {
+			if (UI_KeyMatch(b->key, key)) {
+				result = b;
+				break;
+			}
+		}
+	}
+	return result;
+}
 
-	switch (element->data.dataType) {
-	case INT: {
-		if (element->data.valueInt) {
-			*element->data.valueInt = std::min(std::max(static_cast<int>(*element->data.valueInt + context->pointerState.xRel * 0.01f), element->data.minInt), element->data.maxInt);
-		}
-		break;
-	}
-	case FLOAT: {
-		if (element->data.valueFloat) {
-			*element->data.valueFloat = std::min(std::max(*element->data.valueFloat + context->pointerState.xRel * 0.01f, element->data.minFloat), element->data.maxFloat);
-		}
-		break;
-	}
-	case DOUBLE: {
-		if (element->data.valueDouble) {
-			*element->data.valueDouble = std::min(std::max(*element->data.valueDouble + context->pointerState.xRel * 0.01, element->data.minDouble), element->data.maxDouble);
-		}
-		break;
-	}
+// End UI Element
+
+
+// Start events
+
+OS_Key UI_OSKeyFromMouseButtonSlot(UI_MouseButtonSlot slot) {
+	OS_Key key = OS_Key_Null;
+	switch (slot) {
 	default: {
-		break;
+	} break;
+	case UIMouseButtonSlot_Left: {
+		key = OS_Key_MouseLeft;
+	} break;
+	case UIMouseButtonSlot_Middle: {
+		key = OS_Key_MouseMiddle;
+	} break;
+	case UIMouseButtonSlot_Right: {
+		key = OS_Key_MouseRight;
+	} break;
 	}
-	}
+	return key;
 }
 
-void beginWindow(PrimalWindow* window) {
-	clearPerLayoutContext();
-
-	auto context = getUIContext();
-
-	// setup window target
-	context->window = window;
-	context->windowWidth = (float)window->width;
-	context->windowHeight = (float)window->height;
-
-	// allocate a new window batch
-	FixedArray_add(context->windowCommands, { .window = window, .renderCommands = MemoryArenaCreateArray(FixedArray<UIRenderCommand>, UIRenderCommand, maxElementCount, &context->perFrameArena) });
-
-	// Allocate new array of layout elements
-	windowLayoutElementsIndices.emplace(context->window->id, context->layoutElements.length);
-	FixedArray_add(context->layoutElements, MemoryArenaCreateArray(FixedArray<UILayoutElement>, UILayoutElement, maxElementCount, &context->perFrameArena));
-
-	// create and configure root element
-	openElement();
-
-	auto& index = windowLayoutElementsIndices.at(window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	auto rootElement = FixedArray_back(layoutElements);
-	rootElement->width.size = context->windowWidth;
-	rootElement->height.size = context->windowHeight;
-	rootElement->layoutDirection = UILayoutDirection::VERTICAL;
-	rootElement->childGap = 0.0f;
+UI_MouseButtonSlot UI_mouseButtonSlotFromOSKey(OS_Key key) {
+	UI_MouseButtonSlot slot = UIMouseButtonSlot_Left;
+	switch (key) {
+	default: {
+	} break;
+	case OS_Key_MouseLeft: {
+		slot = UIMouseButtonSlot_Left;
+	} break;
+	case OS_Key_MouseMiddle: {
+		slot = UIMouseButtonSlot_Middle;
+	} break;
+	case OS_Key_MouseRight: {
+		slot = UIMouseButtonSlot_Right;
+	} break;
+	}
+	return slot;
 }
 
-void endWindow() {
-	auto context = getUIContext();
-
-	closeElement();
-
-	calculateFinalLayout();
+void UI_eatEvent(UI_EventList* events, UI_Event* event) {
+	auto* node = BaseFromMember(UI_EventNode, v, event);
+	DLLRemove(events->first, events->last, node);
+	events->count -= 1;
 }
 
-void beginFrame() {
-	clearPerFrameContext();
-	clearPerLayoutContext();
-}
-
-FixedArray<UIWindowBatchCommands> endFrame() {
-	auto context = getUIContext();
-
-	return context->windowCommands;
-}
-
-void openElement() {
-	auto context = getUIContext();
-
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	// Create new layout for the element
-	FixedArray_add(layoutElements, { .id = layoutElements.length, .children = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &context->perLayoutArena) });
-	FixedArray_add(context->openLayoutElements, layoutElements.length - 1);
-	FixedArray_add(context->layoutElementChildrenIndices, layoutElements.length - 1);
-}
-
-void closeElement() {
-	auto context = getUIContext();
-
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	auto closedElementIndex = *FixedArray_top(context->openLayoutElements);
-	FixedArray_pop(context->openLayoutElements);
-
-	auto openLayoutElement = FixedArray_get(layoutElements, closedElementIndex);
-
-	// Set parent to the open layout element
-	if (!FixedArray_empty(context->openLayoutElements)) {
-		auto parentIndex = FixedArray_top(context->openLayoutElements);
-		openLayoutElement->parent = *parentIndex;
-	}
-
-	// add parent padding
-	if (openLayoutElement->parent >= 0) {
-		auto parent = FixedArray_get(layoutElements, openLayoutElement->parent);
-		openLayoutElement->x += parent->padding.left;
-		openLayoutElement->y += parent->padding.top;
-	}
-
-	// add children indices to closing layout element
-	// Find the starting index in the children array for the open layout index we are currently closing
-	auto beginIndex = FixedArray_findIndex(context->layoutElementChildrenIndices, closedElementIndex);
-	if ((beginIndex != -1) && ((beginIndex + 1) < context->layoutElementChildrenIndices.length)) {
-
-		// copy indices
-		for (uint32_t i = beginIndex + 1; i < context->layoutElementChildrenIndices.length; ++i) {
-			auto t = FixedArray_getValue(context->layoutElementChildrenIndices, i);
-			FixedArray_add(openLayoutElement->children, t);
-		}
-
-		// remove copied indices
-		FixedArray_removeRange(context->layoutElementChildrenIndices, beginIndex + 1, context->layoutElementChildrenIndices.length);
-	}
-
-	float horizontalPadding = openLayoutElement->padding.left + openLayoutElement->padding.right;
-	float verticalPadding = openLayoutElement->padding.top + openLayoutElement->padding.bottom;
-
-	// Iterate children and calculate closing element's Width and Height
-	// If we are not a STATIC sized' object, we will FIT the contents of each object.
-	// TODO: Handle GROW sizing in (probably) a separate pass.
-	if (openLayoutElement->layoutDirection == UILayoutDirection::HORIZONTAL) {
-		float leftOffset{ 0.0f };
-		if (openLayoutElement->width.sizingMode != UISizingMode::STATIC) {
-			openLayoutElement->width.size = horizontalPadding;
-		}
-		openLayoutElement->width.size += static_cast<float>(openLayoutElement->children.length - 1) * openLayoutElement->childGap;
-		for (uint32_t i = 0; i < openLayoutElement->children.length; ++i) {
-			auto childIndex = FixedArray_getValue(openLayoutElement->children, i);
-			auto child = FixedArray_get(layoutElements, childIndex);
-			child->x += leftOffset;
-			if (openLayoutElement->width.sizingMode != UISizingMode::STATIC) {
-				openLayoutElement->width.size += child->width.size;
-				openLayoutElement->height.size = std::max(child->height.size + verticalPadding, openLayoutElement->height.size);
-			}
-			leftOffset += child->width.size + openLayoutElement->childGap;
-		}
-	} else {
-		float topOffset{ 0.0f };
-		if (openLayoutElement->height.sizingMode != UISizingMode::STATIC) {
-			openLayoutElement->height.size = verticalPadding;
-		}
-		openLayoutElement->height.size += static_cast<float>(openLayoutElement->children.length - 1) * openLayoutElement->childGap;
-		for (uint32_t i = 0; i < openLayoutElement->children.length; ++i) {
-			auto childIndex = FixedArray_getValue(openLayoutElement->children, i);
-			auto child = FixedArray_get(layoutElements, childIndex);
-			child->y += topOffset;
-			if (openLayoutElement->height.sizingMode != UISizingMode::STATIC) {
-				openLayoutElement->width.size = std::max(child->width.size + horizontalPadding, openLayoutElement->width.size);
-				openLayoutElement->height.size += child->height.size;
-			}
-			topOffset += child->height.size + openLayoutElement->childGap;
-		}
-	}
-}
-
-void openTextElement() {
-	auto context = getUIContext();
-
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	FixedArray_add(layoutElements, { .id = layoutElements.length });
-	FixedArray_add(context->openLayoutElements, layoutElements.length - 1);
-	FixedArray_add(context->layoutElementChildrenIndices, layoutElements.length - 1);
-}
-
-void closeTextElement() {
-	auto context = getUIContext();
-
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	auto closedElementIndex = *FixedArray_top(context->openLayoutElements);
-	FixedArray_pop(context->openLayoutElements);
-
-	auto openLayoutElement = FixedArray_get(layoutElements, closedElementIndex);
-
-	// Set parent to the open layout element
-	if (!FixedArray_empty(context->openLayoutElements)) {
-		auto parentIndex = FixedArray_top(context->openLayoutElements);
-		openLayoutElement->parent = *parentIndex;
-	}
-
-	// add parent padding
-	if (openLayoutElement->parent >= 0) {
-		auto parent = FixedArray_get(layoutElements, openLayoutElement->parent);
-		openLayoutElement->x += parent->padding.left;
-		openLayoutElement->y += parent->padding.top;
-	}
-
-	float horizontalPadding = openLayoutElement->padding.left + openLayoutElement->padding.right;
-	float verticalPadding = openLayoutElement->padding.top + openLayoutElement->padding.bottom;
-
-	// Calculate closing element's Width and Height
-	if (openLayoutElement->layoutDirection == UILayoutDirection::HORIZONTAL) {
-		openLayoutElement->width.size += horizontalPadding;
-	} else {
-		openLayoutElement->height.size += verticalPadding;
-	}
-
-	// TODO: handle text wrapping and truncation
-}
-
-void closeCircleElement() {
-	auto context = getUIContext();
-
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	auto closedElementIndex = *FixedArray_top(context->openLayoutElements);
-	FixedArray_pop(context->openLayoutElements);
-
-	auto openLayoutElement = FixedArray_get(layoutElements, closedElementIndex);
-
-	// Set parent to the open layout element
-	if (!FixedArray_empty(context->openLayoutElements)) {
-		auto parentIndex = FixedArray_top(context->openLayoutElements);
-		openLayoutElement->parent = *parentIndex;
-	}
-
-	// add parent padding
-	if (openLayoutElement->parent >= 0) {
-		auto parent = FixedArray_get(layoutElements, openLayoutElement->parent);
-		openLayoutElement->x += parent->padding.left;
-		openLayoutElement->y += parent->padding.top;
-	}
-
-	float horizontalPadding = openLayoutElement->padding.left + openLayoutElement->padding.right;
-	float verticalPadding = openLayoutElement->padding.top + openLayoutElement->padding.bottom;
-
-	// Calculate closing element's Width and Height
-	if (openLayoutElement->layoutDirection == UILayoutDirection::HORIZONTAL) {
-		openLayoutElement->width.size += horizontalPadding;
-	} else {
-		openLayoutElement->height.size += verticalPadding;
-	}
-}
-
-void closeViewportElement() {
-	auto context = getUIContext();
-
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	auto closedElementIndex = *FixedArray_top(context->openLayoutElements);
-	FixedArray_pop(context->openLayoutElements);
-
-	auto openLayoutElement = FixedArray_get(layoutElements, closedElementIndex);
-
-	// Set parent to the open layout element
-	if (!FixedArray_empty(context->openLayoutElements)) {
-		auto parentIndex = FixedArray_top(context->openLayoutElements);
-		openLayoutElement->parent = *parentIndex;
-	}
-
-	// add parent padding
-	if (openLayoutElement->parent >= 0) {
-		auto parent = FixedArray_get(layoutElements, openLayoutElement->parent);
-		openLayoutElement->x += parent->padding.left;
-		openLayoutElement->y += parent->padding.top;
-	}
-
-	float horizontalPadding = openLayoutElement->padding.left + openLayoutElement->padding.right;
-	float verticalPadding = openLayoutElement->padding.top + openLayoutElement->padding.bottom;
-
-	// Calculate closing element's Width and Height
-	if (openLayoutElement->layoutDirection == UILayoutDirection::HORIZONTAL) {
-		openLayoutElement->width.size += horizontalPadding;
-	} else {
-		openLayoutElement->height.size += verticalPadding;
-	}
-}
-
-void closeDockSpaceElement() {
-	// Close dock space and wrapper element
-	closeElement();
-	closeElement();
-}
-
-
-// DFS to add parent position to children
-void computeFinalSizes() {
-	auto context = getUIContext();
-
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	auto stack = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &context->perLayoutArena);
-	FixedArray_add(stack, static_cast<uint32_t>(0));
-
-	while (!FixedArray_empty(stack)) {
-		auto index = *FixedArray_top(stack);
-		FixedArray_pop(stack);
-
-		auto layoutElement = FixedArray_get(layoutElements, index);
-		auto parentElement = FixedArray_get(layoutElements, layoutElement->parent);
-
-		// Element positions are relative. Before rendering we need to add the parent's position.
-		layoutElement->x += parentElement->x;
-		layoutElement->y += parentElement->y;
-
-		for (uint32_t i = 0; i < layoutElement->children.length; ++i) {
-			auto childIndex = FixedArray_getValue(layoutElement->children, i);
-			FixedArray_add(stack, childIndex);
-		}
-	}
-}
-
-void calculateFinalLayout() {
-	auto context = getUIContext();
-
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	computeFinalSizes();
-
-	auto indices = MemoryArenaCreateArray(FixedArray<uint32_t>, uint32_t, maxElementCount, &context->perLayoutArena);
-	FixedArray_add(indices, static_cast<uint32_t>(0));
-
-	while (!FixedArray_empty(indices)) {
-		auto index = *FixedArray_top(indices);
-		FixedArray_pop(indices);
-
-		auto layoutElement = FixedArray_get(layoutElements, index);
-
-		UIRenderCommand c{
-			.id = index,
-			.zindex = 0,
-			.boundingRect = {
-				.x = layoutElement->x,
-				.y = layoutElement->y,
-				.width = layoutElement->width.size,
-				.height = layoutElement->height.size },
-			.backgroundColor = layoutElement->backgroundColor,
-		};
-
-		switch (layoutElement->type) {
-		case RECT_ELEMENT: {
-			c.commandType = UIRenderCommandType::RECTANGLE;
-			// NOTE(piero): Transform border size from pixel to UV space.
-			c.border.horizontalBorder = layoutElement->border.horizontalBorder / layoutElement->width.size;
-			c.border.verticalBorder = layoutElement->border.verticalBorder / layoutElement->height.size;
+b32 UI_keyPress(UI_EventList* events, OS_Key key, OS_Modifiers mods) {
+	b32 result = 0;
+	for (UI_EventNode* n = events->first; n != nullptr; n = n->next) {
+		if (n->v.kind == UIEventKind_Press && n->v.key == key && n->v.modifiers == mods) {
+			UI_eatEvent(events, &n->v);
+			result = 1;
 			break;
 		}
-		case TEXT_ELEMENT: {
-			c.commandType = UIRenderCommandType::TEXT;
-			c.text = layoutElement->text;
+	}
+	return result;
+}
+
+b32 UI_keyRelease(UI_EventList* events, OS_Key key, OS_Modifiers mods) {
+	b32 result = 0;
+	for (UI_EventNode* n = events->first; n != nullptr; n = n->next) {
+		if (n->v.kind == UIEventKind_Release && n->v.key == key && n->v.modifiers == mods) {
+			UI_eatEvent(events, &n->v);
+			result = 1;
 			break;
 		}
-		case CIRCLE_ELEMENT: {
-			c.commandType = UIRenderCommandType::CIRCLE;
-			c.circleType = layoutElement->circleType;
-			c.thickness = layoutElement->thickness;
-			c.radius = layoutElement->radius;
-			c.segments = layoutElement->segments;
+	}
+	return result;
+}
+
+b32 UI_ctrlPress(UI_EventList* events, UI_CtrlSlot slot) {
+	b32 result = 0;
+	for (UI_EventNode* n = events->first; n != nullptr; n = n->next) {
+		if (n->v.kind == UIEventKind_Press && n->v.ctrl_slot == slot) {
+			UI_eatEvent(events, &n->v);
+			result = 1;
 			break;
 		}
-		case VIEWPORT_ELEMENT: {
-			c.commandType = UIRenderCommandType::VIEWPORT;
-			c.textureId = layoutElement->textureId;
+	}
+	return result;
+}
+
+b32 UI_ctrlRelease(UI_EventList* events, UI_CtrlSlot slot) {
+	b32 result = 0;
+	for (UI_EventNode* n = events->first; n != nullptr; n = n->next) {
+		if (n->v.kind == UIEventKind_Release && n->v.ctrl_slot == slot) {
+			UI_eatEvent(events, &n->v);
+			result = 1;
 			break;
 		}
-		case PANEL_ELEMENT: {
-			c.commandType = UIRenderCommandType::PANEL;
-			break;
-		}
-		case TITLEBAR_ELEMENT: {
-			c.commandType = UIRenderCommandType::TITLEBAR;
-			break;
-		}
-		case DOCKSPACE_ELEMENT: {
-			c.commandType = UIRenderCommandType::DOCKSPACE;
-			break;
-		}
+	}
+	return result;
+}
+
+// End Events
+
+// Start Interactions
+
+b32 UI_isFocusHot() {
+	b32 result = 0;
+	for (FocusHotNode* n = uiContext->focusHotStack.top; n != nullptr; n = n->next) {
+		switch (n->value) {
 		default: {
-			break;
+		} break;
+		case UIFocusKind_On: {
+			result = 1;
+		} break;
+		case UIFocusKind_Off: {
+			result = 0;
 		}
+			goto break_all;
+		case UIFocusKind_Root: {
 		}
-
-		auto windowCommands = FixedArray_back(context->windowCommands);
-		FixedArray_add(windowCommands->renderCommands, c);
-
-		for (uint32_t i = 0; i < layoutElement->children.length; ++i) {
-			auto childIndex = FixedArray_getValue(layoutElement->children, i);
-			FixedArray_add(indices, childIndex);
+			goto break_all;
 		}
 	}
+break_all:;
+	return result;
 }
 
-void setFont(FontAsset* font) {
-	auto context = getUIContext();
-
-	context->fontAsset = font;
-}
-
-void pushText(UIElementOptions options) {
-	auto context = getUIContext();
-
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	float width{}, height{};
-
-	auto layoutElement = FixedArray_back(layoutElements);
-	layoutElement->text = options.text;
-
-	getTextDimensions(layoutElement->text, context->fontAsset, width, height);
-
-	layoutElement->type = UILayoutElementType::TEXT_ELEMENT;
-	layoutElement->width.size = width;
-	layoutElement->height.size = height;
-
-	layoutElement->onHoverCallback = options.onHoverCallback;
-	layoutElement->onClickCallback = options.onClickCallback;
-
-	layoutElement->data = options.data;
-}
-
-void pushBox(UIElementOptions options) {
-	auto context = getUIContext();
-
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	auto layoutElement = FixedArray_back(layoutElements);
-
-	layoutElement->type = UILayoutElementType::RECT_ELEMENT;
-	layoutElement->width = options.width;
-	layoutElement->height = options.height;
-	layoutElement->layoutDirection = options.layoutDirection;
-	layoutElement->backgroundColor = options.backgroundColor;
-	layoutElement->padding = options.padding;
-	layoutElement->childGap = options.childGap;
-	layoutElement->onHoverCallback = options.onHoverCallback;
-	layoutElement->onClickCallback = options.onClickCallback;
-
-	layoutElement->border = options.border;
-
-	layoutElement->data = options.data;
-
-	// if we have a valid texture id, this is a viewport.
-	// TODO(piero): create dedicated widget for this?
-	if (options.textureId > 0) {
-		layoutElement->textureId = options.textureId;
-		layoutElement->type = UILayoutElementType::VIEWPORT_ELEMENT;
+b32 UI_isFocusActive() {
+	b32 result = 0;
+	for (FocusActiveNode* n = uiContext->focusActiveStack.top; n != nullptr; n = n->next) {
+		switch (n->value) {
+		default: {
+		} break;
+		case UIFocusKind_On: {
+			result = 1;
+		} break;
+		case UIFocusKind_Off: {
+			result = 0;
+		}
+			goto break_all;
+		case UIFocusKind_Root: {
+		}
+			goto break_all;
+		}
 	}
+break_all:;
+	return result;
 }
 
-void getTextDimensions(PrimalString& text, FontAsset* font, float& width, float& height) {
-	// TODO(piero): font size config
-	auto [w, h] = generateTextGeometry(text, 16.0f, font);
-	width = w;
-	height = h;
-}
+UI_Signal UI_signalFromElement(UIElement* element) {
+	UI_Signal sig = { .element = element };
+	UI_EventList* events = uiContext->events;
 
-bool isHovered() {
-	auto context = getUIContext();
-
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	// Get first open element on the stack  (element which is currently being processed)
-	auto openElementIndex = FixedArray_top(context->openLayoutElements);
-	auto openLayoutElement = FixedArray_get(layoutElements, *openElementIndex);
-
-	// Don't process hover while dragging
-	// TODO(piero): There is a "possible" bug here. We probably want to still process
-	// hover events on the item we clicked on while we drag?
-	if (context->interactionState.isDragging) {
-		return false;
-	}
-
-	for (uint32_t i = 0; i < context->hoveredIds.length; ++i) {
-		auto hoveredId = FixedArray_getValue(context->hoveredIds, i);
-		if (hoveredId == openLayoutElement->id) {
-			return true;
+	// determine clipped rectangle for this box
+	Rect2D clipped_rect = element->rect;
+	for (UIElement* e = element->parent; !UIElement_isNil(e); e = e->parent) {
+		if (e->flags & UIElementFlag_Clip) {
+			clipped_rect = rect2DIntersect(clipped_rect, e->rect);
 		}
 	}
 
-	return false;
+	// take events
+	for (UI_EventNode *n = events->first, *next = nullptr; n != nullptr; n = next) {
+		next = n->next;
+		b32 taken = 0;
+		UI_Event* ev = &n->v;
+		b32 ev_key_is_mouse = (ev->key == OS_Key_MouseLeft || ev->key == OS_Key_MouseRight || ev->key == OS_Key_MouseMiddle);
+		UI_MouseButtonSlot ev_mb_slot = UI_mouseButtonSlotFromOSKey(ev->key);
+
+		// mouse clickability event consumption
+		if (element->firstGenTouched != element->lastGenTouched && element->flags & UIElementFlag_MouseClickable) {
+			if (ev_key_is_mouse && ev->kind == UIEventKind_Press) {
+				taken = 1;
+				uiContext->hotKey = uiContext->activeKey[ev_mb_slot] = element->key;
+				sig.flags |= UISignalFlag_PressedLeft << ev_mb_slot;
+				uiContext->dragStartMouse = ev->pos_2f32;
+			}
+			if (ev_key_is_mouse && ev->kind == UIEventKind_Release && UI_KeyMatch(uiContext->activeKey[ev_mb_slot], element->key)) {
+				taken = 1;
+				sig.flags |= UISignalFlag_ReleasedLeft << ev_mb_slot;
+				sig.flags |= UISignalFlag_ClickedLeft << ev_mb_slot;
+				uiContext->activeKey[ev_mb_slot] = UI_keyZero();
+			}
+		}
+
+		// keyboard clickability event consumption
+		if (element->flags & UIElementFlag_KeyboardClickable && element->flags & UIElementFlag_FocusHot && !(element->flags & UIElementFlag_FocusHotDisabled) && ev->kind == UIEventKind_Press && ev->ctrl_slot == UICtrlSlot_Accept) {
+			taken = 1;
+			sig.flags |= UISignalFlag_ClickedLeft | UISignalFlag_PressedLeft | UISignalFlag_PressedKeyboard;
+		}
+
+		/*
+		// scrolling event consumption
+		if (element->flags & UIElementFlag_ViewScroll && ev->kind == UIEventKind_Scroll) {
+		taken = 1;
+		for (auto axis = (Axis2D)0; axis < Axis2D_COUNT; axis = Axis2D(axis + 1)) {
+		element->targetViewOff[axis] += ev->delta_2f32[axis];
+		if (element->flags & (UIElementFlag_OverflowX << axis)) {
+		UI_layoutRoot(element, axis);
+		}
+		Rect1Df32 scroll_bounds = UI_scrollBoundsFromBox(element, axis);
+		element->targetViewOff[axis] = clamp1f32(scroll_bounds, element->targetViewOff[axis]);
+		}
+		}
+		 */
+
+		// consume
+		if (taken) {
+			UI_eatEvent(events, ev);
+		}
+	}
+
+	// fill out flags & state based on polled information
+	vec2 mouse_polled = uiContext->mouse;
+	if (rect2DContains(clipped_rect, mouse_polled)) {
+		sig.flags |= UISignalFlag_MouseIsOver;
+	}
+	if (rect2DContains(clipped_rect, mouse_polled)) {
+		if (UI_KeyMatch(UI_keyZero(), uiContext->hotKey)) {
+			sig.flags |= UISignalFlag_Hovering;
+			b32 is_any_key_active = 0;
+			for (auto slot = (UI_MouseButtonSlot)0; slot < UIMouseButtonSlot_COUNT; slot = UI_MouseButtonSlot(slot + 1)) {
+				if (!UI_KeyMatch(uiContext->activeKey[slot], UI_keyZero())) {
+					is_any_key_active = 1;
+					break;
+				}
+			}
+			if (!is_any_key_active) {
+				uiContext->hotKey = element->key;
+			}
+		}
+	} else if (UI_KeyMatch(element->key, uiContext->hotKey)) {
+		uiContext->hotKey = UI_keyZero();
+	}
+	if (element->flags & UIElementFlag_MouseClickable) {
+		for (auto slot = (UI_MouseButtonSlot)0; slot < UIMouseButtonSlot_COUNT; slot = UI_MouseButtonSlot(slot + 1)) {
+			if (UI_KeyMatch(uiContext->activeKey[slot], element->key)) {
+				sig.flags |= UISignalFlag_DraggingLeft << slot;
+				uiContext->hotKey = element->key;
+			}
+		}
+	}
+
+	return sig;
 }
 
-bool isInsideBoundingRect(float x, float y, BoundingRect rect) {
-	return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
+// End Interactions
+
+
+// Start Layout
+
+void UI_layoutRoot(UIElement* root, Axis2D axis) {
+	UI_solveIndependentSizes(root, axis);
+	UI_solveUpwardDependentSizes(root, axis);
+	UI_solveDownwardDependentSizes(root, axis);
+	UI_solveSizeViolations(root, axis);
 }
 
-void pushCircle(float radius, uint32_t segments, float thickness, glm::vec4 color) {
-	auto context = getUIContext();
+void UI_solveIndependentSizes(UIElement* root, Axis2D axis) {
+	switch (root->prefSize[axis].type) {
+	default:
+		break;
+	case UISizeType_Pixels: {
+		root->calcSize[axis] = root->prefSize[axis].value;
+		root->calcSize[axis] = std::floorf(root->calcSize[axis]);
+	} break;
+	case UISizeType_TextDim: {
+		switch (axis) {
+		default: {
+		} break;
 
-	openElement();
+		case Axis2D_X: {
+			auto textDim = generateTextGeometry(root->textEXT->string, root->textEXT->fontSize, root->textEXT->font);
+			root->calcSize[axis] = textDim.first;
+			root->calcSize[axis] += root->textEXT->textEdgePadding * 2.0f;
+			root->calcSize[axis] = std::ceilf(root->calcSize[axis]);
+		} break;
 
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+		case Axis2D_Y: {
+			MSDFFont fontInfo = root->textEXT->font->metadata;
+			auto textDim = generateTextGeometry(root->textEXT->string, root->textEXT->fontSize, root->textEXT->font);
+			root->calcSize[axis] = fontInfo.metrics.emSize + fontInfo.metrics.ascender + fontInfo.metrics.descender;
+			root->calcSize[axis] = std::floorf(root->calcSize[axis]);
+		} break;
+		}
+	} break;
+	}
 
-	auto layoutElement = FixedArray_back(layoutElements);
-
-	layoutElement->width.size = radius * 2;
-	layoutElement->height.size = radius * 2;
-	layoutElement->type = UILayoutElementType::CIRCLE_ELEMENT;
-	layoutElement->radius = radius;
-	layoutElement->segments = segments;
-	layoutElement->thickness = thickness;
-	layoutElement->backgroundColor = color;
-	layoutElement->circleType = CircleType::OUTLINE;
-
-	closeCircleElement();
+	for (UIElement* child = root->first; !UIElement_isNil(child); child = child->next) {
+		UI_solveIndependentSizes(child, axis);
+	}
 }
 
-void pushCircleFilled(float radius, uint32_t segments, glm::vec4 color) {
-	auto context = getUIContext();
-
-	openElement();
-
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	auto layoutElement = FixedArray_back(layoutElements);
-
-	layoutElement->width.size = radius * 2;
-	layoutElement->height.size = radius * 2;
-	layoutElement->type = UILayoutElementType::CIRCLE_ELEMENT;
-	layoutElement->radius = radius;
-	layoutElement->segments = segments;
-	layoutElement->backgroundColor = color;
-	layoutElement->circleType = CircleType::FILLED;
-
-	closeCircleElement();
+void UI_solveUpwardDependentSizes(UIElement* root, Axis2D axis) {
+	switch (root->prefSize[axis].type) {
+	default:
+		break;
+	case UISizeType_Pct: {
+		UIElement* ancestor = &nilUIElement;
+		for (UIElement* p = root->parent; !UIElement_isNil(p); p = p->parent) {
+			if (p->prefSize[axis].type != UISizeType_SizeByChildren) {
+				ancestor = p;
+				break;
+			}
+		}
+		if (!UIElement_isNil(ancestor)) {
+			root->calcSize[axis] = ancestor->calcSize[axis] * root->prefSize[axis].value;
+			root->calcSize[axis] = std::floorf(root->calcSize[axis]);
+		}
+	} break;
+	}
+	for (UIElement* child = root->first; !UIElement_isNil(child); child = child->next) {
+		UI_solveUpwardDependentSizes(child, axis);
+	}
 }
 
-void pushPanel(UIElementOptions options) {
-	auto context = getUIContext();
-
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	auto layoutElement = FixedArray_back(layoutElements);
-
-	layoutElement->type = UILayoutElementType::PANEL_ELEMENT;
-	layoutElement->width = options.width;
-	layoutElement->height = options.height;
-	layoutElement->layoutDirection = options.layoutDirection;
-	layoutElement->backgroundColor = options.backgroundColor;
-	layoutElement->padding = options.padding;
-	layoutElement->childGap = options.childGap;
-	layoutElement->onHoverCallback = options.onHoverCallback;
-	layoutElement->onClickCallback = options.onClickCallback;
-
-	layoutElement->border = options.border;
+void UI_solveDownwardDependentSizes(UIElement* root, Axis2D axis) {
+	for (UIElement* child = root->first; !UIElement_isNil(child); child = child->next) {
+		UI_solveDownwardDependentSizes(child, axis);
+	}
+	switch (root->prefSize[axis].type) {
+	default:
+		break;
+	case UISizeType_SizeByChildren: {
+		f32 value = 0;
+		{
+			if (axis == root->childLayoutAxis) {
+				for (UIElement* child = root->first; !UIElement_isNil(child); child = child->next) {
+					value += child->calcSize[axis];
+				}
+			} else {
+				for (UIElement* child = root->first; !UIElement_isNil(child); child = child->next) {
+					value = Max(value, child->calcSize[axis]);
+				}
+			}
+		}
+		root->calcSize[axis] = value;
+		root->calcSize[axis] = std::floorf(root->calcSize[axis]);
+	} break;
+	}
 }
 
-void pushTitleBar(UIElementOptions options) {
-	openElement();
+void UI_solveSizeViolations(UIElement* root, Axis2D axis) {
+	// determine the maximum available space
+	f32 available_space = root->calcSize[axis];
 
-	auto context = getUIContext();
+	// determine the size taken by all of the children's preferred sizes, & the total budget we have to fix the sizes up
+	f32 taken_space = 0;
+	f32 total_fixup_budget = 0;
+	if (!(root->flags & (UIElementFlag_OverflowX << axis))) {
+		for (UIElement* child = root->first; !UIElement_isNil(child); child = child->next) {
+			if (!(child->flags & (UIElementFlag_FloatingX << axis))) {
+				if (axis == root->childLayoutAxis) {
+					taken_space += child->calcSize[axis];
+				} else {
+					taken_space = Max(taken_space, child->calcSize[axis]);
+				}
+				f32 fixup_budget_this_child = child->calcSize[axis] * (1 - child->prefSize[axis].strictness);
+				total_fixup_budget += fixup_budget_this_child;
+			}
+		}
+	}
 
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
+	// fixup all children as much as possible
+	if (!(root->flags & (UIElementFlag_OverflowX << axis))) {
+		f32 violation = taken_space - available_space;
+		if (violation > 0 && total_fixup_budget > 0) {
+			for (UIElement* child = root->first; !UIElement_isNil(child); child = child->next) {
+				if (!(child->flags & (UIElementFlag_FloatingX << axis))) {
+					f32 fixup_budget_this_child = child->calcSize[axis] * (1 - child->prefSize[axis].strictness);
+					f32 fixup_size_this_child = 0;
+					if (axis == root->childLayoutAxis) {
+						fixup_size_this_child = fixup_budget_this_child * (violation / total_fixup_budget);
+					} else {
+						fixup_size_this_child = child->calcSize[axis] - available_space;
+					}
+					fixup_size_this_child = Clamp(0, fixup_size_this_child, fixup_budget_this_child);
+					child->calcSize[axis] -= fixup_size_this_child;
+					child->calcSize[axis] = std::floorf(child->calcSize[axis]);
+				}
+			}
+		}
+	}
 
-	auto layoutElement = FixedArray_back(layoutElements);
-
-	layoutElement->type = UILayoutElementType::TITLEBAR_ELEMENT;
-	layoutElement->width = options.width;
-	layoutElement->height = options.height;
-	layoutElement->layoutDirection = options.layoutDirection;
-	layoutElement->backgroundColor = options.backgroundColor;
-	layoutElement->padding = options.padding;
-	layoutElement->childGap = options.childGap;
-	layoutElement->onHoverCallback = options.onHoverCallback;
-	layoutElement->onClickCallback = options.onClickCallback;
-
-	layoutElement->border = options.border;
-
-	closeElement();
-}
-
-void pushDockSpace(UIElementOptions options) {
-	auto context = getUIContext();
-	constexpr float TITLE_BAR_HEIGHT = 20.0f;
-
-	auto& index = windowLayoutElementsIndices.at(context->window->id);
-	auto& layoutElements = *FixedArray_get(context->layoutElements, index);
-
-	// wrapper element for titlebar + dock space
-	openElement();
+	// position all children
 	{
-		auto layoutElement = FixedArray_back(layoutElements);
-		layoutElement->width = options.width;
-		layoutElement->height = options.height;
-		layoutElement->layoutDirection = UILayoutDirection::VERTICAL;
-		layoutElement->backgroundColor = { 0.0f, 0.0f, 0.0f, 0.0f };
-		layoutElement->type = UILayoutElementType::RECT_ELEMENT;
+		if (axis == root->childLayoutAxis) {
+			f32 p = 0;
+			for (UIElement* child = root->first; !UIElement_isNil(child); child = child->next) {
+				if (!(child->flags & (UIElementFlag_FloatingX << axis))) {
+					child->calcRelPos[axis] = p;
+					p += child->calcSize[axis];
+				}
+			}
+		} else {
+			for (UIElement* child = root->first; !UIElement_isNil(child); child = child->next) {
+				if (!(child->flags & (UIElementFlag_FloatingX << axis))) {
+					child->calcRelPos[axis] = 0;
+				}
+			}
+		}
+		for (UIElement* child = root->first; !UIElement_isNil(child); child = child->next) {
+			Rect2D last_relRect = child->relRect;
+			child->relRect.min[axis] = child->calcRelPos[axis];
+			child->relRect.max[axis] = child->relRect.min[axis] + child->calcSize[axis];
+			vec2 last_corner_01 = vec2{ last_relRect.min.x, last_relRect.max.y };
+			vec2 last_corner_10 = vec2{ last_relRect.max.x, last_relRect.min.y };
+			vec2 this_corner_01 = vec2{ child->relRect.min.x, child->relRect.max.y };
+			vec2 this_corner_10 = vec2{ child->relRect.max.x, child->relRect.min.y };
+			child->relCornerDelta[Corner_00][axis] = child->relRect.min[axis] - last_relRect.min[axis];
+			child->relCornerDelta[Corner_01][axis] = this_corner_01[axis] - last_corner_01[axis];
+			child->relCornerDelta[Corner_10][axis] = this_corner_10[axis] - last_corner_10[axis];
+			child->relCornerDelta[Corner_11][axis] = child->relRect.max[axis] - last_relRect.max[axis];
+			child->rect.min[axis] = root->rect.min[axis] + child->relRect.min[axis] - root->viewOff[axis];
+			child->rect.max[axis] = child->rect.min[axis] + child->calcSize[axis];
+			if (!(child->flags & (UIElementFlag_FloatingX << axis))) {
+				child->rect.min[axis] = std::floorf(child->rect.min[axis]);
+				child->rect.max[axis] = std::floorf(child->rect.max[axis]);
+			}
+		}
 	}
 
-	// titlebar
-	UIElementOptions titleBarOptions{
-		.width = { .size = options.width.size, .sizingMode = UISizingMode::STATIC },
-		.height = { .size = TITLE_BAR_HEIGHT, .sizingMode = UISizingMode::STATIC },
-		.backgroundColor = { 1.0f, 0.0f, 0.0f, 1.0f }
-	};
-	pushTitleBar(titleBarOptions);
+	for (UIElement* child = root->first; !UIElement_isNil(child); child = child->next) {
+		UI_solveSizeViolations(child, axis);
+	}
+}
+// End Layout
 
-	// dockspace
-	openElement();
-
-	auto layoutElement = FixedArray_back(layoutElements);
-	layoutElement->type = UILayoutElementType::DOCKSPACE_ELEMENT;
-
-	layoutElement->width = options.width;
-	// Dockspace height needs to account for titlebar
-	layoutElement->height = { .size = options.height.size - TITLE_BAR_HEIGHT, .sizingMode = options.height.sizingMode };
-	layoutElement->layoutDirection = options.layoutDirection;
-	layoutElement->backgroundColor = options.backgroundColor;
-	layoutElement->padding = options.padding;
-	layoutElement->childGap = options.childGap;
-	layoutElement->onHoverCallback = options.onHoverCallback;
-	layoutElement->onClickCallback = options.onClickCallback;
-
-	layoutElement->border = options.border;
+void UIElement_EquipText(UIElement* element, String8 text) {
+	if (element->textEXT != &nilUIElementTextExt) {
+		/*
+		D_StyledStringList strings = { 0 };
+		D_StyledString* sstr = D_StyledStringListPushNew(getBuildArena(), &strings);
+		sstr->string = text;
+		sstr->color = element->textEXT->textColor;
+		sstr->fontId = element->textEXT->fontId;
+		sstr->fontSize = element->textEXT->fontSize;
+		*/
+		element->textEXT->string = PushStr8Copy(getBuildArena(), text);
+	}
 }
 
-}// namespace pm::UI
+vec2 UI_textPosFromElement(UIElement* element) {
+	vec2 result = {};
+	auto font = element->textEXT->font;
+	f32 fontSize = element->textEXT->fontSize;
+	MSDFFont fontMetrics = font->metadata;
+	result.y = std::floorf((element->rect.min.y + element->rect.max.y) / 2.f) + fontMetrics.glyphs['H'].planeBounds.top / 2.f;
+
+	switch (element->textEXT->textAlignment) {
+	default:
+	case UITextAlignment_Left: {
+		result.x = element->rect.min.x + element->textEXT->textEdgePadding;
+	} break;
+	case UITextAlignment_Center: {
+		auto textDim = generateTextGeometry(element->textEXT->string, element->textEXT->fontSize, element->textEXT->font);
+		result.x = std::floorf((element->rect.min.x + element->rect.max.x) / 2 - textDim.first / 2);
+		result.x = ClampBot(result.x, element->rect.min.x);
+	} break;
+	case UITextAlignment_Right: {
+		auto textDim = generateTextGeometry(element->textEXT->string, element->textEXT->fontSize, element->textEXT->font);
+		result.x = std::roundf((element->rect.max.x) - textDim.first - element->textEXT->textEdgePadding);
+		result.x = ClampBot(result.x, element->rect.min.x);
+	} break;
+	}
+	result.x = std::floorf(result.x);
+	return result;
+}
+
+
+void UI_beginBuild(PrimalWindow* window, UI_EventList* events, f32 deltaTime) {
+	uiContext->buildGen++;
+	arenaClear(getBuildArena());
+
+	uiContext->deltaTime = deltaTime;
+	uiContext->root = &nilUIElement;
+	uiContext->window = window;
+	uiContext->events = events;
+
+	uiContext->mouse = OS_mouseFromWindow();
+	MemoryZeroStruct(&uiContext->hotKey);
+
+	// init stacks
+	uiContext->parentStack = StackCreate(uiContext, parent);
+	uiContext->prefWidthStack = StackCreate(uiContext, prefWidth);
+	uiContext->prefHeightStack = StackCreate(uiContext, prefHeight);
+	uiContext->childLayoutAxisStack = StackCreate(uiContext, childLayoutAxis);
+	uiContext->fixedXStack = StackCreate(uiContext, fixedX);
+	uiContext->fixedYStack = StackCreate(uiContext, fixedY);
+	uiContext->seedKeyStack = StackCreate(uiContext, seedKey);
+	uiContext->flagsStack = StackCreate(uiContext, flags);
+
+	uiContext->focusHotStack = StackCreate(uiContext, focusHot);
+	uiContext->focusActiveStack = StackCreate(uiContext, focusActive);
+
+	uiContext->hoverCursorStack = StackCreate(uiContext, hoverCursor);
+	uiContext->opacityStack = StackCreate(uiContext, opacity);
+
+	uiContext->backgroundColorStack = StackCreate(uiContext, backgroundColor);
+	uiContext->fontStack = StackCreate(uiContext, font);
+	uiContext->fontSizeStack = StackCreate(uiContext, fontSize);
+
+	// kill action
+	if (uiContext->actionKilledThisFrame) {
+		uiContext->actionKilledThisFrame = 0;
+		MemoryZeroArray(uiContext->activeKey);
+	}
+
+	// prune all of the stale boxes
+	for (u64 slot = 0; slot < uiContext->elementTableSize; slot += 1) {
+		for (UIElement *element = uiContext->elementTable[slot].first, *next = nullptr; !UIElement_isNil(element); element = next) {
+			next = element->hashNext;
+			if (UI_KeyMatch(element->key, UI_keyZero()) || element->lastGenTouched + 1 < uiContext->buildGen) {
+				DLLRemove_NPZ(uiContext->elementTable[slot].first, uiContext->elementTable[slot].last, element, hashNext, hashPrev, UIElement_isNil, UIElement_setNil);
+				StackPush(uiContext->firstFreeElement, element);
+				uiContext->freeElementListCount += 1;
+			}
+		}
+	}
+
+	// zero hot key on pruned boxes
+	UIElement* element = UIElement_fromKey(uiContext->hotKey);
+	if (UIElement_isNil(element) && (UI_KeyMatch(UI_keyZero(), uiContext->activeKey[UIMouseButtonSlot_Left]) || !UI_KeyMatch(uiContext->hotKey, uiContext->activeKey[UIMouseButtonSlot_Left])) && (UI_KeyMatch(UI_keyZero(), uiContext->activeKey[UIMouseButtonSlot_Middle]) || !UI_KeyMatch(uiContext->hotKey, uiContext->activeKey[UIMouseButtonSlot_Middle])) && (UI_KeyMatch(UI_keyZero(), uiContext->activeKey[UIMouseButtonSlot_Right]) || !UI_KeyMatch(uiContext->hotKey, uiContext->activeKey[UIMouseButtonSlot_Right]))) {
+		uiContext->hotKey = UI_keyZero();
+	}
+
+	// create root
+	vec2 clientRectSize = { window->width, window->height };
+	UI_setNextPrefWidth(UI_Pixels(clientRectSize.x, 1.0f));
+	UI_setNextPrefHeight(UI_Pixels(clientRectSize.y, 1.0f));
+	UI_setNextChildLayoutAxis(Axis2D_Y);
+
+	UIElement* root = UIElement_create(0, "window_root_%" PRIx64 "", &window->handle);
+
+	UI_pushParent(root);
+
+	// defaults
+	UI_pushFontSize(12.f);
+	UI_pushBackgroundColor({ 0.1f, 0.13f, 0.14f, 0.7f });
+	UI_pushPrefWidth(UI_Pct(1.f, 0.f));
+	UI_pushPrefHeight(UI_Em(1.8f, 1.f));
+	/*
+	UI_pushTextColor(V4(1, 1, 1, 1));
+	UI_pushBorderColor(V4(1, 1, 1, 0.2f));
+	UI_pushFillColor(V4(0.4f, 0.95f, 1.f, 0.3f));
+	UI_pushCursorColor(V4(1, 0.85f, 0.2f, 0.8f));
+	UI_pushBorderThickness(1.f);
+	UI_pushTextEdgePadding(UI_topFontSize() * 0.5f);
+	*/
+}
+
+void UI_endBuild() {
+	UI_popParent();
+
+	auto hotElement = UIElement_fromKey(uiContext->hotKey);
+	// TODO(piero): Check how to set cursor in SDL3
+	// OS_setCursor(hotElement->hoverCursor);
+
+	for (auto axis = (Axis2D)0; axis < Axis2D_COUNT; axis = Axis2D(axis + 1)) {
+		UI_layoutRoot(uiContext->root, axis);
+	}
+
+	for (auto slot = (UI_MouseButtonSlot)0; slot < UIMouseButtonSlot_COUNT; slot = UI_MouseButtonSlot(slot + 1)) {
+		UIElement* element = UIElement_fromKey(uiContext->activeKey[slot]);
+		if (UIElement_isNil(element)) {
+			OS_Key key = UI_OSKeyFromMouseButtonSlot(slot);
+			b32 release = 0;
+			for (UI_EventNode* n = uiContext->events->first; n != nullptr; n = n->next) {
+				UI_Event* event = &n->v;
+				if (event->kind == UIEventKind_Release && event->key == key) {
+					release = 1;
+					break;
+				}
+			}
+			if (release) {
+				MemoryZeroStruct(&uiContext->activeKey[slot]);
+			}
+		}
+	}
+}
+
+void UI_draw(VulkanRendererContext* context) {
+	for (UIElement *element = uiContext->root, *nextBox = &nilUIElement; !UIElement_isNil(element); element = nextBox) {
+		auto rec = UIElement_recurseDepthFirstPost(element, &nilUIElement);
+		nextBox = rec.next;
+
+		if (element->opacity != 1.f) {
+			// D_PushTransparency(1.f - element->opacity);
+		}
+
+		if (element->flags & UIElementFlag_DrawBackground) {
+			auto rect = element->rect;
+			Renderer_pushRect(context, rect, element->rectStyleEXT->backgroundColor);
+
+			if (element->flags & UIElementFlag_DrawHotEffects) {
+			}
+
+			if (element->flags & UIElementFlag_DrawActiveEffects) {
+			}
+
+			if (element->focusHotT >= 0.005f) {
+			}
+		}
+
+		if (element->flags & UIElementFlag_DrawText) {
+			auto textPos = UI_textPosFromElement(element);
+			Renderer_pushText(context, element->textEXT->string, textPos, element->textEXT->fontSize);
+		}
+
+		if (element->flags & UIElementFlag_DrawBorder) {
+		}
+
+		if (element->flags & UIElementFlag_Clip) {
+		}
+		if (rec.pushCount == 0) {
+			int pop_idx = 0;
+			for (UIElement* p = element; !UIElement_isNil(p) && p != nextBox && pop_idx <= rec.popCount; p = p->parent, pop_idx += 1) {
+				if (p->flags & UIElementFlag_Clip) {
+					// D_PopClip();
+				}
+
+				// draw disabled overlay
+				if (p->disabledT > 0.01f) {
+				}
+
+				// pop opacity
+				if (p->opacity != 1.f) {
+					// D_PopTransparency();
+				}
+			}
+		}
+	}
+}
+
+void UI_pushPrefSize(Axis2D axis, UI_Size v) {
+	(axis == Axis2D_X ? UI_pushPrefWidth : UI_pushPrefHeight)(v);
+}
+
+void UI_popPrefSize(Axis2D axis) {
+	(axis == Axis2D_X ? UI_popPrefWidth : UI_popPrefHeight)();
+}
+
+void UI_setNextPrefSize(Axis2D axis, UI_Size v) {
+	(axis == Axis2D_X ? UI_setNextPrefWidth : UI_setNextPrefHeight)(v);
+}
+
+void UI_pushFixedPos(vec2 v) {
+	UI_pushFixedX(v.x);
+	UI_pushFixedY(v.y);
+}
+
+void UI_popFixedPos() {
+	UI_popFixedX();
+	UI_popFixedY();
+}
+
+void UI_setNextFixedPos(vec2 v) {
+	UI_setNextFixedX(v.x);
+	UI_setNextFixedY(v.y);
+}
+
+void UI_pushFixedRect(Rect2D rect) {
+	vec2 dim = rect2DSize(rect);
+	UI_pushFixedPos(rect.min);
+	UI_pushPrefSize(Axis2D_X, UI_Pixels(dim.x, 1));
+	UI_pushPrefSize(Axis2D_Y, UI_Pixels(dim.y, 1));
+}
+
+void UI_popFixedRect() {
+	UI_popFixedPos();
+	UI_popPrefSize(Axis2D_X);
+	UI_popPrefSize(Axis2D_Y);
+}
+
+void UI_setNextFixedRect(Rect2D rect) {
+	vec2 dim = rect2DSize(rect);
+	UI_setNextFixedPos(rect.min);
+	UI_setNextPrefSize(Axis2D_X, UI_Pixels(dim.x, 1));
+	UI_setNextPrefSize(Axis2D_Y, UI_Pixels(dim.y, 1));
+}
+
+// Generated
+UIElement* UI_topParent() { StackTopImpl(uiContext, Parent, parent) }
+UIElement* UI_pushParent(UIElement* value) { StackPushImpl(uiContext, Parent, parent, value) }
+UIElement* UI_popParent() { StackPopImpl(uiContext, Parent, parent) }
+UIElement* UI_setNextParent(UIElement* value) { StackSetNextImpl(uiContext, Parent, parent, value) }
+
+UI_Size UI_topPrefWidth() { StackTopImpl(uiContext, PrefDim, prefWidth) }
+UI_Size UI_pushPrefWidth(UI_Size value) { StackPushImpl(uiContext, PrefDim, prefWidth, value) }
+UI_Size UI_popPrefWidth() { StackPopImpl(uiContext, PrefDim, prefWidth) }
+UI_Size UI_setNextPrefWidth(UI_Size value) { StackSetNextImpl(uiContext, PrefDim, prefWidth, value) }
+
+UI_Size UI_topPrefHeight() { StackTopImpl(uiContext, PrefDim, prefHeight) }
+UI_Size UI_pushPrefHeight(UI_Size value) { StackPushImpl(uiContext, PrefDim, prefHeight, value) }
+UI_Size UI_popPrefHeight() { StackPopImpl(uiContext, PrefDim, prefHeight) }
+UI_Size UI_setNextPrefHeight(UI_Size value) { StackSetNextImpl(uiContext, PrefDim, prefHeight, value) }
+
+Axis2D UI_topChildLayoutAxis() { StackTopImpl(uiContext, ChildLayoutAxis, childLayoutAxis) }
+Axis2D UI_pushChildLayoutAxis(Axis2D value) { StackPushImpl(uiContext, ChildLayoutAxis, childLayoutAxis, value) }
+Axis2D UI_popChildLayoutAxis() { StackPopImpl(uiContext, ChildLayoutAxis, childLayoutAxis) }
+Axis2D UI_setNextChildLayoutAxis(Axis2D value) { StackSetNextImpl(uiContext, ChildLayoutAxis, childLayoutAxis, value) }
+
+f32 UI_topFixedX() { StackTopImpl(uiContext, FixedX, fixedX) }
+f32 UI_pushFixedX(f32 value) { StackPushImpl(uiContext, FixedX, fixedX, value) }
+f32 UI_popFixedX() { StackPopImpl(uiContext, FixedX, fixedX) }
+f32 UI_setNextFixedX(f32 value) { StackSetNextImpl(uiContext, FixedX, fixedX, value) }
+
+f32 UI_topFixedY() { StackTopImpl(uiContext, FixedY, fixedY) }
+f32 UI_pushFixedY(f32 value) { StackPushImpl(uiContext, FixedY, fixedY, value) }
+f32 UI_popFixedY() { StackPopImpl(uiContext, FixedY, fixedY) }
+f32 UI_setNextFixedY(f32 value) { StackSetNextImpl(uiContext, FixedY, fixedY, value) }
+
+UIKey UI_topSeedKey() { StackTopImpl(uiContext, SeedKey, seedKey) }
+UIKey UI_pushSeedKey(UIKey value) { StackPushImpl(uiContext, SeedKey, seedKey, value) }
+UIKey UI_popSeedKey() { StackPopImpl(uiContext, SeedKey, seedKey) }
+UIKey UI_setNextSeedKey(UIKey value) { StackSetNextImpl(uiContext, SeedKey, seedKey, value) }
+
+UI_ElementFlags UI_topFlags() { StackTopImpl(uiContext, Flags, flags) }
+UI_ElementFlags UI_pushFlags(UI_ElementFlags value) { StackPushImpl(uiContext, Flags, flags, value) }
+UI_ElementFlags UI_popFlags() { StackPopImpl(uiContext, Flags, flags) }
+UI_ElementFlags UI_setNextFlags(UI_ElementFlags value) { StackSetNextImpl(uiContext, Flags, flags, value) }
+
+UI_FocusKind UI_topFocusHot() { StackTopImpl(uiContext, FocusHot, focusHot) }
+UI_FocusKind UI_pushFocusHot(UI_FocusKind value) { StackPushImpl(uiContext, FocusHot, focusHot, value) }
+UI_FocusKind UI_popFocusHot() { StackPopImpl(uiContext, FocusHot, focusHot) }
+UI_FocusKind UI_setNextFocusHot(UI_FocusKind value) { StackSetNextImpl(uiContext, FocusHot, focusHot, value) }
+
+UI_FocusKind UI_topFocusActive() { StackTopImpl(uiContext, FocusActive, focusActive) }
+UI_FocusKind UI_pushFocusActive(UI_FocusKind value) { StackPushImpl(uiContext, FocusActive, focusActive, value) }
+UI_FocusKind UI_popFocusActive() { StackPopImpl(uiContext, FocusActive, focusActive) }
+UI_FocusKind UI_setNextFocusActive(UI_FocusKind value) { StackSetNextImpl(uiContext, FocusActive, focusActive, value) }
+
+u64 UI_topHoverCursor() { StackTopImpl(uiContext, HoverCursor, hoverCursor) }
+u64 UI_pushHoverCursor(u64 value) { StackPushImpl(uiContext, HoverCursor, hoverCursor, value) }
+u64 UI_popHoverCursor() { StackPopImpl(uiContext, HoverCursor, hoverCursor) }
+u64 UI_setNextHoverCursor(u64 value) { StackSetNextImpl(uiContext, HoverCursor, hoverCursor, value) }
+
+f32 UI_topOpacity() { StackTopImpl(uiContext, Opacity, opacity)}
+f32 UI_pushOpacity(f32 value) { StackPushImpl(uiContext, Opacity, opacity, value) }
+f32 UI_popOpacity() { StackPopImpl(uiContext, Opacity, opacity) }
+f32 UI_setNextOpacity(f32 value) { StackSetNextImpl(uiContext, Opacity, opacity, value) }
+
+vec4 UI_topBackgroundColor() { StackTopImpl(uiContext, BackgroundColor, backgroundColor)}
+vec4 UI_pushBackgroundColor(vec4 value) { StackPushImpl(uiContext, BackgroundColor, backgroundColor, value) }
+vec4 UI_popBackgroundColor() { StackPopImpl(uiContext, BackgroundColor, backgroundColor) }
+vec4 UI_setNextBackgroundColor(vec4 value) { StackSetNextImpl(uiContext, BackgroundColor, backgroundColor, value) }
+
+FontAsset* UI_topFont() { StackTopImpl(uiContext, Font, font)}
+FontAsset* UI_pushFont(FontAsset* value) { StackPushImpl(uiContext, Font, font, value) }
+FontAsset* UI_popFont() { StackPopImpl(uiContext, Font, font) }
+FontAsset* UI_setNextFont(FontAsset* value) { StackSetNextImpl(uiContext, Font, font, value) }
+
+f32 UI_topFontSize() { StackTopImpl(uiContext, FontSize, fontSize)}
+f32 UI_pushFontSize(f32 value) { StackPushImpl(uiContext, FontSize, fontSize, value) }
+f32 UI_popFontSize() { StackPopImpl(uiContext, FontSize, fontSize) }
+f32 UI_setNextFontSize(f32 value) { StackSetNextImpl(uiContext, FontSize, fontSize, value) }
+
+}// namespace pm

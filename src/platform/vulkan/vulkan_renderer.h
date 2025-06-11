@@ -4,6 +4,7 @@
 #include "material.h"
 #include "renderer/material.h"
 #include "terrain/voxel.h"
+#include "ui/ui_manager.h"
 #include "vulkan_loader.h"
 #include <SDL3/SDL.h>
 #include <VkBootstrap.h>
@@ -23,10 +24,17 @@
 #include "core/memory/arena.h"
 #include "platform/window.h"
 #include "ui/ui_types.h"
-
+#include "ui/ui_widgets.h"
 
 
 namespace pm {
+
+struct UIVertex {
+	vec3 position;
+	float uv_x;
+	vec3 color;
+	float uv_y;
+};
 
 struct UIPushConstants {
 	VkDeviceAddress vertexBuffer;
@@ -69,22 +77,6 @@ struct MeshIndirectCommand {
 	VkDrawIndexedIndirectCommand command;
 };
 
-struct DrawBatchDescriptor {
-	int32_t binding;
-	AllocatedBuffer buffer;
-	uint32_t size;
-	uint32_t offset;
-	VkDescriptorType type;
-};
-struct DrawBatchImageDescriptor {
-	int32_t binding;
-	// TODO: replace with AllocatedImage when refactoring the SDF loading code.
-	VkImageView imageView;
-	VkSampler sampler;
-	VkImageLayout imageLayout;
-	VkDescriptorType type;
-};
-
 struct DrawBatchCommands {
 	AllocatedBuffer buffer;
 	uint32_t offset;
@@ -93,30 +85,43 @@ struct DrawBatchCommands {
 };
 
 enum DrawBatchType {
-	MESH_BATCH,
-	UI_BATCH,
-	TEXT_BATCH,
-	VIEWPORT_BATCH
+	DRAW_BATCH_MESH,
+	DRAW_BATCH_UI,
+	DRAW_BATCH_TEXT,
+	DRAW_BATCH_VIEWPORT
 };
 
 struct DrawBatch {
-	DrawBatchType type;// TODO(piero): Remove this. This is only used to bind global descriptor sets for a batch but we should include global descriptor sets in the batch itself.
+	i32 id{ -1 };
+	DrawBatchType type{};
 	DrawBatchCommands commands{};
-	std::vector<DrawBatchDescriptor> descriptors{};
-	std::vector<DrawBatchImageDescriptor> imageDescriptors{};
 	GPUMeshBuffers meshBuffers{};
 
 	MaterialInstance material;
 
-	VkPipeline pipeline{};
-	VkPipelineLayout pipelineLayout{};
-	VkDescriptorSetLayout descriptorSetLayout{};
+	// TEMP
+	std::vector<UIVertex> vertices{};
+	std::vector<u32> indices{};
+
+	std::vector<UIIndirectCommand> uiDrawCommands{};
+	std::vector<UIDrawData> uiDrawData{};
+	std::vector<UIMaterialData> uiMaterialData{};
+
+	std::vector<UIIndirectCommand> textDrawCommands;
+	std::vector<glm::mat4> textTransformData;
 };
+
+struct DrawBatchNode {
+	DrawBatchNode* next{};
+	DrawBatch drawBatch{};
+};
+
 
 // Group batches for a specific window
 struct UIWindowBatch {
 	PrimalWindow* window;
-	std::vector<DrawBatch> drawBatches;
+	DrawBatchNode* firstDrawBatch;
+	DrawBatchNode* lastDrawBatch;
 };
 
 struct GBuffer {
@@ -190,8 +195,7 @@ struct FrameData {
 	std::vector<DrawBatch> drawBatches{};
 	std::vector<UIWindowBatch> uiWindowBatches{};
 
-	MemoryArena perFrameArena;// TODO(piero): use arena for per-frame allocations
-	FixedArray<UI::UIWindowBatchCommands> uiWindowBatchCommands{};
+	Arena* perFrameArena;// TODO(piero): use arena for per-frame allocations
 };
 
 struct GPUSceneData {
@@ -224,6 +228,8 @@ struct ModelDrawRender {
 
 	std::vector<RenderObject> renderObjects{};
 };
+
+struct UIContext;
 
 struct VulkanRendererContext {
 	VkDevice device;
@@ -332,9 +338,6 @@ struct VulkanRendererContext {
 
 	bool testBool;
 
-	// Memory
-	MemoryArena uiMemoryArena;
-
 	// Terrain test
 	VoxelTerrain voxelTerrain;
 
@@ -372,6 +375,9 @@ struct VulkanRendererContext {
 	AllocatedImage blueNoise;
 
 	uint32_t gbufferDebugChannel{ 0 };
+
+	// New UI system
+	UIContext* mainUIContext;
 
 	// TODO(piero): Should refactor this. Used to render a different layout to test full screen viewport rendering
 	bool fullScreen{ false };
@@ -422,20 +428,18 @@ void initMeshPipelines(VulkanRendererContext* context);
 
 void initVoxelPipeline(VulkanRendererContext* context);
 
-GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<UI::UIVertex> vertices, std::string name);
+GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<UIVertex> vertices, std::string name);
 GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<Vertex> vertices, std::string name);
 GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<VoxelVertex> vertices, std::string name);
 
 // Batching
 void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models);
-void buildUIDrawBatches(VulkanRendererContext* context, FixedArray<UI::UIWindowBatchCommands>& windowBatches);
-std::vector<UI::UIElement> buildUIGeometry(VulkanRendererContext* context, FixedArray<UI::UIRenderCommand>& renderCommands, std::vector<UI::UIVertex>& vertices, std::vector<uint32_t>& indices);
 
 // Updating
 void rendererUpdate(VulkanRendererContext* context, float deltaTime);
 void updateScene(VulkanRendererContext* context, float deltaTime);
 void updateFontData(VulkanRendererContext* context);
-void updateUIData(VulkanRendererContext* context);
+void updateUIData(VulkanRendererContext* context, f32 deltaTime);
 
 // drawing
 void rendererDraw(VulkanRendererContext* context);
@@ -455,7 +459,6 @@ uint32_t registerImage(VulkanRendererContext* context, AllocatedImage* image);
 
 void setPointerState(uint32_t windowId, float mouseX, float mouseY, float relMouseX, float relMouseY, bool isPointerDown);
 
-
 // Voxel stuff
 void setupVoxelRaycastRenderer(VulkanRendererContext* context);
 void createGBuffer(VulkanRendererContext* context);
@@ -465,5 +468,12 @@ void destroyGBuffer(VulkanRendererContext* context);
 PrimalMaterial createMaterial(VulkanRendererContext* context, std::string_view materialConfig, bool flag = false);
 void destroyMaterial(VulkanRendererContext* context, PrimalMaterial& material);
 
+// API for UI rendering
+DrawBatchNode* Renderer_getBatch(VulkanRendererContext* context, DrawBatchType type);
+DrawBatchNode* Renderer_createBatch(VulkanRendererContext* context, DrawBatchType type);
+void Renderer_pushRect(VulkanRendererContext* context, Rect2D rect, vec4 color);
+void Renderer_pushText(VulkanRendererContext* context, String8 str, vec2 offsetPosition, f32 fontSize);
+
+void Renderer_submit(VulkanRendererContext* context);
 
 }// namespace pm

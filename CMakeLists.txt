@@ -10,7 +10,7 @@ if(APPLE)
 elseif(UNIX)
   message("Configuring for UNIX")
   set(CMAKE_CXX_COMPILER "/usr/bin/g++-13")
-elseif(Win64)
+elseif(WIN32)
   message("Configuring for WINDOWS")
   set(CMAKE_CXX_COMPILER "cl.exe")
 endif()
@@ -18,7 +18,7 @@ endif()
 project(
   PrimalEngine
   DESCRIPTION "C++ Game Engine"
-	LANGUAGES CXX C
+  LANGUAGES CXX C
 )
 
 set(CMAKE_CXX_STANDARD 20)
@@ -172,7 +172,7 @@ set(KTX_INCLUDE_DIRS
     ${KTX_DIR}/other_include
 )
 
-add_library(ktx STATIC ${KTX_SOURCES})
+add_library(ktx SHARED ${KTX_SOURCES})
 target_compile_definitions(ktx PUBLIC LIBKTX)
 if (WIN32)
 	target_compile_definitions(ktx PUBLIC "KTX_API=__declspec(dllexport)")
@@ -199,9 +199,9 @@ target_include_directories(${ENGINE_LIB} PUBLIC "${SOURCES_DIR}")
 
 target_compile_definitions(${ENGINE_LIB} PUBLIC GLM_FORCE_DEPTH_ZERO_TO_ONE)
 
-# [LIB] STB_IMAGE
-set(STBIMAGE_DIR "${LIB_DIR}/stb_image")
-target_include_directories(${ENGINE_LIB} PUBLIC "${STBIMAGE_DIR}")
+# [LIB] STB
+set(STBDIR "${LIB_DIR}/stb")
+target_include_directories(${ENGINE_LIB} PUBLIC "${STBDIR}")
 
 # NOTE: we are not using assimp yet.
 # [LIB] ASSIMP 

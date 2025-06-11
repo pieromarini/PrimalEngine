@@ -16,9 +16,14 @@ public:
 	PrimalWindow* createWindow(std::string_view name, int32_t width, int32_t height, SDL_WindowFlags flags);
 	static PrimalEngine& get();
 
-	std::vector<PrimalWindow> windows;
+	PrimalWindow* firstWindow{};
+	PrimalWindow* lastWindow{};
 
+	Arena* arena;
+
+	VulkanRendererContext rendererContext;
 private:
+	void initThreadContext();
 	bool m_isInitialized{ false };
 	int m_frameNumber{ 0 };
 	bool m_stopRendering{ false };
@@ -27,12 +32,9 @@ private:
 
 	bool windowRelativeMouseMode{ false };
 
-	PrimalWindow* mainWindow;
 	Camera m_mainCamera{ m_windowExtent.width, m_windowExtent.height };
 
 	bool quitRequested{ false };
-
-	VulkanRendererContext rendererContext;
 };
 
 }// namespace pm

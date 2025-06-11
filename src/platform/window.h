@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SDL3/SDL_video.h>
+#include "core/core.h"
 #include "platform/vulkan/swapchain.h"
 #include "vk_types.h"
 #include <string_view>
@@ -9,8 +10,9 @@
 namespace pm {
 
 struct PrimalWindow {
-	uint32_t id{};
-	int32_t width{}, height{};
+	u64 id{};
+	
+	i32 width{}, height{};
 
 	SDL_Window* handle{ nullptr };
 	SDL_WindowFlags windowFlags{};
@@ -34,9 +36,12 @@ struct PrimalWindow {
 	// Vulkan-specific
 	VkSurfaceKHR surface{ nullptr };
 	PrimalSwapchain swapchain{};
+
+	PrimalWindow* next;
+	PrimalWindow* prev;
 };
 
-PrimalWindow createPrimalWindow(std::string_view title, int32_t width, int32_t height, SDL_WindowFlags flags);
+PrimalWindow* createPrimalWindow(Arena* arena, std::string_view title, int32_t width, int32_t height, SDL_WindowFlags flags);
 
 void destroyPrimalWindow(PrimalWindow* window, VmaAllocator& allocator, VkDevice device, VkInstance instance, VkAllocationCallbacks* callbacks);
 

@@ -8,6 +8,8 @@
 
 #include "SDL3/SDL_keycode.h"
 #include "SDL3/SDL_video.h"
+#include "core/memory/arena.h"
+#include "core/thread_context.h"
 #include "platform/vulkan/vulkan_renderer.h"
 #include "primal_engine.h"
 
@@ -24,22 +26,20 @@ PrimalEngine::PrimalEngine() {
 	assert(loadedEngine == nullptr);
 	loadedEngine = this;
 
+	initThreadContext();
+
+	arena = arenaAlloc(Megabytes(512));
+
 	SDL_Init(SDL_INIT_VIDEO);
 
 	rendererInit(&rendererContext);
 
 	auto windowFlags = static_cast<SDL_WindowFlags>(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
-	// TODO(piero): We are reserving 20 windows because right now we won't have more than this and since we store a pointer to
-	//              our main window, we don't want it to be invalidated when the vector reallocates for a resize.
-	windows.reserve(20);
 
-	mainWindow = createWindow("Primal Engine", static_cast<int32_t>(m_windowExtent.width), static_cast<int32_t>(m_windowExtent.height), windowFlags);
+	firstWindow = createWindow("Primal Engine", static_cast<int32_t>(m_windowExtent.width), static_cast<int32_t>(m_windowExtent.height), windowFlags);
 
-	// test create secondary window:
-	createWindow("test window", 400, 800, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
-
-	setWindowRelativeMouseMode(mainWindow, windowRelativeMouseMode);
+	setWindowRelativeMouseMode(firstWindow, windowRelativeMouseMode);
 
 	// setup main viewer camera
 	m_mainCamera.velocity = glm::vec3(0.f);
@@ -49,7 +49,7 @@ PrimalEngine::PrimalEngine() {
 	m_mainCamera.setMouseControlEnabled(windowRelativeMouseMode);
 
 	m_rendererState = {
-		.window = mainWindow,
+		.window = firstWindow,
 		.mainCamera = &m_mainCamera
 	};
 
@@ -66,27 +66,31 @@ PrimalEngine::PrimalEngine() {
 void PrimalEngine::cleanup() {
 	if (m_isInitialized) {
 		rendererCleanup(&rendererContext);
+		arenaRelease(arena);
 	}
+
+	ThreadCtx_release();
+
 	loadedEngine = nullptr;
 }
 
 void PrimalEngine::handleWindowEvent(SDL_Event& e) {
-	for (auto& window : windows) {
-		if (e.window.windowID == window.id) {
+	for (auto* window = firstWindow; window != nullptr; window = window->next) {
+		if (e.window.windowID == window->id) {
 			switch (e.type) {
 			// Window appeared
 			case SDL_EVENT_WINDOW_SHOWN:
-				window.shown = true;
+				window->shown = true;
 				break;
 
 			// Window disappeared
 			case SDL_EVENT_WINDOW_HIDDEN:
-				window.shown = false;
+				window->shown = false;
 				break;
 
 			// Get new dimensions and repaint
 			case SDL_EVENT_WINDOW_RESIZED:
-				window.resizeRequested = true;
+				window->resizeRequested = true;
 				break;
 
 			// Repaint on expose
@@ -96,46 +100,46 @@ void PrimalEngine::handleWindowEvent(SDL_Event& e) {
 
 			// Mouse enter
 			case SDL_EVENT_WINDOW_MOUSE_ENTER:
-				window.mouseFocus = true;
+				window->mouseFocus = true;
 				break;
 
 			// Mouse exit
 			case SDL_EVENT_WINDOW_MOUSE_LEAVE:
-				window.mouseFocus = false;
+				window->mouseFocus = false;
 				break;
 
 			// Keyboard focus gained
 			case SDL_EVENT_WINDOW_FOCUS_GAINED:
-				window.keyboardFocus = true;
+				window->keyboardFocus = true;
 				break;
 
 			// Keyboard focus lost
 			case SDL_EVENT_WINDOW_FOCUS_LOST:
-				window.keyboardFocus = false;
+				window->keyboardFocus = false;
 				break;
 
 			// Window minimized
 			case SDL_EVENT_WINDOW_MINIMIZED:
-				window.isMinimized = true;
+				window->isMinimized = true;
 				break;
 
 			// Window maximized
 			case SDL_EVENT_WINDOW_MAXIMIZED:
-				window.isMinimized = false;
+				window->isMinimized = false;
 				break;
 
 			// Window restored
 			case SDL_EVENT_WINDOW_RESTORED:
-				window.isMinimized = false;
+				window->isMinimized = false;
 				break;
 
 			// Hide on close
 			case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
 				// NOTE(piero): if we close the main window, close the program.
-				if (window.id == mainWindow->id) {
+				if (window->id == firstWindow->id) {
 					quitRequested = true;
 				} else {
-					SDL_HideWindow(window.handle);
+					SDL_HideWindow(window->handle);
 				}
 				break;
 			}
@@ -166,7 +170,7 @@ void PrimalEngine::run() {
 			if (e.type == SDL_EVENT_KEY_UP) {
 				if (e.key.key == SDLK_ESCAPE) {
 					windowRelativeMouseMode = !windowRelativeMouseMode;
-					setWindowRelativeMouseMode(mainWindow, windowRelativeMouseMode);
+					setWindowRelativeMouseMode(firstWindow, windowRelativeMouseMode);
 
 					// Disable camera panning when relative mouse mode is disabled
 					m_mainCamera.setMouseControlEnabled(windowRelativeMouseMode);
@@ -179,7 +183,7 @@ void PrimalEngine::run() {
 					destroyGBuffer(&rendererContext);
 					createGBuffer(&rendererContext);
 
-					m_mainCamera.onWindowResize(mainWindow->width, mainWindow->height);
+					m_mainCamera.onWindowResize(firstWindow->width, firstWindow->height);
 				} else if (e.key.key == SDLK_G) {// regenerate terrain
 					cleanupTerrain(&rendererContext);
 					terrainTest(&rendererContext);
@@ -203,7 +207,7 @@ void PrimalEngine::run() {
 				}
 			}
 
-			m_stopRendering = mainWindow->isMinimized;
+			m_stopRendering = firstWindow->isMinimized;
 		}
 
 		// do not draw if we are minimized
@@ -214,13 +218,13 @@ void PrimalEngine::run() {
 		}
 
 		// Check if we need to resize any windows
-		for (auto& window : windows) {
-			if (window.resizeRequested) {
-				resizeSwapchain(&rendererContext, &window);
+		for (auto* window = firstWindow; window != nullptr; window = window->next) {
+			if (window->resizeRequested) {
+				resizeSwapchain(&rendererContext, window);
 
 				// NOTE(piero): If we resize the main window, we also update our camera.
-				if (window.id == mainWindow->id) {
-					m_mainCamera.onWindowResize(window.width, window.height);
+				if (window->id == firstWindow->id) {
+					m_mainCamera.onWindowResize(window->width, window->height);
 				}
 			}
 		}
@@ -235,11 +239,18 @@ void PrimalEngine::run() {
 }
 
 PrimalWindow* PrimalEngine::createWindow(std::string_view name, int32_t width, int32_t height, SDL_WindowFlags flags) {
-	windows.push_back(createPrimalWindow(name, width, height, flags));
-	auto& window = windows.back();
-	window.surface = createVulkanSurface(&window, rendererContext.instance, nullptr);
-	window.swapchain = createSwapchain(rendererContext.device, rendererContext.physicalDevice, window.surface, width, height, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
-	return &window;
+	auto window = createPrimalWindow(arena, name, width, height, flags);
+	DLLPushBack(firstWindow, lastWindow, window);
+
+	window->surface = createVulkanSurface(window, rendererContext.instance, nullptr);
+	window->swapchain = createSwapchain(rendererContext.device, rendererContext.physicalDevice, window->surface, width, height, VK_FORMAT_B8G8R8A8_UNORM, VK_PRESENT_MODE_IMMEDIATE_KHR);
+
+	return window;
+}
+
+void PrimalEngine::initThreadContext() {
+	static auto tctx = ThreadCtx_alloc();
+	ThreadCtx_set(&tctx);
 }
 
 }// namespace pm

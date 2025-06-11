@@ -1,45 +1,71 @@
 #pragma once
 
-#include <cstdint>
+#include "core/core.h"
 
 namespace pm {
 
-struct MemoryArena {
-	uint64_t size;
-	char* memory;
-	char* allocated;
-	char* committed;
+constexpr u32 ARENA_HEADER_SIZE = 128;
+
+using ArenaFlags = u32;
+enum {
+	ArenaFlag_NoChain = (1 << 0),
 };
 
 
-// TODO(piero): This should be dynamic per arena
-constexpr uint32_t PAGES_PER_COMMIT = 2;
+static constexpr u64 arenaDefaultReserveSize = Megabytes(64);
+static constexpr u64 arenaDefaultCommitSize = Kilobytes(64);
+static constexpr ArenaFlags arenaDefaultFlags = 0;
 
-#define KILOBYTE(value) (uint64_t)((value) * 1024)
-#define MEGABYTE(value) (uint64_t)(KILOBYTE(value) * 1024)
-#define GIGABYTE(value) (uint64_t)(MEGABYTE(value) * 1024)
+struct ArenaParams {
+	ArenaFlags flags{ arenaDefaultFlags };
+	u64 reserveSize{ arenaDefaultReserveSize };
+	u64 commitSize{ arenaDefaultCommitSize };
+	void* optionalBackingBuffer{};
+	String8 name{};
+};
 
-#define MemoryArenaPush(T, count, arena) static_cast<T *>(MemoryArena_push(arena, sizeof(T) * count, alignof(T)))
+struct Arena {
+	Arena* prev;
+	Arena* current;
+	ArenaFlags flags;
+	u32 nameSize;
+	u64 commitedSize;
+	u64 reservedSize;
+	u64 basePos;
+	u64 pos;
+	u64 commited;
+	u64 reserved;
+};
 
-#define MemoryArenaCreateArray(A, T, elementCount, arena) A{ .size = elementCount, .length = 0, .data = MemoryArenaPush(T, elementCount, arena) }
+struct Temp {
+	Arena* arena;
+	u64 pos;
+};
 
-MemoryArena MemoryArena_create(uint64_t bytesToReserve);
-void MemoryArena_destroy(MemoryArena* arena);
-void MemoryArena_commit(MemoryArena* arena, uint64_t size);
+Arena* arenaAlloc(u64 size);
+Arena* arenaAlloc(ArenaParams params);
+#define ArenaAllocDefault() arenaAlloc((ArenaParams){ .flags = arenaDefaultFlags, .reserveSize = arenaDefaultReserveSize, .commitSize = arenaDefaultCommitSize })
+void arenaRelease(Arena* arena);
 
-void* MemoryArena_push(MemoryArena* arena, uint64_t size, uint64_t align);
+String8 arenaName(Arena* arena);
 
-void MemoryArena_pop(MemoryArena* arena, uint64_t size);
+void* arenaPush(Arena* arena, u64 size, u64 align);
+u64 arenaPos(Arena* arena);
+void arenaPopTo(Arena* arena, u64 pos);
 
-void MemoryArena_clear(MemoryArena* arena);
+void arenaClear(Arena* arena);
+void arenaPop(Arena* arena, u64 amt);
 
-// Internal
-void* MemoryArena_os_reserve(uint64_t bytesToReserve);
-bool MemoryArena_os_commit(void* addr, uint64_t size);
-bool MemoryArena_os_decommit(void* addr, uint64_t size);
-void MemoryArena_os_release(void* addr, uint64_t size);
-uint64_t MemoryArena_os_getPageSize();
+Temp tempBegin(Arena* arena);
+void tempEnd(Temp temp);
 
-char* alignMemory(char *ptr, uint32_t align);
+#define PushArrayNoZeroAligned(a, T, c, align) (T*)arenaPush((a), sizeof(T) * (c), (align))
+#define PushArrayAligned(a, T, c, align) (T*)MemoryZero(PushArrayNoZeroAligned(a, T, c, align), sizeof(T) * (c))
+
+#define PushArrayNoZero(a, T, c) PushArrayNoZeroAligned(a, T, c, Max(8, alignof(T)))
+#define PushStructNoZero(a, T) PushArrayNoZeroAligned(a, T, 1, Max(8, alignof(T)))
+
+#define PushArray(a, T, c) PushArrayAligned(a, T, c, Max(8, alignof(T)))
+#define PushStruct(a, T) PushArrayAligned(a, T, 1, Max(8, alignof(T)))
 
 }// namespace pm
