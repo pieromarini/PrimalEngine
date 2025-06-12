@@ -15,7 +15,7 @@ layout (set = 0, binding = 2, std430) readonly buffer Draws {
 layout (set = 1, binding = 0) uniform sampler2D viewportTextures[];
 
 layout (location = 0) in vec2 inUV;
-layout (location = 1) in vec3 inColor;
+layout (location = 1) in vec4 inColor;
 layout (location = 2) in flat uint drawId;
 
 layout (location = 0) out vec4 outFragColor;

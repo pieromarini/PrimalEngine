@@ -121,11 +121,12 @@ struct UIElement_TextExt {
 };
 
 struct UIElement_RectStyleExt {
-	f32 cornerRadii[Corner_COUNT];
-	f32 borderThickness;
-	vec4 backgroundColor;
-	vec4 borderColor;
-	vec4 overlayColor;
+	f32 cornerRadii[Corner_COUNT]{ 0.0f, 0.0f, 0.0f, 0.0f };
+	f32 borderThickness{ 0.0f };
+	f32 softness{ 0.0f };
+	vec4 backgroundColor{ 0.0f };
+	vec4 borderColor{ 0.0f };
+	vec4 overlayColor{ 0.0f };
 };
 
 struct UIElement_BucketExt {

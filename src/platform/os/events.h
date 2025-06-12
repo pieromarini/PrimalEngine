@@ -48,9 +48,6 @@ struct OS_EventList {
 	u64 count;
 };
 
-////////////////////////////////////////////////////////////////
-//~ rjf: Modifiers/Key Pair Type
-
 struct OS_ModifiersKeyPair {
 	OS_Modifiers modifiers;
 	OS_Key key;

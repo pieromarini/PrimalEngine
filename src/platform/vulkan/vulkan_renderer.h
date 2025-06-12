@@ -22,6 +22,7 @@
 #include "vulkan_texture.h"
 
 #include "core/memory/arena.h"
+#include "core/data_structures/stack.h"
 #include "platform/window.h"
 #include "ui/ui_types.h"
 #include "ui/ui_widgets.h"
@@ -30,10 +31,9 @@
 namespace pm {
 
 struct UIVertex {
-	vec3 position;
-	float uv_x;
-	vec3 color;
-	float uv_y;
+	vec2 position;
+	vec2 uv;
+	vec4 color;
 };
 
 struct UIPushConstants {
@@ -66,10 +66,13 @@ struct alignas(16) ViewportDrawData {
 };
 
 struct alignas(16) UIMaterialData {
-	glm::vec4 backgroundColor;
-	float horizontalBorder{ 0.0f };
-	float verticalBorder{ 0.0f };
-	float padding[2];
+	vec4 backgroundColor;
+	vec2 rectHalfSize;
+	float borderThickness;
+	float softness;
+	float opacity;
+	float padding;
+	float cornerRadii[4];
 };
 
 struct MeshIndirectCommand {
@@ -92,7 +95,6 @@ enum DrawBatchType {
 };
 
 struct DrawBatch {
-	i32 id{ -1 };
 	DrawBatchType type{};
 	DrawBatchCommands commands{};
 	GPUMeshBuffers meshBuffers{};
@@ -228,6 +230,8 @@ struct ModelDrawRender {
 
 	std::vector<RenderObject> renderObjects{};
 };
+
+StackDeclareNode(Transparency, f32);
 
 struct UIContext;
 
@@ -381,6 +385,8 @@ struct VulkanRendererContext {
 
 	// TODO(piero): Should refactor this. Used to render a different layout to test full screen viewport rendering
 	bool fullScreen{ false };
+
+	StackDeclare(Transparency, transparency);
 };
 
 inline uint32_t getCurrentFrameIndex(VulkanRendererContext* context) {
@@ -471,8 +477,13 @@ void destroyMaterial(VulkanRendererContext* context, PrimalMaterial& material);
 // API for UI rendering
 DrawBatchNode* Renderer_getBatch(VulkanRendererContext* context, DrawBatchType type);
 DrawBatchNode* Renderer_createBatch(VulkanRendererContext* context, DrawBatchType type);
-void Renderer_pushRect(VulkanRendererContext* context, Rect2D rect, vec4 color);
+void Renderer_pushRect(VulkanRendererContext* context, Rect2D rect, UIElement_RectStyleExt style);
 void Renderer_pushText(VulkanRendererContext* context, String8 str, vec2 offsetPosition, f32 fontSize);
+
+// Stacks
+f32 Renderer_pushTransparency(VulkanRendererContext* context, f32 value);
+f32 Renderer_popTransparency(VulkanRendererContext* context);
+f32 Renderer_topTransparency(VulkanRendererContext* context);
 
 void Renderer_submit(VulkanRendererContext* context);
 

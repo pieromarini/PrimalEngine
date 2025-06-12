@@ -86,10 +86,10 @@ std::pair<float, float> generateTextGeometry(String8 text, float fontSize, FontA
 		maxY = std::max({ maxY, y0, y1 });
 
 		if (vertices) {
-			vertices->push_back({ .position = { x0, y0, 0.0f }, .uv_x = u0, .color = { 1.0f, 0.0f, 0.0f }, .uv_y = v0 });// Bottom-left
-			vertices->push_back({ .position = { x1, y0, 0.0f }, .uv_x = u1, .color = { 1.0f, 0.0f, 0.0f }, .uv_y = v0 });// Bottom-right
-			vertices->push_back({ .position = { x1, y1, 0.0f }, .uv_x = u1, .color = { 1.0f, 0.0f, 0.0f }, .uv_y = v1 });// Top-right
-			vertices->push_back({ .position = { x0, y1, 0.0f }, .uv_x = u0, .color = { 1.0f, 0.0f, 0.0f }, .uv_y = v1 });// Top-right
+			vertices->push_back({ .position = { x0, y0 }, .uv = { u0, v0 }, .color = { 1.0f, 0.0f, 0.0f, 1.0f } });// Bottom-left
+			vertices->push_back({ .position = { x1, y0 }, .uv = { u1, v0 }, .color = { 1.0f, 0.0f, 0.0f, 1.0f } });// Bottom-right
+			vertices->push_back({ .position = { x1, y1 }, .uv = { u1, v1 }, .color = { 1.0f, 0.0f, 0.0f, 1.0f } });// Top-right
+			vertices->push_back({ .position = { x0, y1 }, .uv = { u0, v1 }, .color = { 1.0f, 0.0f, 0.0f, 1.0f } });// Top-right
 		}
 
 		if (indices) {

@@ -62,10 +62,22 @@ struct UIContext {
 	StackDeclare(HoverCursor, hoverCursor);
 	StackDeclare(Opacity, opacity);
 
-	StackDeclare(BackgroundColor, backgroundColor);
-
+	// Text decorations
+	StackDeclare(TextAlignment, textAlignment);
+	StackDeclare(TextEdgePadding, textEdgePadding);
 	StackDeclare(Font, font);
 	StackDeclare(FontSize, fontSize);
+	StackDeclare(TextColor, textColor);
+
+	// Rect decorations
+	StackDeclare(CornerRadius00, cornerRadius00);
+	StackDeclare(CornerRadius01, cornerRadius01);
+	StackDeclare(CornerRadius10, cornerRadius10);
+	StackDeclare(CornerRadius11, cornerRadius11);
+	StackDeclare(BorderThickness, borderThickness);
+	StackDeclare(BackgroundColor, backgroundColor);
+	StackDeclare(BorderColor, borderColor);
+	StackDeclare(OverlayColor, overlayColor);
 };
 
 UIKey UI_keyZero();
@@ -125,12 +137,19 @@ void UI_endBuild();
 
 void UI_draw(VulkanRendererContext* context);
 
+// Extra stack helpers
+void UI_pushCornerRadius(f32 v);
+void UI_popCornerRadius();
+void UI_setNextCornerRadius(f32 v);
+
 void UI_pushPrefSize(Axis2D axis, UI_Size v);
 void UI_popPrefSize(Axis2D axis);
 void UI_setNextPrefSize(Axis2D axis, UI_Size v);
+
 void UI_pushFixedPos(vec2 v);
 void UI_popFixedPos();
 void UI_setNextFixedPos(vec2 v);
+
 void UI_pushFixedRect(Rect2D rect);
 void UI_popFixedRect();
 void UI_setNextFixedRect(Rect2D rect);
@@ -155,8 +174,18 @@ if(state->flagsStack.autoPop) { UI_popFlags(); state->flagsStack.autoPop = 0; }\
 if(state->focusHotStack.autoPop) { UI_popFocusHot(); state->focusHotStack.autoPop = 0; }\
 if(state->hoverCursorStack.autoPop) { UI_popHoverCursor(); state->hoverCursorStack.autoPop = 0; }\
 if(state->opacityStack.autoPop) { UI_popOpacity(); state->opacityStack.autoPop = 0; }\
-if(state->backgroundColorStack.autoPop) { UI_popBackgroundColor(); state->backgroundColorStack.autoPop = 0; }\
+if(state->textAlignmentStack.autoPop) { UI_popTextAlignment(); state->textAlignmentStack.autoPop = 0; }\
+if(state->textEdgePaddingStack.autoPop) { UI_popTextEdgePadding(); state->textEdgePaddingStack.autoPop = 0; }\
+if(state->fontSizeStack.autoPop) { UI_popFontSize(); state->fontSizeStack.autoPop = 0; }\
 if(state->fontStack.autoPop) { UI_popFont(); state->fontStack.autoPop = 0; }\
-if(state->fontSizeStack.autoPop) { UI_popFontSize(); state->fontSizeStack.autoPop = 0; }
+if(state->textColorStack.autoPop) { UI_popTextColor(); state->textColorStack.autoPop = 0; }\
+if(state->cornerRadius00Stack.autoPop) { UI_popCornerRadius00(); state->cornerRadius00Stack.autoPop = 0; }\
+if(state->cornerRadius01Stack.autoPop) { UI_popCornerRadius01(); state->cornerRadius01Stack.autoPop = 0; }\
+if(state->cornerRadius10Stack.autoPop) { UI_popCornerRadius10(); state->cornerRadius10Stack.autoPop = 0; }\
+if(state->cornerRadius11Stack.autoPop) { UI_popCornerRadius11(); state->cornerRadius11Stack.autoPop = 0; }\
+if(state->borderThicknessStack.autoPop) { UI_popBorderThickness(); state->borderThicknessStack.autoPop = 0; }\
+if(state->backgroundColorStack.autoPop) { UI_popBackgroundColor(); state->backgroundColorStack.autoPop = 0; }\
+if(state->borderColorStack.autoPop) { UI_popBorderColor(); state->borderColorStack.autoPop = 0; }\
+if(state->overlayColorStack.autoPop) { UI_popOverlayColor(); state->overlayColorStack.autoPop = 0; }
 
 }// namespace pm:

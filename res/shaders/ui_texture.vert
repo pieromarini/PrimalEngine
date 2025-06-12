@@ -37,7 +37,7 @@ layout (set = 0, binding = 2, std430) readonly buffer Draws {
 };
 
 layout (location = 0) out vec2 outUV;
-layout (location = 1) out vec3 outColor;
+layout (location = 1) out vec4 outColor;
 layout (location = 2) out flat uint outDrawId;
 
 void main() {
@@ -46,7 +46,7 @@ void main() {
 	ViewportDrawData draw = draws[drawId];
 
 	outDrawId = drawId;
-	outUV = vec2(v.uv_x, v.uv_y);
+	outUV = v.uv;
 	outColor = v.color;
 	gl_Position = ubo.projection * ubo.view * draw.transform * vec4(v.position.xy, 0.0, 1.0);
 }

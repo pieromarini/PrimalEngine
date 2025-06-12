@@ -1,5 +1,6 @@
 #include "assets/image_loader.h"
 #include "core/core.h"
+#include "core/data_structures/stack.h"
 #include "core/math/math.h"
 #include "platform/vulkan/buffers.h"
 #include "platform/window.h"
@@ -60,6 +61,9 @@ void rendererSetup(VulkanRendererContext* context) {
 	initFontData(context);
 	initUI(context);
 
+	// TODO(piero): Move this to its own function probably.
+	StackInitNils(context, transparency, 1.0f);
+	context->transparencyStack = StackCreate(context, transparency);
 
 	// Default lighting parameters
 	context->sceneData.ambientColor = glm::vec4(.4f);
@@ -1897,13 +1901,17 @@ void updateUIData(VulkanRendererContext* context, f32 deltaTime) {
 		UI_setNextPrefWidth(UI_Pct(0.1f, 1.0f));
 		UI_Label(Str8L("Label test"));
 
+		UI_setNextBorderColor({ 1.0f, 0.0f, 0.0f, 0.6f });
+		UI_setNextBorderThickness(3.0f);
+		UI_setNextCornerRadius(20.0f);
 		UI_setNextPrefWidth(UI_Pct(0.2f, 1.0f));
 		UI_setNextPrefHeight(UI_Pixels(80.0f, 1.0f));
-		UI_setNextBackgroundColor({ 0.0f, 1.0f, 0.0f, 1.0f });
+		UI_setNextBackgroundColor({ 0.0f, 1.0f, 1.0f, 1.0f });
 		if (UI_Button(Str8L("Button Test")).clicked_left) {
 			std::cout << "Clicked button\n";
 		}
 
+		UI_setNextCornerRadius(50.0f);
 		UI_setNextFixedRect({ .min = { 200.0f, 600.0f }, .max = { 650.0f, 310.0f } });
 		UI_setNextBackgroundColor({ 1.0f, 1.0f, 0.0f, 1.0f });
 		if (UI_Button(Str8L("Button Test")).clicked_left) {
@@ -2122,14 +2130,10 @@ DrawBatchNode* Renderer_createBatch(VulkanRendererContext* context, DrawBatchTyp
  *  To integrate windows: I think we should rework how we are handling them right now. Feels janky.
  *  Expose an API so that we can call it from sandbox and have an application loop there?
  *  Also, refactor renderer so that we don't have to pass the context around for each renderer call.
- *
- * NOW: Batch together multiple calls to `pushRect`
- * Then implement Text
- * Then implement Viewport
- *
- * We should create a vertex/index buffer after all the push* operations.
- * AKA: Create buffers just before looping over the batches?
- * Create a new function called `Renderer_Submit()` or something similar to know we've finished processing commands for this frame
+ *  
+ *  NEXT: - Implement basic rectangle decorations: rounded corners, non-filled rectangle (with border thickness and border color)
+ *        - Implement rectangle instancing. UIDrawData is now per-instance data and we can access it using gl_InstanceId from the shader
+ *        - Implement text edge padding, alignment and plan out text color. For now, text color will be instance-based (1 string -> 1 color)
  */
 
 void Renderer_submit(VulkanRendererContext* context) {
@@ -2204,7 +2208,7 @@ void Renderer_submit(VulkanRendererContext* context) {
 	}
 }
 
-void Renderer_pushRect(VulkanRendererContext* context, Rect2D rect, vec4 color) {
+void Renderer_pushRect(VulkanRendererContext* context, Rect2D rect, UIElement_RectStyleExt style) {
 	auto batchNode = Renderer_getBatch(context, DRAW_BATCH_UI);
 	if (!batchNode) {
 		batchNode = Renderer_createBatch(context, DRAW_BATCH_UI);
@@ -2216,8 +2220,9 @@ void Renderer_pushRect(VulkanRendererContext* context, Rect2D rect, vec4 color) 
 	auto maxX = rect.max.x;
 	auto maxY = rect.max.y;
 
+	auto size = rect2DSize(rect);
+
 	auto drawId = (u32)batch.uiDrawCommands.size();
-	batch.id = 1;
 	batch.uiDrawCommands.push_back({ .drawId = drawId,
 		.command = {
 			.indexCount = 6,
@@ -2226,12 +2231,19 @@ void Renderer_pushRect(VulkanRendererContext* context, Rect2D rect, vec4 color) 
 			.vertexOffset = (i32)batch.vertices.size(),
 			.firstInstance = drawId } });
 	batch.uiDrawData.push_back({ .transform = mat4{ 1.0f }, .materialIndex = drawId });
-	batch.uiMaterialData.push_back({ .backgroundColor = color, .horizontalBorder = 0.0f, .verticalBorder = 0.0f });
+	batch.uiMaterialData.push_back({
+		.backgroundColor = style.backgroundColor,
+		.rectHalfSize = size / 2.0f,
+		.borderThickness = style.borderThickness,
+		.softness = style.softness,
+		.opacity = Renderer_topTransparency(context),
+		.cornerRadii = { style.cornerRadii[0], style.cornerRadii[1], style.cornerRadii[2], style.cornerRadii[3] }
+	});
 
-	batch.vertices.push_back({ .position = { maxX, maxY, 0.0f }, .uv_x = 1.0f, .color = { 1.0f, 0.0f, 0.0f }, .uv_y = 1.0f });
-	batch.vertices.push_back({ .position = { minX, maxY, 0.0f }, .uv_x = 0.0f, .color = { 0.0f, 1.0f, 0.0f }, .uv_y = 1.0f });
-	batch.vertices.push_back({ .position = { minX, minY, 0.0f }, .uv_x = 0.0f, .color = { 1.0f, 0.0f, 1.0f }, .uv_y = 0.0f });
-	batch.vertices.push_back({ .position = { maxX, minY, 0.0f }, .uv_x = 1.0f, .color = { 0.0f, 1.0f, 1.0f }, .uv_y = 0.0f });
+	batch.vertices.push_back({ .position = { maxX, maxY }, .uv = { 1.0f, 1.0f }, .color = style.backgroundColor });
+	batch.vertices.push_back({ .position = { minX, maxY }, .uv = { 0.0f, 1.0f }, .color = style.backgroundColor });
+	batch.vertices.push_back({ .position = { minX, minY }, .uv = { 0.0f, 0.0f }, .color = style.backgroundColor });
+	batch.vertices.push_back({ .position = { maxX, minY }, .uv = { 1.0f, 0.0f }, .color = style.backgroundColor });
 
 	batch.indices.push_back(0);
 	batch.indices.push_back(1);
@@ -2249,7 +2261,6 @@ void Renderer_pushText(VulkanRendererContext* context, String8 str, vec2 offsetP
 	auto& batch = batchNode->drawBatch;
 
 	auto drawId = (u32)batch.textDrawCommands.size();
-	batch.id = 1;
 	batch.textDrawCommands.push_back({ .drawId = drawId,
 		.command = {
 			.indexCount = (u32)str.size * 6,
@@ -2260,6 +2271,18 @@ void Renderer_pushText(VulkanRendererContext* context, String8 str, vec2 offsetP
 	batch.textTransformData.emplace_back(1.0f);
 
 	auto size = generateTextGeometry(str, fontSize, &context->sourceCodeFont, &batch.vertices, &batch.indices, offsetPosition);
+}
+
+f32 Renderer_pushTransparency(VulkanRendererContext* context, f32 value) {
+	StackPushImpl(context, Transparency, transparency, value);
+}
+
+f32 Renderer_popTransparency(VulkanRendererContext* context) {
+	StackPopImpl(context, Transparency, transparency);
+}
+
+f32 Renderer_topTransparency(VulkanRendererContext* context) {
+	StackTopImpl(context, Transparency, transparency);
 }
 
 }// namespace pm

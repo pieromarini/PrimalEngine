@@ -47,9 +47,9 @@ inline CircleGeometryInfo generateCircleGeometry(float radius, uint32_t segments
 			glm::vec3 color = hsvToRgb(hue, saturation, value);
 			*/
 
-			glm::vec3 color = { 1.0f, 0.0f, 0.0f };
+			vec4 color = { 1.0f, 0.0f, 0.0f, 1.0f };
 
-			vertices.push_back({ .position = { x, y, centerZ }, .uv_x = x, .color = color, .uv_y = y });
+			vertices.push_back({ .position = { x, y, centerZ }, .uv = { x, y}, .color = color });
 		}
 
 		// Generate indices for triangles (center to edge)

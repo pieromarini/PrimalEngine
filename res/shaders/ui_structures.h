@@ -1,8 +1,7 @@
 struct UIVertex {
-	vec3 position;
-  float uv_x;
-	vec3 color;
-  float uv_y;
+	vec2 position;
+	vec2 uv;
+	vec4 color;
 };
 
 struct IndirectCommandData {
@@ -24,7 +23,10 @@ struct UIDraw {
 
 struct UIMaterialData {
 	vec4 backgroundColor;
-	float horizontalBorder;
-	float verticalBorder;
-	float padding[2];
+	vec2 rectHalfSize;
+	float borderThickness;
+	float softness;
+	float opacity;
+	float padding;
+	float cornerRadii[4];
 };

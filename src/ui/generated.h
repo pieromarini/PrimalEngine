@@ -20,10 +20,22 @@ StackDeclareNode(FocusActive, UI_FocusKind);
 StackDeclareNode(HoverCursor, u64);
 StackDeclareNode(Opacity, f32);
 
-StackDeclareNode(BackgroundColor, vec4);
-
-StackDeclareNodeWithPointer(Font, FontAsset);
+// Text decorations
+StackDeclareNode(TextAlignment, UI_TextAlignment);
+StackDeclareNode(TextEdgePadding, f32);
 StackDeclareNode(FontSize, f32);
+StackDeclareNodeWithPointer(Font, FontAsset);
+StackDeclareNode(TextColor, vec4);
+
+// Rect decorations
+StackDeclareNode(CornerRadius00, f32);
+StackDeclareNode(CornerRadius01, f32);
+StackDeclareNode(CornerRadius10, f32);
+StackDeclareNode(CornerRadius11, f32);
+StackDeclareNode(BorderThickness, f32);
+StackDeclareNode(BackgroundColor, vec4);
+StackDeclareNode(BorderColor, vec4);
+StackDeclareNode(OverlayColor, vec4);
 
 UIElement* UI_topParent();
 UIElement* UI_pushParent(UIElement* value);
@@ -85,10 +97,16 @@ f32 UI_pushOpacity(f32 value);
 f32 UI_popOpacity();
 f32 UI_setNextOpacity(f32 value);
 
-vec4 UI_topBackgroundColor();
-vec4 UI_pushBackgroundColor(vec4 value);
-vec4 UI_popBackgroundColor();
-vec4 UI_setNextBackgroundColor(vec4 value);
+// Text decorations
+UI_TextAlignment UI_topTextAlignment();
+UI_TextAlignment UI_pushTextAlignment(UI_TextAlignment value);
+UI_TextAlignment UI_popTextAlignment();
+UI_TextAlignment UI_setNextTextAlignment(UI_TextAlignment value);
+
+f32 UI_topTextEdgePadding();
+f32 UI_pushTextEdgePadding(f32 value);
+f32 UI_popTextEdgePadding();
+f32 UI_setNextTextEdgePadding(f32 value);
 
 FontAsset* UI_topFont();
 FontAsset* UI_pushFont(FontAsset* value);
@@ -99,5 +117,52 @@ f32 UI_topFontSize();
 f32 UI_pushFontSize(f32 value);
 f32 UI_popFontSize();
 f32 UI_setNextFontSize(f32 value);
+
+vec4 UI_topTextColor();
+vec4 UI_pushTextColor(vec4 value);
+vec4 UI_popTextColor();
+vec4 UI_setNextTextColor(vec4 value);
+
+// Rect decorations
+f32 UI_topCornerRadius00();
+f32 UI_pushCornerRadius00(f32 value);
+f32 UI_popCornerRadius00();
+f32 UI_setNextCornerRadius00(f32 value);
+
+f32 UI_topCornerRadius01();
+f32 UI_pushCornerRadius01(f32 value);
+f32 UI_popCornerRadius01();
+f32 UI_setNextCornerRadius01(f32 value);
+
+f32 UI_topCornerRadius10();
+f32 UI_pushCornerRadius10(f32 value);
+f32 UI_popCornerRadius10();
+f32 UI_setNextCornerRadius10(f32 value);
+
+f32 UI_topCornerRadius11();
+f32 UI_pushCornerRadius11(f32 value);
+f32 UI_popCornerRadius11();
+f32 UI_setNextCornerRadius11(f32 value);
+
+f32 UI_topBorderThickness();
+f32 UI_pushBorderThickness(f32 value);
+f32 UI_popBorderThickness();
+f32 UI_setNextBorderThickness(f32 value);
+
+vec4 UI_topBackgroundColor();
+vec4 UI_pushBackgroundColor(vec4 value);
+vec4 UI_popBackgroundColor();
+vec4 UI_setNextBackgroundColor(vec4 value);
+
+vec4 UI_topBorderColor();
+vec4 UI_pushBorderColor(vec4 value);
+vec4 UI_popBorderColor();
+vec4 UI_setNextBorderColor(vec4 value);
+
+vec4 UI_topOverlayColor();
+vec4 UI_pushOverlayColor(vec4 value);
+vec4 UI_popOverlayColor();
+vec4 UI_setNextOverlayColor(vec4 value);
+
 
 }// namespace pm

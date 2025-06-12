@@ -9,6 +9,7 @@
 #include "font_cache/font_cache.h"
 #include "platform/os/os.h"
 #include "primal_engine.h"
+#include "ui/generated.h"
 #include "ui/ui_types.h"
 #include "ui/ui_utils.h"
 #include "utils/fonts.h"
@@ -73,10 +74,22 @@ UIContext* UI_createContext() {
 	StackInitNils(context, hoverCursor, 0);
 	StackInitNils(context, opacity, 0.0f);
 
-	StackInitNils(context, backgroundColor, (vec4{ 0.3f, 0.3f, 0.3f, 1.0f }));
-
+	// Text decorations
+	StackInitNils(context, textAlignment, UITextAlignment_Left);
+	StackInitNils(context, textEdgePadding, 1.0f);
 	StackInitNils(context, font, &nilFontAsset);
 	StackInitNils(context, fontSize, 12.0f);
+	StackInitNils(context, textColor, (vec4{ 1.0f, 1.0f, 1.0f, 1.0f }));
+
+	// Rect decorations
+	StackInitNils(context, cornerRadius00, 0.0f);
+	StackInitNils(context, cornerRadius01, 0.0f);
+	StackInitNils(context, cornerRadius10, 0.0f);
+	StackInitNils(context, cornerRadius11, 0.0f);
+	StackInitNils(context, borderThickness, 1.0f);
+	StackInitNils(context, backgroundColor, (vec4{ 0.3f, 0.3f, 0.3f, 1.0f }));
+	StackInitNils(context, borderColor, (vec4{ 0.3f, 0.3f, 0.3f, 1.0f }));
+	StackInitNils(context, overlayColor, (vec4{ 0.3f, 0.3f, 0.3f, 1.0f }));
 
 	return context;
 }
@@ -205,36 +218,31 @@ UIElement* UIElement_createFromKey(UI_ElementFlags flags, UIKey key) {
 		element->bucketEXT = &nilUIElementBucketExt;
 
 		if (element->flags & UIElementFlag_DrawText) {
-			auto a = PushStruct(getBuildArena(), UIElement_TextExt);
-			element->textEXT = a;
+			element->textEXT = PushStruct(getBuildArena(), UIElement_TextExt);
 			element->textEXT->font = UI_topFont();
 			element->textEXT->fontSize = UI_topFontSize();
-			/*
-			element->textEXT->textAlignment = UI_TopTextAlign();
-			element->textEXT->textEdgePadding = UI_TopTextEdgePadding();
-			element->textEXT->textColor = UI_TopTextColor();
-			*/
+			element->textEXT->textAlignment = UI_topTextAlignment();
+			element->textEXT->textEdgePadding = UI_topTextEdgePadding();
+			element->textEXT->textColor = UI_topTextColor();
 		}
 
 		if (element->flags & (UIElementFlag_DrawBackground | UIElementFlag_DrawBorder | UIElementFlag_DrawOverlay)) {
 			element->rectStyleEXT = PushStruct(getBuildArena(), UIElement_RectStyleExt);
 			element->rectStyleEXT->backgroundColor = UI_topBackgroundColor();
-			/*
-			element->rectStyleEXT->borderColor = UI_TopBorderColor();
-			element->rectStyleEXT->overlayColor = UI_TopOverlayColor();
-			element->rectStyleEXT->cornerRadii[Corner_00] = UI_TopCornerRadius00();
-			element->rectStyleEXT->cornerRadii[Corner_01] = UI_TopCornerRadius01();
-			element->rectStyleEXT->cornerRadii[Corner_10] = UI_TopCornerRadius10();
-			element->rectStyleEXT->cornerRadii[Corner_11] = UI_TopCornerRadius11();
-			element->rectStyleEXT->borderThickness = UI_TopBorderThickness();
-			*/
+			element->rectStyleEXT->borderColor = UI_topBorderColor();
+			element->rectStyleEXT->overlayColor = UI_topOverlayColor();
+			element->rectStyleEXT->cornerRadii[Corner_00] = UI_topCornerRadius00();
+			element->rectStyleEXT->cornerRadii[Corner_01] = UI_topCornerRadius01();
+			element->rectStyleEXT->cornerRadii[Corner_10] = UI_topCornerRadius10();
+			element->rectStyleEXT->cornerRadii[Corner_11] = UI_topCornerRadius11();
+			element->rectStyleEXT->borderThickness = UI_topBorderThickness();
 		}
 
 		// fill fixed positions
 		element->calcRelPos.x = UI_topFixedX();
 		element->calcRelPos.y = UI_topFixedY();
 
-		// fill first-frame statUI_e
+		// fill first-frame context
 		if (firstFrame) {
 			element->firstGenTouched = uiContext->buildGen;
 		}
@@ -760,9 +768,20 @@ void UI_beginBuild(PrimalWindow* window, UI_EventList* events, f32 deltaTime) {
 	uiContext->hoverCursorStack = StackCreate(uiContext, hoverCursor);
 	uiContext->opacityStack = StackCreate(uiContext, opacity);
 
-	uiContext->backgroundColorStack = StackCreate(uiContext, backgroundColor);
+	uiContext->textAlignmentStack = StackCreate(uiContext, textAlignment);
+	uiContext->textEdgePaddingStack = StackCreate(uiContext, textEdgePadding);
 	uiContext->fontStack = StackCreate(uiContext, font);
 	uiContext->fontSizeStack = StackCreate(uiContext, fontSize);
+	uiContext->textColorStack = StackCreate(uiContext, textColor);
+
+	uiContext->cornerRadius00Stack = StackCreate(uiContext, cornerRadius00);
+	uiContext->cornerRadius01Stack = StackCreate(uiContext, cornerRadius01);
+	uiContext->cornerRadius10Stack = StackCreate(uiContext, cornerRadius10);
+	uiContext->cornerRadius11Stack = StackCreate(uiContext, cornerRadius11);
+	uiContext->borderThicknessStack = StackCreate(uiContext, borderThickness);
+	uiContext->backgroundColorStack = StackCreate(uiContext, backgroundColor);
+	uiContext->borderColorStack = StackCreate(uiContext, borderColor);
+	uiContext->overlayColorStack = StackCreate(uiContext, overlayColor);
 
 	// kill action
 	if (uiContext->actionKilledThisFrame) {
@@ -800,17 +819,14 @@ void UI_beginBuild(PrimalWindow* window, UI_EventList* events, f32 deltaTime) {
 
 	// defaults
 	UI_pushFontSize(12.f);
-	UI_pushBackgroundColor({ 0.1f, 0.13f, 0.14f, 0.7f });
+	// UI_pushBackgroundColor({ 0.1f, 0.13f, 0.14f, 0.7f });
+	UI_pushBackgroundColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	UI_pushPrefWidth(UI_Pct(1.f, 0.f));
 	UI_pushPrefHeight(UI_Em(1.8f, 1.f));
-	/*
-	UI_pushTextColor(V4(1, 1, 1, 1));
-	UI_pushBorderColor(V4(1, 1, 1, 0.2f));
-	UI_pushFillColor(V4(0.4f, 0.95f, 1.f, 0.3f));
-	UI_pushCursorColor(V4(1, 0.85f, 0.2f, 0.8f));
-	UI_pushBorderThickness(1.f);
+	UI_pushTextColor(vec4{1, 1, 1, 1});
+	UI_pushBorderColor(vec4{0, 1, 0, 0.2f});
+	UI_pushBorderThickness(1.0f);
 	UI_pushTextEdgePadding(UI_topFontSize() * 0.5f);
-	*/
 }
 
 void UI_endBuild() {
@@ -849,12 +865,29 @@ void UI_draw(VulkanRendererContext* context) {
 		nextBox = rec.next;
 
 		if (element->opacity != 1.f) {
-			// D_PushTransparency(1.f - element->opacity);
+			Renderer_pushTransparency(context, 1.f - element->opacity);
+		}
+
+		// TODO(piero): Play with this settings/ideas some more... result is not good right now.
+		if(element->flags & UIElementFlag_DrawDropShadow) {
+			auto dpi = SDL_GetWindowDisplayScale(context->rendererState->window->handle);
+			f32 shift = dpi * 0.03f;
+			auto shadowRect = rect2DPad(rect2DShift(element->rect, vec2{ shift, shift }), shift * 2.0f);
+			UIElement_RectStyleExt style{};
+			style.backgroundColor = vec4{ 0.0f, 0.0f, 0.0f, 0.8f };
+			style.cornerRadii[0] = style.cornerRadii[1] = style.cornerRadii[2] = style.cornerRadii[3] = dpi * 0.02f;
+			// MemoryCopyArray(style.cornerRadii, element->rectStyleEXT->cornerRadii);
+			style.softness = 6.0f;
+			Renderer_pushRect(context, shadowRect, style);
 		}
 
 		if (element->flags & UIElementFlag_DrawBackground) {
 			auto rect = element->rect;
-			Renderer_pushRect(context, rect, element->rectStyleEXT->backgroundColor);
+			UIElement_RectStyleExt style{};
+			style.backgroundColor = element->rectStyleEXT->backgroundColor;
+			MemoryCopyArray(style.cornerRadii, element->rectStyleEXT->cornerRadii);
+			style.softness = 1.0f;
+			Renderer_pushRect(context, rect, style);
 
 			if (element->flags & UIElementFlag_DrawHotEffects) {
 			}
@@ -872,6 +905,16 @@ void UI_draw(VulkanRendererContext* context) {
 		}
 
 		if (element->flags & UIElementFlag_DrawBorder) {
+			auto rect = rect2DPad(element->rect, 1.0f);
+			UIElement_RectStyleExt style{};
+			MemoryCopyArray(style.cornerRadii, element->rectStyleEXT->cornerRadii);
+			// TODO(piero): quick hack for now. The renderer should send 4 color values per rectangle.
+			//              We can send 4 color values per vertex, but this seems wasteful and repetitive, since the 4 colors are the same between a rectangle's vertices.
+			//              The idea should be to send 4 colors as part of the UIMaterialData. This should be better memory-wise and it will still be useful once we add instancing for rectangle rendering.
+			style.backgroundColor = element->rectStyleEXT->borderColor;
+			style.borderThickness = element->rectStyleEXT->borderThickness;
+			style.softness = 1.0f;
+			Renderer_pushRect(context, rect, style);
 		}
 
 		if (element->flags & UIElementFlag_Clip) {
@@ -885,15 +928,42 @@ void UI_draw(VulkanRendererContext* context) {
 
 				// draw disabled overlay
 				if (p->disabledT > 0.01f) {
+					auto rect = element->rect;
+					UIElement_RectStyleExt style{};
+					style.backgroundColor = { 0.0f, 0.0f, 0.0f, 0.6f * p->disabledT };
+					style.softness = 1.0f;
+					MemoryCopyArray(style.cornerRadii, element->rectStyleEXT->cornerRadii);
+					Renderer_pushRect(context, rect, style);
 				}
 
 				// pop opacity
 				if (p->opacity != 1.f) {
-					// D_PopTransparency();
+					Renderer_popTransparency(context);
 				}
 			}
 		}
 	}
+}
+
+void UI_pushCornerRadius(f32 v) {
+ UI_pushCornerRadius00(v);
+ UI_pushCornerRadius01(v);
+ UI_pushCornerRadius10(v);
+ UI_pushCornerRadius11(v);
+}
+
+void UI_popCornerRadius() {
+ UI_popCornerRadius00();
+ UI_popCornerRadius01();
+ UI_popCornerRadius10();
+ UI_popCornerRadius11();
+}
+
+void UI_setNextCornerRadius(f32 v) {
+ UI_setNextCornerRadius00(v);
+ UI_setNextCornerRadius01(v);
+ UI_setNextCornerRadius10(v);
+ UI_setNextCornerRadius11(v);
 }
 
 void UI_pushPrefSize(Axis2D axis, UI_Size v) {
@@ -1004,10 +1074,16 @@ f32 UI_pushOpacity(f32 value) { StackPushImpl(uiContext, Opacity, opacity, value
 f32 UI_popOpacity() { StackPopImpl(uiContext, Opacity, opacity) }
 f32 UI_setNextOpacity(f32 value) { StackSetNextImpl(uiContext, Opacity, opacity, value) }
 
-vec4 UI_topBackgroundColor() { StackTopImpl(uiContext, BackgroundColor, backgroundColor)}
-vec4 UI_pushBackgroundColor(vec4 value) { StackPushImpl(uiContext, BackgroundColor, backgroundColor, value) }
-vec4 UI_popBackgroundColor() { StackPopImpl(uiContext, BackgroundColor, backgroundColor) }
-vec4 UI_setNextBackgroundColor(vec4 value) { StackSetNextImpl(uiContext, BackgroundColor, backgroundColor, value) }
+// Text decorations
+UI_TextAlignment UI_topTextAlignment() { StackTopImpl(uiContext, TextAlignment, textAlignment)}
+UI_TextAlignment UI_pushTextAlignment(UI_TextAlignment value) { StackPushImpl(uiContext, TextAlignment, textAlignment, value) }
+UI_TextAlignment UI_popTextAlignment() { StackPopImpl(uiContext, TextAlignment, textAlignment) }
+UI_TextAlignment UI_setNextTextAlignment(UI_TextAlignment value) { StackSetNextImpl(uiContext, TextAlignment, textAlignment, value) }
+
+f32 UI_topTextEdgePadding() { StackTopImpl(uiContext, TextEdgePadding, textEdgePadding)}
+f32 UI_pushTextEdgePadding(f32 value) { StackPushImpl(uiContext, TextEdgePadding, textEdgePadding, value) }
+f32 UI_popTextEdgePadding() { StackPopImpl(uiContext, TextEdgePadding, textEdgePadding) }
+f32 UI_setNextTextEdgePadding(f32 value) { StackSetNextImpl(uiContext, TextEdgePadding, textEdgePadding, value) }
 
 FontAsset* UI_topFont() { StackTopImpl(uiContext, Font, font)}
 FontAsset* UI_pushFont(FontAsset* value) { StackPushImpl(uiContext, Font, font, value) }
@@ -1018,5 +1094,51 @@ f32 UI_topFontSize() { StackTopImpl(uiContext, FontSize, fontSize)}
 f32 UI_pushFontSize(f32 value) { StackPushImpl(uiContext, FontSize, fontSize, value) }
 f32 UI_popFontSize() { StackPopImpl(uiContext, FontSize, fontSize) }
 f32 UI_setNextFontSize(f32 value) { StackSetNextImpl(uiContext, FontSize, fontSize, value) }
+
+vec4 UI_topTextColor() { StackTopImpl(uiContext, TextColor, textColor)}
+vec4 UI_pushTextColor(vec4 value) { StackPushImpl(uiContext, TextColor, textColor, value) }
+vec4 UI_popTextColor() { StackPopImpl(uiContext, TextColor, textColor) }
+vec4 UI_setNextTextColor(vec4 value) { StackSetNextImpl(uiContext, TextColor, textColor, value) }
+
+// Rect decorations
+f32 UI_topCornerRadius00() { StackTopImpl(uiContext, CornerRadius00, cornerRadius00)}
+f32 UI_pushCornerRadius00(f32 value) { StackPushImpl(uiContext, CornerRadius00, cornerRadius00, value) }
+f32 UI_popCornerRadius00() { StackPopImpl(uiContext, CornerRadius00, cornerRadius00) }
+f32 UI_setNextCornerRadius00(f32 value) { StackSetNextImpl(uiContext, CornerRadius00, cornerRadius00, value) }
+
+f32 UI_topCornerRadius01() { StackTopImpl(uiContext, CornerRadius01, cornerRadius01)}
+f32 UI_pushCornerRadius01(f32 value) { StackPushImpl(uiContext, CornerRadius01, cornerRadius01, value) }
+f32 UI_popCornerRadius01() { StackPopImpl(uiContext, CornerRadius01, cornerRadius01) }
+f32 UI_setNextCornerRadius01(f32 value) { StackSetNextImpl(uiContext, CornerRadius01, cornerRadius01, value) }
+
+f32 UI_topCornerRadius10() { StackTopImpl(uiContext, CornerRadius10, cornerRadius10)}
+f32 UI_pushCornerRadius10(f32 value) { StackPushImpl(uiContext, CornerRadius10, cornerRadius10, value) }
+f32 UI_popCornerRadius10() { StackPopImpl(uiContext, CornerRadius10, cornerRadius10) }
+f32 UI_setNextCornerRadius10(f32 value) { StackSetNextImpl(uiContext, CornerRadius10, cornerRadius10, value) }
+
+f32 UI_topCornerRadius11() { StackTopImpl(uiContext, CornerRadius11, cornerRadius11)}
+f32 UI_pushCornerRadius11(f32 value) { StackPushImpl(uiContext, CornerRadius11, cornerRadius11, value) }
+f32 UI_popCornerRadius11() { StackPopImpl(uiContext, CornerRadius11, cornerRadius11) }
+f32 UI_setNextCornerRadius11(f32 value) { StackSetNextImpl(uiContext, CornerRadius11, cornerRadius11, value) }
+
+f32 UI_topBorderThickness() { StackTopImpl(uiContext, BorderThickness, borderThickness)}
+f32 UI_pushBorderThickness(f32 value) { StackPushImpl(uiContext, BorderThickness, borderThickness, value) }
+f32 UI_popBorderThickness() { StackPopImpl(uiContext, BorderThickness, borderThickness) }
+f32 UI_setNextBorderThickness(f32 value) { StackSetNextImpl(uiContext, BorderThickness, borderThickness, value) }
+
+vec4 UI_topBackgroundColor() { StackTopImpl(uiContext, BackgroundColor, backgroundColor)}
+vec4 UI_pushBackgroundColor(vec4 value) { StackPushImpl(uiContext, BackgroundColor, backgroundColor, value) }
+vec4 UI_popBackgroundColor() { StackPopImpl(uiContext, BackgroundColor, backgroundColor) }
+vec4 UI_setNextBackgroundColor(vec4 value) { StackSetNextImpl(uiContext, BackgroundColor, backgroundColor, value) }
+
+vec4 UI_topBorderColor() { StackTopImpl(uiContext, BorderColor, borderColor)}
+vec4 UI_pushBorderColor(vec4 value) { StackPushImpl(uiContext, BorderColor, borderColor, value) }
+vec4 UI_popBorderColor() { StackPopImpl(uiContext, BorderColor, borderColor) }
+vec4 UI_setNextBorderColor(vec4 value) { StackSetNextImpl(uiContext, BorderColor, borderColor, value) }
+
+vec4 UI_topOverlayColor() { StackTopImpl(uiContext, OverlayColor, overlayColor)}
+vec4 UI_pushOverlayColor(vec4 value) { StackPushImpl(uiContext, OverlayColor, overlayColor, value) }
+vec4 UI_popOverlayColor() { StackPopImpl(uiContext, OverlayColor, overlayColor) }
+vec4 UI_setNextOverlayColor(vec4 value) { StackSetNextImpl(uiContext, OverlayColor, overlayColor, value) }
 
 }// namespace pm

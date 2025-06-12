@@ -58,6 +58,7 @@ vec2 rect2DCenter(Rect2D r);
 
 Rect2D rect2DIntersect(Rect2D a, Rect2D b);
 Rect2D rect2DPad(Rect2D r, f32 x);
+Rect2D rect2DShift(Rect2D r, vec2 v);
 
 f32 clamp1F32(Rect1DF32 r, f32 v);
 b32 rect2DContains(Rect2D r, vec2 v);

@@ -4,7 +4,7 @@
 		"type": "graphics",
 		"cull_mode": "none",
 		"front_face": "counter_clockwise",
-		"blend_mode": "disabled",
+		"blend_mode": "alphablend",
 		"depth_test": false,
 		"shaders": [
 			{

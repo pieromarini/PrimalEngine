@@ -19,7 +19,11 @@ Rect2D rect2DIntersect(Rect2D a, Rect2D b) {
 }
 
 Rect2D rect2DPad(Rect2D r, f32 x) {
-	return { r.min - vec2{ x, x }, r.max + vec2{ x, x } };
+	return { .min = r.min - vec2{ x, x }, .max = r.max + vec2{ x, x } };
+}
+
+Rect2D rect2DShift(Rect2D r, vec2 v) {
+	return { .min = r.min + v, .max = r.max + v };
 }
 
 f32 clamp1F32(Rect1DF32 r, f32 v) {

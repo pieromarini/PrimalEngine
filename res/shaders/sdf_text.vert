@@ -32,13 +32,13 @@ layout (std140, binding = 3) readonly buffer Transform {
 };
 
 layout (location = 0) out vec2 outUV;
-layout (location = 1) out vec3 outColor;
+layout (location = 1) out vec4 outColor;
 
 void main() {
 	uint drawId = drawCommands[gl_DrawIDARB].drawId;
 	UIVertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
 
-	outUV = vec2(v.uv_x, v.uv_y);
+	outUV = v.uv;
 	outColor = v.color;
 	gl_Position = ubo.projection * ubo.view * transforms[gl_DrawIDARB] * vec4(v.position.xy, 0.0, 1.0);
 }
