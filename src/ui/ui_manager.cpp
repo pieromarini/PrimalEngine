@@ -521,17 +521,20 @@ void UI_solveIndependentSizes(UIElement* root, Axis2D axis) {
 		default: {
 		} break;
 
+		// TODO(piero): Cache the generated text geometry
 		case Axis2D_X: {
-			auto textDim = generateTextGeometry(root->textEXT->string, root->textEXT->fontSize, root->textEXT->font);
-			root->calcSize[axis] = textDim.first;
+			auto position = rect2DSize(root->rect);
+			auto textDim = generateTextGeometry(root->textEXT->string, root->textEXT->fontSize, root->textEXT->font, nullptr, nullptr, position);
+			root->calcSize[axis] = textDim.x;
 			root->calcSize[axis] += root->textEXT->textEdgePadding * 2.0f;
 			root->calcSize[axis] = std::ceilf(root->calcSize[axis]);
 		} break;
 
 		case Axis2D_Y: {
 			MSDFFont fontInfo = root->textEXT->font->metadata;
-			auto textDim = generateTextGeometry(root->textEXT->string, root->textEXT->fontSize, root->textEXT->font);
-			root->calcSize[axis] = fontInfo.metrics.emSize + fontInfo.metrics.ascender + fontInfo.metrics.descender;
+			auto position = rect2DSize(root->rect);
+			auto textDim = generateTextGeometry(root->textEXT->string, root->textEXT->fontSize, root->textEXT->font, nullptr, nullptr, position);
+			root->calcSize[axis] = textDim.y;
 			root->calcSize[axis] = std::floorf(root->calcSize[axis]);
 		} break;
 		}
@@ -680,17 +683,21 @@ void UI_solveSizeViolations(UIElement* root, Axis2D axis) {
 
 void UIElement_EquipText(UIElement* element, String8 text) {
 	if (element->textEXT != &nilUIElementTextExt) {
-		// TODO(piero): string colors?
 		element->textEXT->string = PushStr8Copy(getBuildArena(), text);
 	}
 }
 
 vec2 UI_textPosFromElement(UIElement* element) {
 	vec2 result = {};
+
+	auto rectSize = rect2DSize(element->rect);
+
 	auto font = element->textEXT->font;
 	f32 fontSize = element->textEXT->fontSize;
 	MSDFFont fontMetrics = font->metadata;
-	result.y = std::floorf((element->rect.min.y + element->rect.max.y) / 2.f) + fontMetrics.glyphs['H'].planeBounds.top / 2.f;
+	auto textDim = generateTextGeometry(element->textEXT->string, element->textEXT->fontSize, element->textEXT->font, nullptr, nullptr, rectSize);
+
+	result.y = std::floorf((element->rect.min.y + element->rect.max.y) / 2.f) - textDim.y;
 
 	switch (element->textEXT->textAlignment) {
 	default:
@@ -698,13 +705,11 @@ vec2 UI_textPosFromElement(UIElement* element) {
 		result.x = element->rect.min.x + element->textEXT->textEdgePadding;
 	} break;
 	case UITextAlignment_Center: {
-		auto textDim = generateTextGeometry(element->textEXT->string, element->textEXT->fontSize, element->textEXT->font);
-		result.x = std::floorf((element->rect.min.x + element->rect.max.x) / 2 - textDim.first / 2);
+		result.x = std::floorf((element->rect.min.x + element->rect.max.x) / 2 - textDim.x / 2);
 		result.x = ClampBot(result.x, element->rect.min.x);
 	} break;
 	case UITextAlignment_Right: {
-		auto textDim = generateTextGeometry(element->textEXT->string, element->textEXT->fontSize, element->textEXT->font);
-		result.x = std::roundf((element->rect.max.x) - textDim.first - element->textEXT->textEdgePadding);
+		result.x = std::roundf((element->rect.max.x) - textDim.x - element->textEXT->textEdgePadding);
 		result.x = ClampBot(result.x, element->rect.min.x);
 	} break;
 	}
@@ -792,8 +797,7 @@ void UI_beginBuild(PrimalWindow* window, UI_EventList* events, f32 deltaTime) {
 
 	// defaults
 	UI_pushFontSize(12.f);
-	// UI_pushBackgroundColor({ 0.1f, 0.13f, 0.14f, 0.7f });
-	UI_pushBackgroundColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+	UI_pushBackgroundColor({ 0.1f, 0.13f, 0.14f, 0.7f });
 	UI_pushPrefWidth(UI_Pct(1.f, 0.f));
 	UI_pushPrefHeight(UI_Em(1.8f, 1.f));
 	UI_pushTextColor(vec4{1, 1, 1, 1});
@@ -837,11 +841,11 @@ void UI_draw(VulkanRendererContext* context) {
 		auto rec = UIElement_recurseDepthFirstPost(element, &nilUIElement);
 		nextBox = rec.next;
 
-		if (element->opacity != 1.f) {
-			Renderer_pushTransparency(context, 1.f - element->opacity);
+		if (element->opacity != 1.0f) {
+			Renderer_pushTransparency(context, 1.0f - element->opacity);
 		}
 
-		// TODO(piero): Play with this settings/ideas some more... result is not good right now.
+		// TODO(piero): Play with these settings/ideas some more... result is not good right now.
 		if(element->flags & UIElementFlag_DrawDropShadow) {
 			auto dpi = SDL_GetWindowDisplayScale(context->rendererState->window->handle);
 			f32 shift = dpi * 0.03f;
@@ -874,7 +878,7 @@ void UI_draw(VulkanRendererContext* context) {
 
 		if (element->flags & UIElementFlag_DrawText) {
 			auto textPos = UI_textPosFromElement(element);
-			Renderer_pushText(context, element->textEXT->string, textPos, element->textEXT->fontSize);
+			Renderer_pushText(context, textPos, element->textEXT);
 		}
 
 		if (element->flags & UIElementFlag_DrawBorder) {
@@ -892,6 +896,7 @@ void UI_draw(VulkanRendererContext* context) {
 
 		if (element->flags & UIElementFlag_Clip) {
 		}
+
 		if (rec.pushCount == 0) {
 			int pop_idx = 0;
 			for (UIElement* p = element; !UIElement_isNil(p) && p != nextBox && pop_idx <= rec.popCount; p = p->parent, pop_idx += 1) {
@@ -909,7 +914,7 @@ void UI_draw(VulkanRendererContext* context) {
 				}
 
 				// pop opacity
-				if (p->opacity != 1.f) {
+				if (p->opacity != 1.0f) {
 					Renderer_popTransparency(context);
 				}
 			}

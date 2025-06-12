@@ -6,6 +6,10 @@
 
 #include "ui_structures.h"
 
+struct FontDraw {
+	vec4 textColor;
+};
+
 layout (buffer_reference , std430, buffer_reference_align=8) readonly buffer UIVertexBuffer {
 	UIVertex vertices[];
 };
@@ -14,7 +18,7 @@ layout (push_constant) uniform constants {
 	UIVertexBuffer vertexBuffer;
 } PushConstants;
 
-layout (binding = 0) uniform UBO {
+layout (set = 0, binding = 0) uniform UBO {
 	mat4 projection;
 	mat4 view;
 	vec4 outlineColor;
@@ -23,16 +27,13 @@ layout (binding = 0) uniform UBO {
 } ubo;
 
 
-layout (std140, binding = 2) readonly buffer DrawCommands {
+layout (set = 0, binding = 2, std140) readonly buffer DrawCommands {
 	IndirectCommandData drawCommands[];
-};
-
-layout (std140, binding = 3) readonly buffer Transform {
-	mat4 transforms[];
 };
 
 layout (location = 0) out vec2 outUV;
 layout (location = 1) out vec4 outColor;
+layout (location = 2) out flat uint outDrawId;
 
 void main() {
 	uint drawId = drawCommands[gl_DrawIDARB].drawId;
@@ -40,5 +41,6 @@ void main() {
 
 	outUV = v.uv;
 	outColor = v.color;
-	gl_Position = ubo.projection * ubo.view * transforms[gl_DrawIDARB] * vec4(v.position.xy, 0.0, 1.0);
+	outDrawId = drawId;
+	gl_Position = ubo.projection * ubo.view * vec4(v.position.xy, 0.0, 1.0);
 }

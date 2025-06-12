@@ -65,14 +65,9 @@ struct alignas(16) GPUDrawPushConstants {
 };
 
 struct FontUniformData {
-	// Scene matrices
 	mat4 projection;
 	mat4 view;
-
-	// Font display options
-	vec4 outlineColor{ 1.0f, 0.0f, 0.0f, 0.0f };
-	float outlineWidth{ 0.6f };
-	float outline{ true };
+	float pxRange;
 };
 
 struct UIUniformData {

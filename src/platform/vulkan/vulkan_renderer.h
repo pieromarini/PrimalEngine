@@ -49,19 +49,23 @@ struct UIIndirectCommand {
 };
 
 struct alignas(16) MeshDraw {
-	glm::mat4 transform{};
+	mat4 transform{};
 	uint32_t materialIndex{};
 	float padding[3]{ 0.0f, 0.0f, 0.0f };
 };
 
 struct alignas(16) UIDrawData {
-	glm::mat4 transform{};
+	mat4 transform{};
 	uint32_t materialIndex{};
 	float padding[3]{ 0.0f, 0.0f, 0.0f };
 };
 
+struct alignas(16) FontDrawData {
+	vec4 textColor;
+};
+
 struct alignas(16) ViewportDrawData {
-	glm::mat4 transform{};
+	mat4 transform{};
 	uint32_t textureIndex{};
 };
 
@@ -110,7 +114,7 @@ struct DrawBatch {
 	std::vector<UIMaterialData> uiMaterialData{};
 
 	std::vector<UIIndirectCommand> textDrawCommands;
-	std::vector<glm::mat4> textTransformData;
+	std::vector<FontDrawData> textDrawData;
 };
 
 struct DrawBatchNode {
@@ -478,7 +482,7 @@ void destroyMaterial(VulkanRendererContext* context, PrimalMaterial& material);
 DrawBatchNode* Renderer_getBatch(VulkanRendererContext* context, DrawBatchType type);
 DrawBatchNode* Renderer_createBatch(VulkanRendererContext* context, DrawBatchType type);
 void Renderer_pushRect(VulkanRendererContext* context, Rect2D rect, UIElement_RectStyleExt style);
-void Renderer_pushText(VulkanRendererContext* context, String8 str, vec2 offsetPosition, f32 fontSize);
+void Renderer_pushText(VulkanRendererContext* context, vec2 offsetPosition, UIElement_TextExt* style);
 
 // Stacks
 f32 Renderer_pushTransparency(VulkanRendererContext* context, f32 value);

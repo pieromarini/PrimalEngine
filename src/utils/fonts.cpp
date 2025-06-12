@@ -6,7 +6,7 @@
 
 namespace pm {
 
-std::pair<float, float> generateTextGeometry(String8 text, float fontSize, FontAsset* font, std::vector<UIVertex>* vertices, std::vector<u32>* indices, vec2 offset) {
+vec2 generateTextGeometry(String8 text, float fontSize, FontAsset* font, std::vector<UIVertex>* vertices, std::vector<u32>* indices, vec2 offset) {
 	auto& metadata = font->metadata;
 
 	uint32_t vertexIndex = 0;
@@ -15,9 +15,10 @@ std::pair<float, float> generateTextGeometry(String8 text, float fontSize, FontA
 
 	float cursorX{ 0.0f };
 
-	// TODO: why do we need this magic number? I'm guessing we are not aligning to the baseline correctly.
-	float baseline{ metadata.metrics.ascender * scale * 0.80f };
+	// TODO(piero): I don't know if this is correct...
+	float baseline{ metadata.metrics.ascender * scale };
 
+	// Start from offset
 	cursorX += offset.x;
 	baseline += offset.y;
 
@@ -103,9 +104,10 @@ std::pair<float, float> generateTextGeometry(String8 text, float fontSize, FontA
 		cursorX += glyph.advance * scale;
 		vertexIndex += 4;
 	}
-	textWidth = std::max(textWidth, cursorX);
 
-	float textHeight = maxY - minY;
+	textWidth = std::max(textWidth, cursorX) - offset.x;
+
+	float textHeight = (maxY - minY);
 
 	return { textWidth, textHeight };
 }

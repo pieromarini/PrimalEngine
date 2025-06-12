@@ -31,14 +31,14 @@
           "binding": 0,
           "type": "uniform",
           "readonly": false,
-          "size_in_bytes": 128,
+          "size_in_bytes": 132,
           "stages": ["vertex", "fragment"]
         },
 				{
           "debug_name": "MSDFTexture",
           "binding": 1,
           "type": "combined_image_sampler",
-          "stages": ["vertex", "fragment"]
+          "stages": ["fragment"]
 				},
         {
           "debug_name": "DrawCommands",
@@ -49,12 +49,12 @@
           "stages": ["vertex"]
         },
         {
-          "debug_name": "Transform",
+          "debug_name": "FontDraw",
           "binding": 3,
           "type": "storage_array",
           "readonly": true,
-          "size_in_bytes": 64,
-          "stages": ["vertex"]
+          "size_in_bytes": 16,
+          "stages": ["fragment"]
         }
       ]
     }

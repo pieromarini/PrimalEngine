@@ -1807,7 +1807,7 @@ void updateFontData(VulkanRendererContext* context) {
 	// Update uniform for each window
 	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
 		FontUniformData fontUniformData{};
-		fontUniformData.outline = 0.0f;
+		fontUniformData.pxRange = 2.0f;
 		fontUniformData.view = glm::mat4(1.0f);
 		auto w = static_cast<float>(window->width);
 		auto h = static_cast<float>(window->height);
@@ -1898,23 +1898,28 @@ void updateUIData(VulkanRendererContext* context, f32 deltaTime) {
 	UI_setNextChildLayoutAxis(Axis2D_X);
 	UIElement* panelElement = UIElement_create(UIElementFlag_DrawBorder | UIElementFlag_DrawBackground | UIElementFlag_Floating, "###panel_box_%p", &context->rendererState->window);
 	UI_parent(panelElement) UI_seedKey(panelElement->key) {
-		UI_setNextPrefWidth(UI_Pct(0.1f, 1.0f));
-		UI_Label(Str8L("Label test"));
+		// UI_setNextPrefWidth(UI_Pct(0.1f, 1.0f));
+		// UI_Label(Str8L("Label test"));
 
+		UI_setNextTextEdgePadding(50.0f);
+		UI_setNextTextAlignment(UITextAlignment_Center);
 		UI_setNextBorderColor({ 1.0f, 0.0f, 0.0f, 0.6f });
 		UI_setNextBorderThickness(3.0f);
 		UI_setNextCornerRadius(20.0f);
 		UI_setNextPrefWidth(UI_Pct(0.2f, 1.0f));
 		UI_setNextPrefHeight(UI_Pixels(80.0f, 1.0f));
 		UI_setNextBackgroundColor({ 0.0f, 1.0f, 1.0f, 1.0f });
-		if (UI_Button(Str8L("Button Test")).clicked_left) {
+		if (UI_Button(Str8L("Button 1")).clicked_left) {
 			std::cout << "Clicked button\n";
 		}
 
-		UI_setNextCornerRadius(50.0f);
-		UI_setNextFixedRect({ .min = { 200.0f, 600.0f }, .max = { 650.0f, 310.0f } });
-		UI_setNextBackgroundColor({ 1.0f, 1.0f, 0.0f, 1.0f });
-		if (UI_Button(Str8L("Button Test")).clicked_left) {
+		UI_setNextTextColor({ 1.0f, 0.0f, 0.0f, 1.0f });
+		UI_setNextBackgroundColor({ 0.26f, 0.29f, 0.31f, 1.0f });
+		UI_setNextCornerRadius(5.0f);
+		UI_setNextPrefWidth(UI_TextDim(1.0f));
+		UI_setNextPrefHeight(UI_Pixels(80.0f, 1.0f));
+		UI_setNextTextEdgePadding(10.0f);
+		if (UI_Button(Str8L("Button 2")).clicked_left) {
 			std::cout << "Clicked button\n";
 		}
 	}
@@ -2181,8 +2186,8 @@ void Renderer_submit(VulkanRendererContext* context) {
 			auto textDrawCommandsBuffer = createBuffer("textIndirectCommandBuffer", sizeof(UIIndirectCommand) * batch.textDrawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 			memcpy(textDrawCommandsBuffer.info.pMappedData, batch.textDrawCommands.data(), sizeof(UIIndirectCommand) * batch.textDrawCommands.size());
 
-			auto textTransformDataBuffer = createBuffer("textTransformBuffer", sizeof(glm::mat4) * batch.textTransformData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			memcpy(textTransformDataBuffer.info.pMappedData, batch.textTransformData.data(), sizeof(glm::mat4) * batch.textTransformData.size());
+			auto textDrawDataBuffer = createBuffer("textTransformBuffer", sizeof(FontDrawData) * batch.textDrawData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+			memcpy(textDrawDataBuffer.info.pMappedData, batch.textDrawData.data(), sizeof(FontDrawData) * batch.textDrawData.size());
 
 			batch.commands = {
 				.buffer = textDrawCommandsBuffer,
@@ -2198,11 +2203,11 @@ void Renderer_submit(VulkanRendererContext* context) {
 			writeUniform(context, &batch.material, 0, 0, window->fontData.buffer, sizeof(FontUniformData), 0);
 			writeUniform(context, &batch.material, 0, 1, context->sourceCodeFontTexture.imageView, context->sourceCodeFontTexture.sampler, context->sourceCodeFontTexture.imageLayout);
 			writeUniform(context, &batch.material, 0, 2, textDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * batch.textDrawCommands.size(), 0);
-			writeUniform(context, &batch.material, 0, 3, textTransformDataBuffer.buffer, sizeof(glm::mat4) * batch.textTransformData.size(), 0);
+			writeUniform(context, &batch.material, 0, 3, textDrawDataBuffer.buffer, sizeof(FontDrawData) * batch.textDrawData.size(), 0);
 
-			getCurrentFrame(context).deletionQueue.push([context, textDrawCommandsBuffer, textTransformDataBuffer]() {
+			getCurrentFrame(context).deletionQueue.push([context, textDrawCommandsBuffer, textDrawDataBuffer]() {
 				destroyBuffer(context->vmaAllocator, textDrawCommandsBuffer);
-				destroyBuffer(context->vmaAllocator, textTransformDataBuffer);
+				destroyBuffer(context->vmaAllocator, textDrawDataBuffer);
 			});
 		}
 	}
@@ -2253,12 +2258,13 @@ void Renderer_pushRect(VulkanRendererContext* context, Rect2D rect, UIElement_Re
 	batch.indices.push_back(0);
 }
 
-void Renderer_pushText(VulkanRendererContext* context, String8 str, vec2 offsetPosition, f32 fontSize) {
+void Renderer_pushText(VulkanRendererContext* context, vec2 offsetPosition, UIElement_TextExt* style) {
 	auto batchNode = Renderer_getBatch(context, DRAW_BATCH_TEXT);
 	if (!batchNode) {
 		batchNode = Renderer_createBatch(context, DRAW_BATCH_TEXT);
 	}
 	auto& batch = batchNode->drawBatch;
+	auto str = style->string;
 
 	auto drawId = (u32)batch.textDrawCommands.size();
 	batch.textDrawCommands.push_back({ .drawId = drawId,
@@ -2268,9 +2274,9 @@ void Renderer_pushText(VulkanRendererContext* context, String8 str, vec2 offsetP
 			.firstIndex = (u32)batch.indices.size(),
 			.vertexOffset = (i32)batch.vertices.size(),
 			.firstInstance = drawId } });
-	batch.textTransformData.emplace_back(1.0f);
+	batch.textDrawData.emplace_back(style->textColor);
 
-	auto size = generateTextGeometry(str, fontSize, &context->sourceCodeFont, &batch.vertices, &batch.indices, offsetPosition);
+	generateTextGeometry(str, style->fontSize, &context->sourceCodeFont, &batch.vertices, &batch.indices, offsetPosition);
 }
 
 f32 Renderer_pushTransparency(VulkanRendererContext* context, f32 value) {

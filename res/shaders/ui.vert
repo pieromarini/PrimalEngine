@@ -38,8 +38,8 @@ void main() {
 	UIDraw draw = draws[drawId];
   UIVertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
 
-	outDrawId = drawId;
   outUV = v.uv;
   outColor = v.color;
+	outDrawId = drawId;
   gl_Position = ubo.projection * ubo.view * draw.transform * vec4(v.position.xy, 0.0, 1.0);
 }
