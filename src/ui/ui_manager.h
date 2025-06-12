@@ -11,8 +11,6 @@
 
 namespace pm {
 
-// Declare nil values for each type
-
 struct UIElementSlot {
 	UIElement* first;
 	UIElement* last;

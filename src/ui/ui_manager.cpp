@@ -423,7 +423,6 @@ UI_Signal UI_signalFromElement(UIElement* element) {
 	UI_Signal sig = { .element = element };
 	UI_EventList* events = uiContext->events;
 
-	// determine clipped rectangle for this box
 	Rect2D clipped_rect = element->rect;
 	for (UIElement* e = element->parent; !UIElement_isNil(e); e = e->parent) {
 		if (e->flags & UIElementFlag_Clip) {
@@ -431,7 +430,6 @@ UI_Signal UI_signalFromElement(UIElement* element) {
 		}
 	}
 
-	// take events
 	for (UI_EventNode *n = events->first, *next = nullptr; n != nullptr; n = next) {
 		next = n->next;
 		b32 taken = 0;
@@ -439,7 +437,6 @@ UI_Signal UI_signalFromElement(UIElement* element) {
 		b32 ev_key_is_mouse = (ev->key == OS_Key_MouseLeft || ev->key == OS_Key_MouseRight || ev->key == OS_Key_MouseMiddle);
 		UI_MouseButtonSlot ev_mb_slot = UI_mouseButtonSlotFromOSKey(ev->key);
 
-		// mouse clickability event consumption
 		if (element->firstGenTouched != element->lastGenTouched && element->flags & UIElementFlag_MouseClickable) {
 			if (ev_key_is_mouse && ev->kind == UIEventKind_Press) {
 				taken = 1;
@@ -455,28 +452,11 @@ UI_Signal UI_signalFromElement(UIElement* element) {
 			}
 		}
 
-		// keyboard clickability event consumption
 		if (element->flags & UIElementFlag_KeyboardClickable && element->flags & UIElementFlag_FocusHot && !(element->flags & UIElementFlag_FocusHotDisabled) && ev->kind == UIEventKind_Press && ev->ctrl_slot == UICtrlSlot_Accept) {
 			taken = 1;
 			sig.flags |= UISignalFlag_ClickedLeft | UISignalFlag_PressedLeft | UISignalFlag_PressedKeyboard;
 		}
 
-		/*
-		// scrolling event consumption
-		if (element->flags & UIElementFlag_ViewScroll && ev->kind == UIEventKind_Scroll) {
-		taken = 1;
-		for (auto axis = (Axis2D)0; axis < Axis2D_COUNT; axis = Axis2D(axis + 1)) {
-		element->targetViewOff[axis] += ev->delta_2f32[axis];
-		if (element->flags & (UIElementFlag_OverflowX << axis)) {
-		UI_layoutRoot(element, axis);
-		}
-		Rect1Df32 scroll_bounds = UI_scrollBoundsFromBox(element, axis);
-		element->targetViewOff[axis] = clamp1f32(scroll_bounds, element->targetViewOff[axis]);
-		}
-		}
-		 */
-
-		// consume
 		if (taken) {
 			UI_eatEvent(events, ev);
 		}
@@ -700,14 +680,7 @@ void UI_solveSizeViolations(UIElement* root, Axis2D axis) {
 
 void UIElement_EquipText(UIElement* element, String8 text) {
 	if (element->textEXT != &nilUIElementTextExt) {
-		/*
-		D_StyledStringList strings = { 0 };
-		D_StyledString* sstr = D_StyledStringListPushNew(getBuildArena(), &strings);
-		sstr->string = text;
-		sstr->color = element->textEXT->textColor;
-		sstr->fontId = element->textEXT->fontId;
-		sstr->fontSize = element->textEXT->fontSize;
-		*/
+		// TODO(piero): string colors?
 		element->textEXT->string = PushStr8Copy(getBuildArena(), text);
 	}
 }
@@ -833,7 +806,7 @@ void UI_endBuild() {
 	UI_popParent();
 
 	auto hotElement = UIElement_fromKey(uiContext->hotKey);
-	// TODO(piero): Check how to set cursor in SDL3
+	// TODO(piero): Check how to set cursor in SDL3. Should do something like:
 	// OS_setCursor(hotElement->hoverCursor);
 
 	for (auto axis = (Axis2D)0; axis < Axis2D_COUNT; axis = Axis2D(axis + 1)) {
@@ -923,7 +896,6 @@ void UI_draw(VulkanRendererContext* context) {
 			int pop_idx = 0;
 			for (UIElement* p = element; !UIElement_isNil(p) && p != nextBox && pop_idx <= rec.popCount; p = p->parent, pop_idx += 1) {
 				if (p->flags & UIElementFlag_Clip) {
-					// D_PopClip();
 				}
 
 				// draw disabled overlay
