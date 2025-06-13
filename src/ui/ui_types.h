@@ -54,6 +54,7 @@ enum Axis2D {
 	Axis2D_Y,
 	Axis2D_COUNT
 };
+#define Axis2D_Flip(a) ((Axis2D)(!(a)))
 
 enum UI_SizeType {
 	UISizeType_Pixels,
@@ -129,10 +130,6 @@ struct UIElement_RectStyleExt {
 	vec4 overlayColor{ 0.0f };
 };
 
-struct UIElement_BucketExt {
-	f32 bucketAnchorWeights[Corner_COUNT];
-};
-
 struct UIElement {
 	// hash links (cross-frame)
 	UIElement* hashNext;
@@ -159,7 +156,6 @@ struct UIElement {
 
 	UIElement_TextExt* textEXT;
 	UIElement_RectStyleExt* rectStyleEXT;
-	UIElement_BucketExt* bucketEXT;
 
 	// post size-calculation data
 	vec2 calcSize;

@@ -4,14 +4,7 @@
 
 namespace pm {
 
-struct UI_SliderF32DrawData {
- f32 percentageFilled;
- vec4 fillColor;
-};
-
-struct UI_LineEditDrawData {
- Rect1DF32 selectionRangePx;
-};
+void UI_Spacer(UI_Size size);
 
 UI_Signal UI_Label(String8 string);
 UI_Signal UI_LabelF(char *fmt, ...);

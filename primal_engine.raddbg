@@ -1,9 +1,9 @@
 // raddbg 0.9.20 project file
 
+recent_file: path: "src/platform/vulkan/vulkan_renderer.cpp"
 recent_file: path: "src/ui/ui_manager.cpp"
 recent_file: path: "sandbox/main.cpp"
 recent_file: path: "src/primal_engine.cpp"
-recent_file: path: "src/platform/vulkan/vulkan_renderer.cpp"
 recent_file: path: "src/core/memory/arena.cpp"
 recent_file: path: "src/ui/ui_widgets.cpp"
 recent_file: path: "src/core/primal_string.cpp"
@@ -21,22 +21,4 @@ target:
   executable: "build_nvim/Debug/sandbox.exe"
   working_directory: "build_nvim/Debug"
   enabled: 1
-}
-breakpoint:
-{
-  source_location: "src/ui/ui_manager.cpp:205:1"
-  enabled: 0
-  hit_count: 0
-}
-breakpoint:
-{
-  source_location: "src/platform/vulkan/vulkan_renderer.cpp:1898:1"
-  enabled: 0
-  hit_count: 0
-}
-breakpoint:
-{
-  source_location: "src/platform/vulkan/vulkan_renderer.cpp:1894:1"
-  hit_count: 0
-  enabled: 0
 }

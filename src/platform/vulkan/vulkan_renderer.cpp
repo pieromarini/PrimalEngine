@@ -1,3 +1,4 @@
+#include <cinttypes>
 #include "assets/image_loader.h"
 #include "core/core.h"
 #include "core/data_structures/stack.h"
@@ -1851,14 +1852,16 @@ void updateUIData(VulkanRendererContext* context, f32 deltaTime) {
 	auto& rendererState = context->rendererState;
 	auto& sceneData = context->sceneData;
 
-	auto stats = std::format("Frametime: {:.2f}ms | GPU: {:.2f}ms | UI: {:.4f}ms | Triangles: {:.2f}M | DrawCall: {}",
+	auto scratch = ScratchBegin();
+
+	auto stats = PushStr8F(scratch.arena, "Frametime: %.2fms | GPU: %.2fms | UI: %.4fms | Triangles: %.2fM | DrawCall: %" PRIu32 "",
 		rendererState->rendererStats.frametime,
 		rendererState->rendererStats.frameGpuTimeAvg,
 		rendererState->rendererStats.uiFrametimeAvg,
 		rendererState->rendererStats.triangleCount * 1e-6,
 		rendererState->rendererStats.drawCallCount);
 
-	auto otherStats = std::format("DrawBatchGen: {:.4f}us | UIDrawBatchGen: {:.4f}us | EntityFlatten: {:.4f}us | UILayout: {:.4f}us | SceneUpdate: {:.4f}us | MeshDraw: {:.4f}us",
+	auto otherStats = PushStr8F(scratch.arena, "DrawBatchGen: %.4fus | UIDrawBatchGen: %.4fus | EntityFlatten: %.4fus | UILayout: %.4fus | SceneUpdate: %.4fus | MeshDraw: %.4fus",
 		rendererState->rendererStats.drawBatchGenerationTimeAvg,
 		rendererState->rendererStats.uiDrawBatchGenerationTimeAvg,
 		rendererState->rendererStats.entityFlattenTimeAvg,
@@ -1866,18 +1869,18 @@ void updateUIData(VulkanRendererContext* context, f32 deltaTime) {
 		rendererState->rendererStats.sceneUpdateTimeAvg,
 		rendererState->rendererStats.meshDrawTimeAvg);
 
-	auto cameraPosition = std::format("Camera Pos: {:.2f} {:.2f} {:.2f}",
+	auto cameraPosition = PushStr8F(scratch.arena, "Camera Pos: %.2f %.2f %.2f",
 		rendererState->mainCamera->position.x,
 		rendererState->mainCamera->position.y,
 		rendererState->mainCamera->position.z);
 
-	auto sunDirection = std::format("Sun Direction: {:.2f} {:.2f} {:.2f} {:.2f}",
+	auto sunDirection = PushStr8F(scratch.arena, "Sun Direction: %.2f %.2f %.2f %.2f",
 		sceneData.sunlightDirection.x,
 		sceneData.sunlightDirection.y,
 		sceneData.sunlightDirection.z,
 		sceneData.sunlightDirection.w);
 
-	auto sunColor = std::format("Sun Color: {:.2f} {:.2f} {:.2f} {:.2f}",
+	auto sunColor = PushStr8F(scratch.arena, "Sun Color: %.2f %.2f %.2f %.2f",
 		sceneData.sunlightColor.x,
 		sceneData.sunlightColor.y,
 		sceneData.sunlightColor.z,
@@ -1896,10 +1899,25 @@ void updateUIData(VulkanRendererContext* context, f32 deltaTime) {
 	UI_setNextPrefWidth(UI_Pct(1.0f, 1.0f));
 	UI_setNextPrefHeight(UI_Pct(1.0f, 1.0f));
 	UI_setNextChildLayoutAxis(Axis2D_X);
-	UIElement* panelElement = UIElement_create(UIElementFlag_DrawBorder | UIElementFlag_DrawBackground | UIElementFlag_Floating, "###panel_box_%p", &context->rendererState->window);
+	UIElement* panelElement = UIElement_create(UIElementFlag_DrawBorder | UIElementFlag_DrawBackground | UIElementFlag_Floating, "###panel_element_%p", &context->rendererState->window);
 	UI_parent(panelElement) UI_seedKey(panelElement->key) {
-		// UI_setNextPrefWidth(UI_Pct(0.1f, 1.0f));
-		// UI_Label(Str8L("Label test"));
+		
+		UI_setNextPrefWidth(UI_Pct(1.0f, 1.0f));
+		UI_setNextPrefHeight(UI_SizeByChildren(1.0f));
+		UI_setNextChildLayoutAxis(Axis2D_Y);
+		UIElement* statsContainer = UIElement_create(UIElementFlag_DrawBorder | UIElementFlag_DrawBackground, "###stats_container_%p", &context->rendererState->mainCamera);
+
+		UI_parent(statsContainer) UI_seedKey(statsContainer->key)
+		UI_prefWidth(UI_Pct(1.0f, 1.0f)) UI_prefHeight(UI_TextDim(1.0f))
+		UI_textColor((vec4{ 1.0f, 1.0f, 1.0f, 1.0f })) UI_textEdgePadding(10.0f) {
+			UI_Spacer(UI_Em(5.0f, 1.0f));
+			UI_Label(stats);
+			UI_Label(otherStats);
+			UI_Label(cameraPosition);
+			UI_Label(sunDirection);
+			UI_Label(sunColor);
+			UI_Spacer(UI_Em(5.0f, 1.0f));
+		}
 
 		UI_setNextTextEdgePadding(50.0f);
 		UI_setNextTextAlignment(UITextAlignment_Center);
@@ -1925,6 +1943,8 @@ void updateUIData(VulkanRendererContext* context, f32 deltaTime) {
 	}
 
 	UI_endBuild();
+
+	ScratchEnd(scratch);
 
 	auto uiLayoutTime = std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - start).count();
 	context->rendererState->rendererStats.uiLayoutTimeAvg = context->rendererState->rendererStats.uiLayoutTimeAvg * 0.95 + uiLayoutTime * 0.05;
@@ -2190,7 +2210,7 @@ void Renderer_submit(VulkanRendererContext* context) {
 			batch.commands = {
 				.buffer = textDrawCommandsBuffer,
 				.offset = offsetof(UIIndirectCommand, command),
-				.size = static_cast<uint32_t>(batch.textDrawCommands.size()),
+				.size = (u32)batch.textDrawCommands.size(),
 				.stride = sizeof(UIIndirectCommand)
 			};
 
@@ -2272,7 +2292,8 @@ void Renderer_pushText(VulkanRendererContext* context, vec2 offsetPosition, UIEl
 			.firstIndex = (u32)batch.indices.size(),
 			.vertexOffset = (i32)batch.vertices.size(),
 			.firstInstance = drawId } });
-	batch.textDrawData.emplace_back(style->textColor);
+	auto a = vec4{ style->textColor };
+	batch.textDrawData.emplace_back(a);
 
 	generateTextGeometry(str, style->fontSize, &context->sourceCodeFont, &batch.vertices, &batch.indices, offsetPosition);
 }

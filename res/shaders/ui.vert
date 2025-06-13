@@ -21,7 +21,7 @@ layout (set = 0, binding = 0) uniform UBO {
   mat4 view;
 } ubo;
 
-layout (set = 0, binding = 1) readonly buffer DrawCommands {
+layout (set = 0, binding = 1, std430) readonly buffer DrawCommands {
   IndirectCommandData drawCommands[];
 };
 

@@ -160,6 +160,9 @@ void UI_setNextFixedRect(Rect2D rect);
 #define UI_seedKey(v) DeferLoop(UI_pushSeedKey(v), UI_popSeedKey())
 #define UI_flags(value) DeferLoop(UI_pushFlags(value), UI_popFlags())
 
+#define UI_textColor(value) DeferLoop(UI_pushTextColor(value), UI_popTextColor())
+#define UI_textEdgePadding(value) DeferLoop(UI_pushTextEdgePadding(value), UI_popTextEdgePadding())
+
 #define UI_autoPopStacks(state) \
 if(state->parentStack.autoPop) { UI_popParent(); state->parentStack.autoPop = 0; }\
 if(state->prefWidthStack.autoPop) { UI_popPrefWidth(); state->prefWidthStack.autoPop = 0; }\

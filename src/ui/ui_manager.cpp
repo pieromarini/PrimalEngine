@@ -22,7 +22,6 @@ namespace pm {
 static UIElement nilUIElement = { .first = &nilUIElement, .last = &nilUIElement, .next = &nilUIElement, .prev = &nilUIElement, .parent = &nilUIElement };
 static UIElement_TextExt nilUIElementTextExt = {};
 static UIElement_RectStyleExt nilUIElementRectStyleExt = {};
-static UIElement_BucketExt nilUIElementBucketExt = {};
 static UI_Size nilPrefWidth = { .type = UISizeType_Pixels, .value = 200.0f, .strictness = 1.0f };
 static UI_Size nilPrefHeight = { .type = UISizeType_Pixels, .value = 2.0f, .strictness = 1.0f };
 static FontAsset nilFontAsset = {};
@@ -215,7 +214,6 @@ UIElement* UIElement_createFromKey(UI_ElementFlags flags, UIKey key) {
 
 		element->textEXT = &nilUIElementTextExt;
 		element->rectStyleEXT = &nilUIElementRectStyleExt;
-		element->bucketEXT = &nilUIElementBucketExt;
 
 		if (element->flags & UIElementFlag_DrawText) {
 			element->textEXT = PushStruct(getBuildArena(), UIElement_TextExt);

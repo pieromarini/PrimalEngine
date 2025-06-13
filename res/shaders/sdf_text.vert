@@ -21,13 +21,11 @@ layout (push_constant) uniform constants {
 layout (set = 0, binding = 0) uniform UBO {
 	mat4 projection;
 	mat4 view;
-	vec4 outlineColor;
-	float outlineWidth;
-	float outline;
+	float pxRange;
 } ubo;
 
 
-layout (set = 0, binding = 2, std140) readonly buffer DrawCommands {
+layout (set = 0, binding = 2, std430) readonly buffer DrawCommands {
 	IndirectCommandData drawCommands[];
 };
 
