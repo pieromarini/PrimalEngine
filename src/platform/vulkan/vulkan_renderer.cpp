@@ -1274,6 +1274,15 @@ void blitGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer) 
 }
 
 void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
+	auto genStart = std::chrono::system_clock::now();
+
+	getCurrentFrame(context).uiWindowBatches.clear();
+	UI_draw(context);
+	Renderer_submit(context);
+
+	auto genElapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - genStart);
+
+	context->rendererState->rendererStats.uiDrawBatchGenerationTimeAvg = context->rendererState->rendererStats.uiDrawBatchGenerationTimeAvg * 0.95 + (static_cast<float>(genElapsed.count()) / 1000.0f) * 0.05;
 
 	auto uiStart = std::chrono::system_clock::now();
 
@@ -1281,11 +1290,6 @@ void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
 		.color = { 0.0, 0.0, 0.0, 1.0 }
 	};
 
-	getCurrentFrame(context).uiWindowBatches.clear();
-
-	UI_draw(context);
-
-	Renderer_submit(context);
 
 	for (auto& windowBatch : getCurrentFrame(context).uiWindowBatches) {
 		auto window = windowBatch.window;
