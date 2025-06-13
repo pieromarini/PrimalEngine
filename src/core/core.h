@@ -66,11 +66,11 @@ using f64 = double;
 // #define AssertAlways(b) do { if(!(b)) { BreakDebugger(); } } while(0)
 
 #undef Assert
-// #if DEBUG
+#if DEBUG
 # define Assert(b) do { if(!(b)) { BreakDebugger(); } } while(0)
-// #else
-// # define Assert(b) ((void)(b))
-// #endif
+#else
+# define Assert(b) ((void)(b))
+#endif
 
 // #define NotImplemented AssertAlways(!"Not Implemented")
 // #define InvalidPath AssertAlways(!"Invalid Path")

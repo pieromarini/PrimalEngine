@@ -30,6 +30,23 @@ if(!APPLE)
   find_package(TBB COMPONENTS tbbmalloc tbbmalloc_proxy tbb_preview)
 endif()
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(COMPILER_NAME "GCC")
+    message("Using GCC compiler")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set(COMPILER_NAME "Clang")
+    message("Using Clang compiler")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    set(COMPILER_NAME "MSVC")
+    message("Using MSVC compiler")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    set(COMPILER_NAME "AppleClang")
+    message("Using Apple Clang compiler")
+else()
+    set(COMPILER_NAME "Unknown")
+    message("Unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
+endif()
+
 include(cmake/BasicSettings.cmake)
 
 # Project Options as an interface library.
@@ -78,6 +95,14 @@ add_library(${ENGINE_LIB} STATIC ${engine_sources})
 
 target_include_directories(${ENGINE_LIB} PUBLIC ${SOURCES_DIR})
 target_compile_definitions(${ENGINE_LIB} PUBLIC GLM_FORCE_DEPTH_ZERO_TO_ONE)
+target_compile_definitions(${ENGINE_LIB} PRIVATE 
+  $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:DEBUG>
+  $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:COMPILER_MSVC>
+  $<$<CXX_COMPILER_ID:GNU>:COMPILER_GCC>
+  $<$<CXX_COMPILER_ID:Clang>:COMPILER_CLANG>
+  $<$<CXX_COMPILER_ID:MSVC>:COMPILER_MSVC>
+  $<$<CXX_COMPILER_ID:AppleClang>:COMPILER_APPLE_CLANG>
+)
 
 # [LIB] GLM
 set(BUILD_SHARED_LIBS OFF)
