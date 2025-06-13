@@ -2136,9 +2136,7 @@ DrawBatchNode* Renderer_createBatch(VulkanRendererContext* context, DrawBatchTyp
  *  Expose an API so that we can call it from sandbox and have an application loop there?
  *  Also, refactor renderer so that we don't have to pass the context around for each renderer call.
  *  
- *  NEXT: - Implement basic rectangle decorations: rounded corners, non-filled rectangle (with border thickness and border color)
- *        - Implement rectangle instancing. UIDrawData is now per-instance data and we can access it using gl_InstanceId from the shader
- *        - Implement text edge padding, alignment and plan out text color. For now, text color will be instance-based (1 string -> 1 color)
+ *  NEXT: - Implement rectangle instancing. UIDrawData is now per-instance data and we can access it using gl_InstanceId from the shader
  */
 
 void Renderer_submit(VulkanRendererContext* context) {
