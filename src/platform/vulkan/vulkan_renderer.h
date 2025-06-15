@@ -201,7 +201,7 @@ struct FrameData {
 	std::vector<DrawBatch> drawBatches{};
 	std::vector<UIWindowBatch> uiWindowBatches{};
 
-	Arena* perFrameArena;// TODO(piero): use arena for per-frame allocations
+	Arena* perFrameArena;
 };
 
 struct GPUSceneData {

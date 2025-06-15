@@ -33,12 +33,12 @@ namespace pm {
 #define StackTopImpl(state, name_upper, name_lower) \
 	return state->name_lower##Stack.top->value;
 
-#define StackPushImpl(state, name_upper, name_lower, new_value) \
+#define StackPushImplArena(state, name_upper, name_lower, new_value, arena) \
 	name_upper##Node* node = state->name_lower##Stack.free;       \
 	if (node != 0) {                                              \
 		StackPop(state->name_lower##Stack.free);                    \
 	} else {                                                      \
-		node = PushStruct(getBuildArena(), name_upper##Node);       \
+		node = PushStruct((arena), name_upper##Node);       \
 	}                                                             \
 	auto old_value = state->name_lower##Stack.top->value;         \
 	node->value = new_value;                                      \
@@ -53,12 +53,12 @@ namespace pm {
 	}                                                        \
 	return popped->value;
 
-#define StackSetNextImpl(state, name_upper, name_lower, new_value) \
+#define StackSetNextImplArena(state, name_upper, name_lower, new_value, arena) \
 	name_upper##Node* node = state->name_lower##Stack.free;          \
 	if (node != 0) {                                                 \
 		StackPop(state->name_lower##Stack.free);                       \
 	} else {                                                         \
-		node = PushStruct(getBuildArena(), name_upper##Node);          \
+		node = PushStruct((arena), name_upper##Node);          \
 	}                                                                \
 	auto old_value = state->name_lower##Stack.top->value;            \
 	node->value = new_value;                                         \

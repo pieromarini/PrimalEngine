@@ -2,10 +2,11 @@
 
 recent_file: path: "src/platform/vulkan/vulkan_renderer.cpp"
 recent_file: path: "src/ui/ui_manager.cpp"
-recent_file: path: "sandbox/main.cpp"
-recent_file: path: "src/primal_engine.cpp"
-recent_file: path: "src/core/memory/arena.cpp"
 recent_file: path: "src/ui/ui_widgets.cpp"
+recent_file: path: "src/primal_engine.cpp"
+recent_file: path: "sandbox/main.cpp"
+recent_file: path: "D:/a/_work/1/s/src/vctools/crt/vcstartup/src/startup/exe_common.inl"
+recent_file: path: "src/core/memory/arena.cpp"
 recent_file: path: "src/core/primal_string.cpp"
 recent_file: path: "src/assets/asset.h"
 recent_file: path: "src/platform/vulkan/buffers.cpp"
@@ -15,7 +16,6 @@ recent_file: path: "../../../../j/msdk/build/Vulkan-ValidationLayers/repo/layers
 recent_file: path: "../../../../Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.43.34808/include/vector"
 recent_file: path: "../../../../j/msdk/build/Vulkan-ValidationLayers/repo/layers/core_checks/cc_drawdispatch.cpp"
 recent_file: path: "../../../../Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.43.34808/include/__msvc_ostream.hpp"
-recent_file: path: "D:/a/_work/1/s/src/vctools/crt/vcstartup/src/startup/exe_common.inl"
 target:
 {
   executable: "build_nvim/Debug/sandbox.exe"

@@ -917,6 +917,7 @@ void UI_draw(VulkanRendererContext* context) {
 				}
 			}
 		}
+
 	}
 }
 
@@ -987,6 +988,10 @@ void UI_setNextFixedRect(Rect2D rect) {
 	UI_setNextPrefSize(Axis2D_X, UI_Pixels(dim.x, 1));
 	UI_setNextPrefSize(Axis2D_Y, UI_Pixels(dim.y, 1));
 }
+
+// Local macros to use specific arenas for stacks
+#define StackPushImpl(state, name_upper, name_lower, new_value) StackPushImplArena(state, name_upper, name_lower, new_value, getBuildArena())
+#define StackSetNextImpl(state, name_upper, name_lower, new_value) StackSetNextImplArena(state, name_upper, name_lower, new_value, getBuildArena())
 
 // Generated
 UIElement* UI_topParent() { StackTopImpl(uiContext, Parent, parent) }
@@ -1115,5 +1120,8 @@ vec4 UI_topOverlayColor() { StackTopImpl(uiContext, OverlayColor, overlayColor)}
 vec4 UI_pushOverlayColor(vec4 value) { StackPushImpl(uiContext, OverlayColor, overlayColor, value) }
 vec4 UI_popOverlayColor() { StackPopImpl(uiContext, OverlayColor, overlayColor) }
 vec4 UI_setNextOverlayColor(vec4 value) { StackSetNextImpl(uiContext, OverlayColor, overlayColor, value) }
+
+#undef StackPushImpl
+#undef StackSetNextImpl
 
 }// namespace pm

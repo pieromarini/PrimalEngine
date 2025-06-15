@@ -84,10 +84,9 @@ void rendererSetup(VulkanRendererContext* context) {
 	terrainTest(context);
 }
 
-// NOTE(piero): not using this right now.
 void rendererInitMemory(VulkanRendererContext* context) {
 	for (auto& frame : context->frames) {
-		// frame.perFrameArena = arenaAlloc(Megabytes(256));
+		frame.perFrameArena = arenaAlloc(Megabytes(256));
 	}
 }
 
@@ -1049,6 +1048,8 @@ void rendererDraw(VulkanRendererContext* context) {
 
 	getCurrentFrame(context).deletionQueue.flush();
 	getCurrentFrame(context).frameDescriptor.clearPools(context->device);
+
+	arenaClear(getCurrentFrame(context).perFrameArena);
 
 	// Get next swapchain image for each swapchain/window we render to
 	auto currentFrameIndex = getCurrentFrameIndex(context);
@@ -2302,16 +2303,15 @@ void Renderer_pushText(VulkanRendererContext* context, vec2 offsetPosition, UIEl
 	generateTextGeometry(str, style->fontSize, &context->sourceCodeFont, &batch.vertices, &batch.indices, offsetPosition);
 }
 
-f32 Renderer_pushTransparency(VulkanRendererContext* context, f32 value) {
-	StackPushImpl(context, Transparency, transparency, value);
-}
+// Local macros to use specific arenas for stacks
+#define StackPushImpl(state, name_upper, name_lower, new_value) StackPushImplArena(state, name_upper, name_lower, new_value, getCurrentFrame(state).perFrameArena)
+#define StackSetNextImpl(state, name_upper, name_lower, new_value) StackSetNextImplArena(state, name_upper, name_lower, new_value, getCurrentFrame(state).perFrameArena)
 
-f32 Renderer_popTransparency(VulkanRendererContext* context) {
-	StackPopImpl(context, Transparency, transparency);
-}
+f32 Renderer_pushTransparency(VulkanRendererContext* context, f32 value) { StackPushImpl(context, Transparency, transparency, value); }
+f32 Renderer_popTransparency(VulkanRendererContext* context) { StackPopImpl(context, Transparency, transparency); }
+f32 Renderer_topTransparency(VulkanRendererContext* context) { StackTopImpl(context, Transparency, transparency); }
 
-f32 Renderer_topTransparency(VulkanRendererContext* context) {
-	StackTopImpl(context, Transparency, transparency);
-}
+#undef StackPushImpl
+#undef StackSetNextImpl
 
 }// namespace pm
