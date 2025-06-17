@@ -1,5 +1,6 @@
 #include <chrono>
 #include <thread>
+#include <cinttypes>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_mouse.h>
@@ -149,8 +150,28 @@ void PrimalEngine::handleWindowEvent(SDL_Event& e, f32 deltaTime) {
 }
 
 void PrimalEngine::render(f32 deltaTime, UI_EventList* events) {
-	Renderer_update(&rendererContext, deltaTime);
 
+	auto scratch = ScratchBegin();
+
+	auto rendererState = rendererContext.rendererState;
+
+	auto stats = PushStr8F(scratch.arena, "Frametime: %.2fms | GPU: %.2fms | UISubmit: %.4fms | UI: %.4fms | Triangles: %.2fM | DrawCall: %" PRIu32 "",
+		rendererState->rendererStats.frametime,
+		rendererState->rendererStats.frameGpuTimeAvg,
+		rendererState->rendererStats.renderSubmitTimeAvg,
+		rendererState->rendererStats.uiRenderTimeAvg,
+		rendererState->rendererStats.triangleCount * 1e-6,
+		rendererState->rendererStats.drawCallCount);
+
+	auto otherStats = PushStr8F(scratch.arena, "DrawBatchGen: %.4fus | EntityFlatten: %.4fus | UISetupBuffers: %.4fus | UIBuildTime: %.4fus | SceneUpdate: %.4fus | MeshDraw: %.4fus",
+		rendererState->rendererStats.drawBatchGenerationTimeAvg,
+		rendererState->rendererStats.entityFlattenTimeAvg,
+		rendererState->rendererStats.uiSetupBuffersTimeAvg,
+		rendererState->rendererStats.uiBuildTimeAvg,
+		rendererState->rendererStats.sceneUpdateTimeAvg,
+		rendererState->rendererStats.meshDrawTimeAvg);
+
+	auto buildStart = std::chrono::high_resolution_clock::now();
 	Renderer_beginFrame(&rendererContext);
 
 	for (PrimalWindow* window = firstWindow; window != nullptr; window = window->next) {
@@ -246,12 +267,8 @@ void PrimalEngine::render(f32 deltaTime, UI_EventList* events) {
 					UI_prefWidth(UI_Pct(1.0f, 1.0f)) UI_prefHeight(UI_TextDim(1.0f))
 					UI_textColor((vec4{ 1.0f, 1.0f, 1.0f, 1.0f })) UI_textEdgePadding(10.0f) {
 						UI_Spacer(UI_Em(5.0f, 1.0f));
-						UI_Label(Str8L("Label Test"));
-						// UI_Label(stats);
-						// UI_Label(otherStats);
-						// UI_Label(cameraPosition);
-						// UI_Label(sunDirection);
-						// UI_Label(sunColor);
+						UI_Label(stats);
+						UI_Label(otherStats);
 						UI_Spacer(UI_Em(5.0f, 1.0f));
 					}
 
@@ -285,12 +302,29 @@ void PrimalEngine::render(f32 deltaTime, UI_EventList* events) {
 		UI_draw(&rendererContext);
 
 		Renderer_endWindow(&rendererContext);
+
+		ScratchEnd(scratch);
 	}
-	Renderer_submit(&rendererContext);
+
+	auto buildTime = std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - buildStart).count();
+	rendererContext.rendererState->rendererStats.uiBuildTimeAvg = rendererContext.rendererState->rendererStats.uiBuildTimeAvg * 0.95 + buildTime * 0.05;
+
+
+	auto setupBuffersStart = std::chrono::high_resolution_clock::now();
+
+	Renderer_setupBuffers(&rendererContext);
+
+	auto setupBuffersTime = std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - setupBuffersStart).count();
+	rendererContext.rendererState->rendererStats.uiSetupBuffersTimeAvg = rendererContext.rendererState->rendererStats.uiSetupBuffersTimeAvg * 0.95 + setupBuffersTime * 0.05;
+
+
+	auto renderSubmitStart = std::chrono::high_resolution_clock::now();
 
 	Renderer_draw(&rendererContext);
-
 	Renderer_endFrame(&rendererContext);
+
+	auto renderSubmitTime = std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - renderSubmitStart).count();
+	rendererContext.rendererState->rendererStats.renderSubmitTimeAvg = rendererContext.rendererState->rendererStats.renderSubmitTimeAvg * 0.95 + (renderSubmitTime * 1e-3)  * 0.05;
 }
 
 void PrimalEngine::run() {
@@ -372,6 +406,8 @@ void PrimalEngine::run() {
 
 			m_mainCamera.processSDLEvent(e);
 		}
+
+		Renderer_update(&rendererContext, deltaTime);
 
 		render(deltaTime, events);
 

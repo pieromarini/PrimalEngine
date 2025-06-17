@@ -163,17 +163,18 @@ constexpr uint32_t FRAME_OVERLAP = 2;
 struct RendererStats {
 	double frametime{};
 	double frameGpuTimeAvg{};
-	double uiFrametimeAvg{};
+	double uiRenderTimeAvg{};
 	double sceneUpdateTimeAvg{};
 	double meshDrawTimeAvg{};
+	double renderSubmitTimeAvg{};
 
 	// 3D draw batch generation
 	double entityFlattenTimeAvg{};
 	double drawBatchGenerationTimeAvg{};
 
 	// UI draw batch generation
-	double uiDrawBatchGenerationTimeAvg{};
-	double uiLayoutTimeAvg{};
+	double uiBuildTimeAvg{};
+	double uiSetupBuffersTimeAvg{};
 
 	uint32_t triangleCount{};
 	uint32_t drawCallCount{};
@@ -498,6 +499,6 @@ f32 Renderer_pushTransparency(VulkanRendererContext* context, f32 value);
 f32 Renderer_popTransparency(VulkanRendererContext* context);
 f32 Renderer_topTransparency(VulkanRendererContext* context);
 
-void Renderer_submit(VulkanRendererContext* context);
+void Renderer_setupBuffers(VulkanRendererContext* context);
 
 }// namespace pm

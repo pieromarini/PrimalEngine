@@ -1240,17 +1240,6 @@ void blitGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer) 
 }
 
 void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
-	/*
-	auto genStart = std::chrono::system_clock::now();
-
-	UI_draw(context);
-	Renderer_submit(context);
-
-	auto genElapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - genStart);
-
-	context->rendererState->rendererStats.uiDrawBatchGenerationTimeAvg = context->rendererState->rendererStats.uiDrawBatchGenerationTimeAvg * 0.95 + (static_cast<float>(genElapsed.count()) / 1000.0f) * 0.05;
-	*/
-
 	auto uiStart = std::chrono::system_clock::now();
 
 	VkClearValue clearColor{
@@ -1316,7 +1305,7 @@ void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
 	auto uiEnd = std::chrono::system_clock::now();
 	auto uiElapsed = std::chrono::duration_cast<std::chrono::microseconds>(uiEnd - uiStart);
 
-	context->rendererState->rendererStats.uiFrametimeAvg = context->rendererState->rendererStats.uiFrametimeAvg * 0.95 + (static_cast<float>(uiElapsed.count()) / 1000.0f) * 0.05;
+	context->rendererState->rendererStats.uiRenderTimeAvg = context->rendererState->rendererStats.uiRenderTimeAvg * 0.95 + (static_cast<float>(uiElapsed.count()) / 1000.0f) * 0.05;
 }
 
 void drawTerrain(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
@@ -1816,106 +1805,6 @@ void updateUIData(VulkanRendererContext* context, f32 deltaTime) {
 
 		memcpy(window->uiData.info.pMappedData, &uiUniformData, sizeof(UIUniformData));
 	}
-
-	/*
-	auto& rendererState = context->rendererState;
-	auto& sceneData = context->sceneData;
-
-	auto scratch = ScratchBegin();
-
-	auto stats = PushStr8F(scratch.arena, "Frametime: %.2fms | GPU: %.2fms | UI: %.4fms | Triangles: %.2fM | DrawCall: %" PRIu32 "",
-		rendererState->rendererStats.frametime,
-		rendererState->rendererStats.frameGpuTimeAvg,
-		rendererState->rendererStats.uiFrametimeAvg,
-		rendererState->rendererStats.triangleCount * 1e-6,
-		rendererState->rendererStats.drawCallCount);
-
-	auto otherStats = PushStr8F(scratch.arena, "DrawBatchGen: %.4fus | UIDrawBatchGen: %.4fus | EntityFlatten: %.4fus | UILayout: %.4fus | SceneUpdate: %.4fus | MeshDraw: %.4fus",
-		rendererState->rendererStats.drawBatchGenerationTimeAvg,
-		rendererState->rendererStats.uiDrawBatchGenerationTimeAvg,
-		rendererState->rendererStats.entityFlattenTimeAvg,
-		rendererState->rendererStats.uiLayoutTimeAvg,
-		rendererState->rendererStats.sceneUpdateTimeAvg,
-		rendererState->rendererStats.meshDrawTimeAvg);
-
-	auto cameraPosition = PushStr8F(scratch.arena, "Camera Pos: %.2f %.2f %.2f",
-		rendererState->mainCamera->position.x,
-		rendererState->mainCamera->position.y,
-		rendererState->mainCamera->position.z);
-
-	auto sunDirection = PushStr8F(scratch.arena, "Sun Direction: %.2f %.2f %.2f %.2f",
-		sceneData.sunlightDirection.x,
-		sceneData.sunlightDirection.y,
-		sceneData.sunlightDirection.z,
-		sceneData.sunlightDirection.w);
-
-	auto sunColor = PushStr8F(scratch.arena, "Sun Color: %.2f %.2f %.2f %.2f",
-		sceneData.sunlightColor.x,
-		sceneData.sunlightColor.y,
-		sceneData.sunlightColor.z,
-		sceneData.sunlightColor.w);
-
-	auto start = std::chrono::high_resolution_clock::now();
-
-	UI_EventList event{};
-	UI_beginBuild(context->rendererState->window, &event, deltaTime);
-
-	UI_pushFont(&context->sourceCodeFont);
-	UI_pushFontSize(16.0f);
-
-	UI_setNextPrefWidth(UI_Pct(1.0f, 1.0f));
-	UI_setNextPrefHeight(UI_Pct(1.0f, 1.0f));
-	UI_setNextChildLayoutAxis(Axis2D_X);
-	UIElement* panelElement = UIElement_create(UIElementFlag_DrawBorder | UIElementFlag_DrawBackground | UIElementFlag_Floating, "###panel_element_%p", &context->rendererState->window);
-	UI_parent(panelElement) UI_seedKey(panelElement->key) {
-		
-		UI_setNextPrefWidth(UI_Pct(1.0f, 1.0f));
-		UI_setNextPrefHeight(UI_SizeByChildren(1.0f));
-		UI_setNextChildLayoutAxis(Axis2D_Y);
-		UIElement* statsContainer = UIElement_create(UIElementFlag_DrawBorder | UIElementFlag_DrawBackground, "###stats_container_%p", &context->rendererState->mainCamera);
-
-		UI_parent(statsContainer) UI_seedKey(statsContainer->key)
-		UI_prefWidth(UI_Pct(1.0f, 1.0f)) UI_prefHeight(UI_TextDim(1.0f))
-		UI_textColor((vec4{ 1.0f, 1.0f, 1.0f, 1.0f })) UI_textEdgePadding(10.0f) {
-			UI_Spacer(UI_Em(5.0f, 1.0f));
-			UI_Label(stats);
-			UI_Label(otherStats);
-			UI_Label(cameraPosition);
-			UI_Label(sunDirection);
-			UI_Label(sunColor);
-			UI_Spacer(UI_Em(5.0f, 1.0f));
-		}
-
-		UI_setNextTextEdgePadding(50.0f);
-		UI_setNextTextAlignment(UITextAlignment_Center);
-		UI_setNextBorderColor({ 1.0f, 0.0f, 0.0f, 0.6f });
-		UI_setNextBorderThickness(3.0f);
-		UI_setNextCornerRadius(20.0f);
-		UI_setNextPrefWidth(UI_Pct(0.2f, 1.0f));
-		UI_setNextPrefHeight(UI_Pixels(80.0f, 1.0f));
-		UI_setNextBackgroundColor({ 0.0f, 1.0f, 1.0f, 1.0f });
-		if (UI_Button(Str8L("Button 1")).clicked_left) {
-			std::cout << "Clicked button\n";
-		}
-
-		UI_setNextTextColor({ 1.0f, 0.0f, 0.0f, 1.0f });
-		UI_setNextBackgroundColor({ 0.26f, 0.29f, 0.31f, 1.0f });
-		UI_setNextCornerRadius(5.0f);
-		UI_setNextPrefWidth(UI_TextDim(1.0f));
-		UI_setNextPrefHeight(UI_Pixels(80.0f, 1.0f));
-		UI_setNextTextEdgePadding(10.0f);
-		if (UI_Button(Str8L("Button 2")).clicked_left) {
-			std::cout << "Clicked button\n";
-		}
-	}
-
-	UI_endBuild();
-
-	ScratchEnd(scratch);
-
-	auto uiLayoutTime = std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - start).count();
-	context->rendererState->rendererStats.uiLayoutTimeAvg = context->rendererState->rendererStats.uiLayoutTimeAvg * 0.95 + uiLayoutTime * 0.05;
-	*/
 }
 
 void Renderer_initWindow(VulkanRendererContext* context, PrimalWindow* window) {
@@ -2141,7 +2030,7 @@ DrawBatchNode* Renderer_createBatch(VulkanRendererContext* context, DrawBatchTyp
  *  NEXT: - Implement rectangle instancing. UIDrawData is now per-instance data and we can access it using gl_InstanceId from the shader
  */
 
-void Renderer_submit(VulkanRendererContext* context) {
+void Renderer_setupBuffers(VulkanRendererContext* context) {
 	for (auto* windowBatchNode = getCurrentFrame(context).uiWindowBatches.top; windowBatchNode != nullptr; windowBatchNode = windowBatchNode->next) {
 		auto* windowBatch = windowBatchNode->value;
 		auto* window = windowBatch->window;
