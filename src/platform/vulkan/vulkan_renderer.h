@@ -188,6 +188,9 @@ struct VulkanRendererConfig {
 	RendererStats rendererStats;
 };
 
+StackDeclareNode(Transparency, f32);
+StackDeclareNodeWithPointer(WindowBatch, UIWindowBatch);
+
 struct FrameData {
 	VkCommandPool commandPool;
 	VkCommandBuffer commandBuffer;
@@ -199,9 +202,10 @@ struct FrameData {
 	DescriptorAllocator frameDescriptor;
 
 	std::vector<DrawBatch> drawBatches{};
-	std::vector<UIWindowBatch> uiWindowBatches{};
+	struct { WindowBatchNode* top; WindowBatchNode* free; bool autoPop; } uiWindowBatches;
 
 	Arena* perFrameArena;
+	Arena* perWindowArena;
 };
 
 struct GPUSceneData {
@@ -234,8 +238,6 @@ struct ModelDrawRender {
 
 	std::vector<RenderObject> renderObjects{};
 };
-
-StackDeclareNode(Transparency, f32);
 
 struct UIContext;
 
@@ -422,6 +424,8 @@ void initDescriptors(VulkanRendererContext* context);
 void initPipelines(VulkanRendererContext* context);
 void initQueryPools(VulkanRendererContext* context);
 
+void Renderer_initWindow(VulkanRendererContext* context, PrimalWindow* window);
+
 void initFontData(VulkanRendererContext* context);
 void initUI(VulkanRendererContext* context);
 void initBindlessTextureDescriptor(VulkanRendererContext* context, VkDescriptorSetLayout& descriptorSetLayout, VkDescriptorSet& descriptotSet);
@@ -446,13 +450,18 @@ GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> in
 void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models);
 
 // Updating
-void rendererUpdate(VulkanRendererContext* context, float deltaTime);
+void Renderer_update(VulkanRendererContext* context, float deltaTime);
 void updateScene(VulkanRendererContext* context, float deltaTime);
 void updateFontData(VulkanRendererContext* context);
 void updateUIData(VulkanRendererContext* context, f32 deltaTime);
 
 // drawing
-void rendererDraw(VulkanRendererContext* context);
+void Renderer_beginFrame(VulkanRendererContext* context);
+void Renderer_endFrame(VulkanRendererContext* context);
+
+void Renderer_beginWindow(VulkanRendererContext* context, PrimalWindow* window);
+void Renderer_endWindow(VulkanRendererContext* context);
+void Renderer_draw(VulkanRendererContext* context);
 
 void drawToGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer);
 void blitGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer);

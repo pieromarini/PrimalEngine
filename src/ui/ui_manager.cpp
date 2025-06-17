@@ -6,9 +6,7 @@
 #include "core/math/math.h"
 #include "core/memory/arena.h"
 #include "core/primal_string.h"
-#include "font_cache/font_cache.h"
 #include "platform/os/os.h"
-#include "primal_engine.h"
 #include "ui/generated.h"
 #include "ui/ui_types.h"
 #include "ui/ui_utils.h"
@@ -95,8 +93,8 @@ UIContext* UI_createContext() {
 
 void UI_destroyContext(UIContext* context) {
 	arenaRelease(context->dragDataArena);
-	for (u64 idx = 0; idx < ArrayCount(context->buildArenas); idx++) {
-		arenaRelease(context->buildArenas[idx]);
+	for (auto& buildArena : context->buildArenas) {
+		arenaRelease(buildArena);
 	}
 	arenaRelease(context->arena);
 }
@@ -417,14 +415,23 @@ break_all:;
 	return result;
 }
 
+Rect1DF32 UI_scrollBoundsFromElement(UIElement *element, Axis2D axis) {
+	Rect1DF32 bounds = {0, 0};
+	for(UIElement *child = element->first; !UIElement_isNil(child); child = child->next) {
+		bounds.min = Min(bounds.min, child->calcRelPos[axis]);
+		bounds.max = Max(bounds.max, child->calcRelPos[axis]);
+	}
+	return bounds;
+}
+
 UI_Signal UI_signalFromElement(UIElement* element) {
 	UI_Signal sig = { .element = element };
 	UI_EventList* events = uiContext->events;
 
-	Rect2D clipped_rect = element->rect;
+	Rect2D clippedRect = element->rect;
 	for (UIElement* e = element->parent; !UIElement_isNil(e); e = e->parent) {
 		if (e->flags & UIElementFlag_Clip) {
-			clipped_rect = rect2DIntersect(clipped_rect, e->rect);
+			clippedRect = rect2DIntersect(clippedRect, e->rect);
 		}
 	}
 
@@ -432,20 +439,23 @@ UI_Signal UI_signalFromElement(UIElement* element) {
 		next = n->next;
 		b32 taken = 0;
 		UI_Event* ev = &n->v;
-		b32 ev_key_is_mouse = (ev->key == OS_Key_MouseLeft || ev->key == OS_Key_MouseRight || ev->key == OS_Key_MouseMiddle);
+		b32 eventInElementInteractionRegion = rect2DContains(clippedRect, ev->position);
+		b32 eventKeyIsMouse = (ev->key == OS_Key_MouseLeft || ev->key == OS_Key_MouseRight || ev->key == OS_Key_MouseMiddle);
 		UI_MouseButtonSlot ev_mb_slot = UI_mouseButtonSlotFromOSKey(ev->key);
 
 		if (element->firstGenTouched != element->lastGenTouched && element->flags & UIElementFlag_MouseClickable) {
-			if (ev_key_is_mouse && ev->kind == UIEventKind_Press) {
+			if (eventKeyIsMouse && eventInElementInteractionRegion && ev->kind == UIEventKind_Press) {
 				taken = 1;
 				uiContext->hotKey = uiContext->activeKey[ev_mb_slot] = element->key;
 				sig.flags |= UISignalFlag_PressedLeft << ev_mb_slot;
-				uiContext->dragStartMouse = ev->pos_2f32;
+				uiContext->dragStartMouse = ev->position;
 			}
-			if (ev_key_is_mouse && ev->kind == UIEventKind_Release && UI_KeyMatch(uiContext->activeKey[ev_mb_slot], element->key)) {
+			if (eventKeyIsMouse && ev->kind == UIEventKind_Release && UI_KeyMatch(uiContext->activeKey[ev_mb_slot], element->key)) {
 				taken = 1;
 				sig.flags |= UISignalFlag_ReleasedLeft << ev_mb_slot;
-				sig.flags |= UISignalFlag_ClickedLeft << ev_mb_slot;
+				if (eventInElementInteractionRegion) {
+					sig.flags |= UISignalFlag_ClickedLeft << ev_mb_slot;
+				}
 				uiContext->activeKey[ev_mb_slot] = UI_keyZero();
 			}
 		}
@@ -455,27 +465,39 @@ UI_Signal UI_signalFromElement(UIElement* element) {
 			sig.flags |= UISignalFlag_ClickedLeft | UISignalFlag_PressedLeft | UISignalFlag_PressedKeyboard;
 		}
 
+		if(element->flags & UIElementFlag_ViewScroll && ev->kind == UIEventKind_Scroll && eventInElementInteractionRegion) {
+			taken = 1;
+			for (auto axis = (Axis2D)0; axis < Axis2D_COUNT; axis = Axis2D(axis + 1)) {
+				element->targetViewOff[axis] += ev->delta[axis];
+				if(element->flags & (UIElementFlag_OverflowX << axis)) {
+					UI_layoutRoot(element, axis);
+				}
+				auto scroll_bounds = UI_scrollBoundsFromElement(element, axis);
+				element->targetViewOff[axis] = clamp1F32(scroll_bounds, element->targetViewOff[axis]);
+			}
+		}
+
 		if (taken) {
 			UI_eatEvent(events, ev);
 		}
 	}
 
 	// fill out flags & state based on polled information
-	vec2 mouse_polled = uiContext->mouse;
-	if (rect2DContains(clipped_rect, mouse_polled)) {
+	vec2 mousePosition = uiContext->mouse;
+	if (rect2DContains(clippedRect, mousePosition)) {
 		sig.flags |= UISignalFlag_MouseIsOver;
 	}
-	if (rect2DContains(clipped_rect, mouse_polled)) {
+	if (rect2DContains(clippedRect, mousePosition)) {
 		if (UI_KeyMatch(UI_keyZero(), uiContext->hotKey)) {
 			sig.flags |= UISignalFlag_Hovering;
-			b32 is_any_key_active = 0;
+			b32 isAnyKeyActive = 0;
 			for (auto slot = (UI_MouseButtonSlot)0; slot < UIMouseButtonSlot_COUNT; slot = UI_MouseButtonSlot(slot + 1)) {
 				if (!UI_KeyMatch(uiContext->activeKey[slot], UI_keyZero())) {
-					is_any_key_active = 1;
+					isAnyKeyActive = 1;
 					break;
 				}
 			}
-			if (!is_any_key_active) {
+			if (!isAnyKeyActive) {
 				uiContext->hotKey = element->key;
 			}
 		}
@@ -794,6 +816,7 @@ void UI_beginBuild(PrimalWindow* window, UI_EventList* events, f32 deltaTime) {
 	UI_pushParent(root);
 
 	// defaults
+	// TODO(piero): Set a default font when we have a proper font manager/cache
 	UI_pushFontSize(12.f);
 	UI_pushBackgroundColor({ 0.1f, 0.13f, 0.14f, 0.7f });
 	UI_pushPrefWidth(UI_Pct(1.f, 0.f));
@@ -843,9 +866,10 @@ void UI_draw(VulkanRendererContext* context) {
 			Renderer_pushTransparency(context, 1.0f - element->opacity);
 		}
 
+		auto dpi = SDL_GetWindowDisplayScale(context->rendererState->window->handle);
+
 		// TODO(piero): Play with these settings/ideas some more... result is not good right now.
 		if(element->flags & UIElementFlag_DrawDropShadow) {
-			auto dpi = SDL_GetWindowDisplayScale(context->rendererState->window->handle);
 			f32 shift = dpi * 0.03f;
 			auto shadowRect = rect2DPad(rect2DShift(element->rect, vec2{ shift, shift }), shift * 2.0f);
 			UIElement_RectStyleExt style{};
@@ -865,6 +889,9 @@ void UI_draw(VulkanRendererContext* context) {
 			Renderer_pushRect(context, rect, style);
 
 			if (element->flags & UIElementFlag_DrawHotEffects) {
+				auto activeDestroyer = element->flags & UIElementFlag_DrawActiveEffects ? element->activeT : 0;
+				f32 effectiveHotT = element->hotT * (1 - activeDestroyer);
+				f32 edgeThickness = dpi * 0.1f;
 			}
 
 			if (element->flags & UIElementFlag_DrawActiveEffects) {
@@ -872,6 +899,7 @@ void UI_draw(VulkanRendererContext* context) {
 
 			if (element->focusHotT >= 0.005f) {
 			}
+
 		}
 
 		if (element->flags & UIElementFlag_DrawText) {
@@ -987,6 +1015,21 @@ void UI_setNextFixedRect(Rect2D rect) {
 	UI_setNextFixedPos(rect.min);
 	UI_setNextPrefSize(Axis2D_X, UI_Pixels(dim.x, 1));
 	UI_setNextPrefSize(Axis2D_Y, UI_Pixels(dim.y, 1));
+}
+
+void UI_storeDragData(vec2 data) {
+	arenaClear(uiContext->dragDataArena);
+	uiContext->dragData = PushStruct(uiContext->dragDataArena, vec2);
+	uiContext->dragData->x = data.x;
+	uiContext->dragData->y = data.y;
+}
+
+vec2 UI_loadDragData() {
+	return *uiContext->dragData;
+}
+
+vec2 UI_dragDelta() {
+	return (uiContext->mouse - uiContext->dragStartMouse);
 }
 
 // Local macros to use specific arenas for stacks

@@ -68,4 +68,64 @@ void destroyVulkanSurface(VkInstance instance, VkSurfaceKHR surface, VkAllocatio
 	SDL_Vulkan_DestroySurface(instance, surface, callbacks);
 }
 
+PanelTraversalStep depthFirstPreOrderStep(Panel* panel) {
+	PanelTraversalStep rec{};
+
+	if (panel->first != nullptr) {
+		// Panel has child
+		rec.next = panel->first;
+		rec.pushCount = 1;
+	} else {
+		// Left node. Traverse up until we find a node with a sibling
+		for (auto* p = panel; p != nullptr; p = p->parent) {
+			if (p->next != nullptr) {
+				rec.next = p->next;
+				break;
+			}
+			rec.popCount++;
+		}
+	}
+
+	return rec;
+}
+
+Rect2D rectFromPanelChild(Panel* child, Rect2D parentRect) {
+	Rect2D result = parentRect;
+
+	auto* parent = child->parent;
+
+	if (parent != nullptr) {
+		auto parentRectDim = rect2DSize(parentRect);
+		result.max[parent->splitAxis] = result.min[parent->splitAxis];
+		for (auto* p = parent->first; p != child && p != nullptr; p = p->next) {
+			result.min[parent->splitAxis] += p->sizePct * parentRectDim[parent->splitAxis];
+			result.max[parent->splitAxis] = result.min[parent->splitAxis];
+		}
+		result.max[parent->splitAxis] += child->sizePct * parentRectDim[parent->splitAxis];
+	}
+
+	return result;
+}
+
+Rect2D rectFromPanel(Panel* panel, Rect2D rootRect) {
+	auto scratch = ScratchBegin();
+
+	TraverseNode* travNode = nullptr;
+	for (Panel* p = panel; p != nullptr && p->parent != nullptr; p = p->parent) {
+		auto* node = PushStruct(scratch.arena, TraverseNode);
+		node->parent = panel->parent;
+		node->child = panel;
+		StackPush(travNode, node);
+	}
+
+	auto result = rootRect;
+	for (TraverseNode* node = travNode; node != nullptr; node = node->next) {
+		result = rectFromPanelChild(node->child, result);
+	}
+
+	ScratchEnd(scratch);
+
+	return result;
+}
+
 }// namespace pm

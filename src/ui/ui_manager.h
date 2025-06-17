@@ -2,7 +2,6 @@
 
 #include "core/core.h"
 #include "core/memory/arena.h"
-#include "platform/vulkan/vulkan_renderer.h"
 #include "ui_types.h"
 #include "core/data_structures/stack.h"
 #include "core/primal_string.h"
@@ -15,6 +14,8 @@ struct UIElementSlot {
 	UIElement* first;
 	UIElement* last;
 };
+
+struct PrimalWindow;
 
 struct UIContext {
 	Arena* arena;
@@ -29,7 +30,7 @@ struct UIContext {
 	UIKey activeKey[UIMouseButtonSlot_COUNT];
 	vec2 dragStartMouse;
 	Arena *dragDataArena;
-	String8 dragData;
+	vec2* dragData;
 	
 	// persistant UIElement state
 	UIElement *firstFreeElement;
@@ -115,6 +116,7 @@ b32 UI_ctrlRelease(UI_EventList *events, UI_CtrlSlot slot);
 b32 UI_isFocusHot();
 b32 UI_isFocusActive();
 UI_Signal UI_signalFromElement(UIElement* element);
+Rect1DF32 UI_scrollBoundsFromElement(UIElement *element, Axis2D axis);
 
 // layouts
 void UI_layoutRoot(UIElement* root, Axis2D axis);
@@ -133,6 +135,7 @@ vec2 UI_textPosFromElement(UIElement* element);
 void UI_beginBuild(PrimalWindow* window, UI_EventList* events, f32 deltaTime);
 void UI_endBuild();
 
+struct VulkanRendererContext;
 void UI_draw(VulkanRendererContext* context);
 
 // Extra stack helpers
@@ -151,6 +154,11 @@ void UI_setNextFixedPos(vec2 v);
 void UI_pushFixedRect(Rect2D rect);
 void UI_popFixedRect();
 void UI_setNextFixedRect(Rect2D rect);
+
+void UI_storeDragData(vec2 data);
+vec2 UI_loadDragData();
+
+vec2 UI_dragDelta();
 
 // NOTE(piero): Scope helpers
 #define UI_parent(value) DeferLoop(UI_pushParent(value), UI_popParent())

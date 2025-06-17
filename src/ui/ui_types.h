@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SDL3/SDL_events.h"
 #include "assets/asset.h"
 #include "core/core.h"
 #include "core/primal_string.h"
@@ -49,13 +50,6 @@ enum UIElementFlagsBits {
 	UIElementFlag_Clickable = UIElementFlag_MouseClickable | UIElementFlag_KeyboardClickable,
 };
 
-enum Axis2D {
-	Axis2D_X,
-	Axis2D_Y,
-	Axis2D_COUNT
-};
-#define Axis2D_Flip(a) ((Axis2D)(!(a)))
-
 enum UI_SizeType {
 	UISizeType_Pixels,
 	UISizeType_TextDim,
@@ -90,7 +84,7 @@ struct UI_Size {
 #define UI_Em(v, s) \
 	UI_Size { .type = UISizeType_Pixels, .value = v, .strictness = s }
 
-enum UI_FocusKind: u32 {
+enum UI_FocusKind : u32 {
 	UIFocusKind_Null,
 	UIFocusKind_On,
 	UIFocusKind_Off,
@@ -98,18 +92,18 @@ enum UI_FocusKind: u32 {
 	UIFocusKind_COUNT
 };
 
-enum UI_MouseButtonSlot: u32 {
+enum UI_MouseButtonSlot : u32 {
 	UIMouseButtonSlot_Left,
 	UIMouseButtonSlot_Middle,
 	UIMouseButtonSlot_Right,
 	UIMouseButtonSlot_COUNT
 };
 
-enum UI_TextAlignment: u32 {
- UITextAlignment_Left,
- UITextAlignment_Center,
- UITextAlignment_Right,
- UITextAlignment_COUNT,
+enum UI_TextAlignment : u32 {
+	UITextAlignment_Left,
+	UITextAlignment_Center,
+	UITextAlignment_Right,
+	UITextAlignment_COUNT,
 };
 
 struct UIElement_TextExt {
@@ -254,24 +248,12 @@ enum UI_EventKind {
 	UIEventKind_COUNT
 };
 
-using UI_EventFlags = u32;
-enum {
-	UIEventFlag_KeepMark = (1 << 0),
-	UIEventFlag_WordScan = (1 << 1),
-	UIEventFlag_ZeroDeltaOnSelect = (1 << 2),
-	UIEventFlag_PickSideOnSelect = (1 << 3),
-	UIEventFlag_Delete = (1 << 4),
-	UIEventFlag_Copy = (1 << 5),
-};
-
 struct UI_Event {
 	UI_EventKind kind;
-	UI_EventFlags flags;
 	UI_CtrlSlot ctrl_slot;
 	OS_Key key;
 	OS_Modifiers modifiers;
-	vec2 pos_2f32;
-	vec2 delta_2f32;
+	vec2 position;
 	vec2 delta;
 	String8 string;
 };
@@ -287,5 +269,20 @@ struct UI_EventList {
 	UI_EventNode* last;
 	u64 count;
 };
+
+// TEMP
+inline UI_EventKind sdlEventTypeToUIEventKind(SDL_EventType type) {
+	switch (type) {
+	case SDL_EVENT_MOUSE_BUTTON_DOWN:
+		return UIEventKind_Press;
+	case SDL_EVENT_MOUSE_BUTTON_UP:
+		return UIEventKind_Release;
+	case SDL_EVENT_MOUSE_WHEEL:
+		return UIEventKind_Scroll;
+
+	default:
+		return UIEventKind_Null;
+	}
+}
 
 }// namespace pm

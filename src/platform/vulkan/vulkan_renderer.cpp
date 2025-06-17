@@ -62,9 +62,7 @@ void rendererSetup(VulkanRendererContext* context) {
 	initFontData(context);
 	initUI(context);
 
-	// TODO(piero): Move this to its own function probably.
 	StackInitNils(context, transparency, 1.0f);
-	context->transparencyStack = StackCreate(context, transparency);
 
 	// Default lighting parameters
 	context->sceneData.ambientColor = glm::vec4(.4f);
@@ -86,7 +84,8 @@ void rendererSetup(VulkanRendererContext* context) {
 
 void rendererInitMemory(VulkanRendererContext* context) {
 	for (auto& frame : context->frames) {
-		frame.perFrameArena = arenaAlloc(Megabytes(256));
+		frame.perFrameArena = arenaAlloc(Gigabytes(2));
+		frame.perWindowArena = arenaAlloc(Gigabytes(2));
 	}
 }
 
@@ -736,13 +735,8 @@ void initVulkan(VulkanRendererContext* context) {
 }
 
 void initRenderTargets(VulkanRendererContext* context) {
-	VkExtent3D drawImageExtent{
-		static_cast<uint32_t>(context->rendererState->window->width),
-		static_cast<uint32_t>(context->rendererState->window->height),
-		1
-	};
-
-	// TODO(piero): what size should this be?
+	// Create render targets for 3d scene
+	// TODO(piero): Refactor this. Create a system that does this automatically based on a config file?
 	VkExtent3D sceneDrawImageExtent{
 		context->fullScreen ? static_cast<uint32_t>(context->rendererState->window->width) : 1448,
 		context->fullScreen ? static_cast<uint32_t>(context->rendererState->window->height - 80) : 700,
@@ -755,18 +749,10 @@ void initRenderTargets(VulkanRendererContext* context) {
 	drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
 	drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-
-	// Create render targets
-	// TODO(piero): Refactor this. Create a system that does this automatically based on a config file?
-	context->rendererState->window->renderTarget = createImage("drawImage", drawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
-
-	context->sceneDrawImage = createImage("scene drawImage", sceneDrawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
-
 	VkImageUsageFlags depthImageUsages{};
 	depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-	context->rendererState->window->depthTarget = createImage("depthImage", drawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
-
+	context->sceneDrawImage = createImage("scene drawImage", sceneDrawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
 	context->sceneDepthImage = createImage("scene depthImage", sceneDrawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
 }
 
@@ -836,8 +822,6 @@ void rendererCleanup(VulkanRendererContext* context) {
 	vkDestroyPipelineCache(context->device, context->pipelineCache, nullptr);
 
 	context->mainDeletionQueue.flush();
-
-	UI_destroyContext(context->mainUIContext);
 
 	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
 		destroyPrimalWindow(window, context->vmaAllocator, context->device, context->instance, nullptr);
@@ -1033,7 +1017,7 @@ void buildDrawBatches(VulkanRendererContext* context, std::vector<Model>& models
 	context->rendererState->rendererStats.drawBatchGenerationTimeAvg = context->rendererState->rendererStats.drawBatchGenerationTimeAvg * 0.95 + genTime * 0.05;
 }
 
-void rendererUpdate(VulkanRendererContext* context, float deltaTime) {
+void Renderer_update(VulkanRendererContext* context, float deltaTime) {
 	// TEMP(piero): frame count for random sequences on GPU
 	context->rendererState->rendererStats.frameCount++;
 
@@ -1042,7 +1026,7 @@ void rendererUpdate(VulkanRendererContext* context, float deltaTime) {
 	updateFontData(context);
 }
 
-void rendererDraw(VulkanRendererContext* context) {
+void Renderer_beginFrame(VulkanRendererContext* context) {
 	// wait until the gpu has finished rendering the last frame. Timeout of 1 second
 	VK_CHECK(vkWaitForFences(context->device, 1, &getCurrentFrame(context).renderFence, true, 1000000000));
 
@@ -1051,116 +1035,12 @@ void rendererDraw(VulkanRendererContext* context) {
 
 	arenaClear(getCurrentFrame(context).perFrameArena);
 
-	// Get next swapchain image for each swapchain/window we render to
+	getCurrentFrame(context).uiWindowBatches = { .top = nullptr, .free = nullptr, .autoPop = false };
+}
+
+void Renderer_endFrame(VulkanRendererContext* context) {
+	auto& commandBuffer = getCurrentFrame(context).commandBuffer;
 	auto currentFrameIndex = getCurrentFrameIndex(context);
-	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
-		auto e = vkAcquireNextImageKHR(context->device, window->swapchain.handle, 1000000000, window->swapchain.swapchainSemaphores.at(currentFrameIndex), nullptr, &window->nextImageIndex);
-		if (e == VK_ERROR_OUT_OF_DATE_KHR) {
-			window->resizeRequested = true;
-			return;
-		}
-	}
-
-	VK_CHECK(vkResetFences(context->device, 1, &getCurrentFrame(context).renderFence));
-
-	// Build draw batches
-	buildDrawBatches(context, context->loadedModels);
-
-	auto commandBuffer = getCurrentFrame(context).commandBuffer;
-
-	VK_CHECK(vkResetCommandBuffer(commandBuffer, 0));
-
-	auto commandBeginInfo = commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-
-	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &commandBeginInfo));
-
-	vkCmdResetQueryPool(commandBuffer, context->timestampPool, 0, 128);
-	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, context->timestampPool, 0);
-
-	// transition GBuffer targets so compute can write to them
-	/*
-	transitionImage(commandBuffer, context->gbuffer.albedo.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-	transitionImage(commandBuffer, context->gbuffer.irradiance.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-	transitionImage(commandBuffer, context->gbuffer.depth.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-
-	// TEMP: clear depth buffer
-	VkClearColorValue clearValue = {};
-	clearValue.float32[0] = 0.0f;
-	clearValue.float32[1] = 0.0f;
-	clearValue.float32[2] = 0.0f;
-	clearValue.float32[3] = 0.0f;
-
-	VkImageSubresourceRange range = {};
-	range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	range.baseMipLevel = 0;
-	range.levelCount = 1;
-	range.baseArrayLayer = 0;
-	range.layerCount = 1;
-
-	vkCmdClearColorImage(
-		commandBuffer,
-		context->gbuffer.depth.image,
-		VK_IMAGE_LAYOUT_GENERAL,
-		&clearValue,
-		1,
-		&range);
-
-	drawToGBuffer(context, commandBuffer);
-	*/
-
-	// transition render targets into correct layouts
-	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
-		transitionImage(commandBuffer, window->renderTarget.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-		transitionImage(commandBuffer, window->depthTarget.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-	}
-
-	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	transitionImage(commandBuffer, context->sceneDepthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-
-	vkCmdResetQueryPool(commandBuffer, context->pipelineStatisticsPool, 0, 1);
-	vkCmdBeginQuery(commandBuffer, context->pipelineStatisticsPool, 0, 0);
-
-	// drawGeometry(context, commandBuffer);
-	drawTerrain(context, commandBuffer);
-	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-	// blit gbuffer to sceneDrawImage
-	/*
-	transitionImage(commandBuffer, context->gbuffer.albedo.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	transitionImage(commandBuffer, context->gbuffer.irradiance.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	transitionImage(commandBuffer, context->gbuffer.depth.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-
-	blitGBuffer(context, commandBuffer);
-
-	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	*/
-
-	drawUI(context, commandBuffer);
-
-	vkCmdEndQuery(commandBuffer, context->pipelineStatisticsPool, 0);
-
-	// transition the render targets into their correct transfer layouts
-	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
-		transitionImage(commandBuffer, window->renderTarget.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-	}
-
-	// Copy render target to swapchain image
-	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
-		// get all swapchains ready to be copied to
-		transitionImage(commandBuffer, window->swapchain.images[window->nextImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-		// execute a copy from the draw image into the swapchain
-		VkExtent2D sourceImageSize{ .width = window->renderTarget.imageExtent.width, .height = window->renderTarget.imageExtent.height };
-		copyImageToImage(commandBuffer, window->renderTarget.image, window->swapchain.images[window->nextImageIndex], sourceImageSize, window->swapchain.extent);
-
-		// set swapchain image layout to Present so we can show it on the screen
-		transitionImage(commandBuffer, window->swapchain.images[window->nextImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-	}
-
-	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, context->timestampPool, 1);
-
-	VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
 	// prepare the submission to the queue.
 	// we want to wait on the swapchainSemaphore, as that semaphore is signaled when the swapchain is ready
@@ -1224,6 +1104,92 @@ void rendererDraw(VulkanRendererContext* context) {
 	context->frameNumber++;
 }
 
+void Renderer_beginWindow(VulkanRendererContext* context, PrimalWindow* window) {
+	// Per-Window data
+	arenaClear(getCurrentFrame(context).perWindowArena);
+	context->transparencyStack = StackCreate(context, transparency);
+
+	// Create a window batch for this window
+	auto* newWindowBatchNode = PushStruct(getCurrentFrame(context).perFrameArena, WindowBatchNode);
+	auto* windowBatch = PushStruct(getCurrentFrame(context).perFrameArena, UIWindowBatch);
+	windowBatch->window = window;
+
+	newWindowBatchNode->value = windowBatch;
+	StackPush(getCurrentFrame(context).uiWindowBatches.top, newWindowBatchNode);
+}
+
+void Renderer_endWindow(VulkanRendererContext* context) {
+
+}
+
+void Renderer_draw(VulkanRendererContext* context) {
+	// Build draw batches
+	buildDrawBatches(context, context->loadedModels);
+
+	// Get next swapchain image for each swapchain/window we render to
+	auto currentFrameIndex = getCurrentFrameIndex(context);
+	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
+		auto e = vkAcquireNextImageKHR(context->device, window->swapchain.handle, 1000000000, window->swapchain.swapchainSemaphores.at(currentFrameIndex), nullptr, &window->nextImageIndex);
+		if (e == VK_ERROR_OUT_OF_DATE_KHR) {
+			window->resizeRequested = true;
+			return;
+		}
+	}
+
+	VK_CHECK(vkResetFences(context->device, 1, &getCurrentFrame(context).renderFence));
+
+	auto commandBuffer = getCurrentFrame(context).commandBuffer;
+
+	auto commandBeginInfo = commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &commandBeginInfo));
+
+	vkCmdResetQueryPool(commandBuffer, context->timestampPool, 0, 128);
+	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, context->timestampPool, 0);
+
+	// transition render targets into correct layouts
+	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
+		transitionImage(commandBuffer, window->renderTarget.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		transitionImage(commandBuffer, window->depthTarget.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+	}
+
+	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	transitionImage(commandBuffer, context->sceneDepthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+
+	vkCmdResetQueryPool(commandBuffer, context->pipelineStatisticsPool, 0, 1);
+	vkCmdBeginQuery(commandBuffer, context->pipelineStatisticsPool, 0, 0);
+
+	// drawGeometry(context, commandBuffer);
+	drawTerrain(context, commandBuffer);
+	transitionImage(commandBuffer, context->sceneDrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	drawUI(context, commandBuffer);
+
+	vkCmdEndQuery(commandBuffer, context->pipelineStatisticsPool, 0);
+
+	// transition the render targets into their correct transfer layouts
+	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
+		transitionImage(commandBuffer, window->renderTarget.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	}
+
+	// Copy render target to swapchain image
+	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
+		// get all swapchains ready to be copied to
+		transitionImage(commandBuffer, window->swapchain.images[window->nextImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+		// execute a copy from the draw image into the swapchain
+		VkExtent2D sourceImageSize{ .width = window->renderTarget.imageExtent.width, .height = window->renderTarget.imageExtent.height };
+		copyImageToImage(commandBuffer, window->renderTarget.image, window->swapchain.images[window->nextImageIndex], sourceImageSize, window->swapchain.extent);
+
+		// set swapchain image layout to Present so we can show it on the screen
+		transitionImage(commandBuffer, window->swapchain.images[window->nextImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+	}
+
+	vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, context->timestampPool, 1);
+
+	VK_CHECK(vkEndCommandBuffer(commandBuffer));
+}
+
 void drawToGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
 	// allocate a new uniform buffer for the scene data
 	// This should be deleted each frame.
@@ -1275,15 +1241,16 @@ void blitGBuffer(VulkanRendererContext* context, VkCommandBuffer commandBuffer) 
 }
 
 void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
+	/*
 	auto genStart = std::chrono::system_clock::now();
 
-	getCurrentFrame(context).uiWindowBatches.clear();
 	UI_draw(context);
 	Renderer_submit(context);
 
 	auto genElapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - genStart);
 
 	context->rendererState->rendererStats.uiDrawBatchGenerationTimeAvg = context->rendererState->rendererStats.uiDrawBatchGenerationTimeAvg * 0.95 + (static_cast<float>(genElapsed.count()) / 1000.0f) * 0.05;
+	*/
 
 	auto uiStart = std::chrono::system_clock::now();
 
@@ -1292,8 +1259,9 @@ void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
 	};
 
 
-	for (auto& windowBatch : getCurrentFrame(context).uiWindowBatches) {
-		auto window = windowBatch.window;
+	for (auto windowBatchNode = getCurrentFrame(context).uiWindowBatches.top; windowBatchNode != nullptr; windowBatchNode = windowBatchNode->next) {
+		auto* windowBatch = windowBatchNode->value;
+		auto* window = windowBatch->window;
 		VkRenderingAttachmentInfo colorAttachment = attachmentInfo(window->renderTarget.imageView, &clearColor, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 		VkRenderingAttachmentInfo depthAttachment = depthAttachmentInfo(window->depthTarget.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
@@ -1320,7 +1288,7 @@ void drawUI(VulkanRendererContext* context, VkCommandBuffer commandBuffer) {
 		scissor.extent.height = extent.height;
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-		for (auto* batchNode = windowBatch.firstDrawBatch; batchNode != nullptr; batchNode = batchNode->next) {
+		for (auto* batchNode = windowBatch->firstDrawBatch; batchNode != nullptr; batchNode = batchNode->next) {
 			auto& drawBatch = batchNode->drawBatch;
 			auto materialInstance = drawBatch.material;
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, materialInstance.material->pipeline);
@@ -1827,10 +1795,6 @@ void initFontData(VulkanRendererContext* context) {
 	context->sourceCodeFont = loadFontSDF("SauceCodePro-Light", "res/fonts/SauceCodePro-Light.png", "res/fonts/SauceCodePro-Light.json");
 	// arialFont = loadFontSDF("Arial", "res/fonts/arial.png", "res/fonts/arial.json");
 
-	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
-		window->fontData = createBuffer(std::format("fontUniformBuffer-{}", window->id), sizeof(FontUniformData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	}
-
 	auto extents = VkExtent3D{
 		context->sourceCodeFont.image.width,
 		context->sourceCodeFont.image.height,
@@ -1854,6 +1818,7 @@ void updateUIData(VulkanRendererContext* context, f32 deltaTime) {
 		memcpy(window->uiData.info.pMappedData, &uiUniformData, sizeof(UIUniformData));
 	}
 
+	/*
 	auto& rendererState = context->rendererState;
 	auto& sceneData = context->sceneData;
 
@@ -1892,8 +1857,6 @@ void updateUIData(VulkanRendererContext* context, f32 deltaTime) {
 		sceneData.sunlightColor.w);
 
 	auto start = std::chrono::high_resolution_clock::now();
-
-	UI_setCurrentContext(context->mainUIContext);
 
 	UI_EventList event{};
 	UI_beginBuild(context->rendererState->window, &event, deltaTime);
@@ -1953,19 +1916,39 @@ void updateUIData(VulkanRendererContext* context, f32 deltaTime) {
 
 	auto uiLayoutTime = std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - start).count();
 	context->rendererState->rendererStats.uiLayoutTimeAvg = context->rendererState->rendererStats.uiLayoutTimeAvg * 0.95 + uiLayoutTime * 0.05;
+	*/
+}
+
+void Renderer_initWindow(VulkanRendererContext* context, PrimalWindow* window) {
+	// TEMP(piero): This is a hack for now. I don't think the window itself should store these buffers.
+	window->uiData = createBuffer(std::format("uiUniformBuffer-{}", window->id), sizeof(UIUniformData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	window->fontData = createBuffer(std::format("fontUniformBuffer-{}", window->id), sizeof(FontUniformData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+
+	VkExtent3D drawImageExtent{
+		(u32)window->width,
+		(u32)window->height,
+		1
+	};
+
+	VkImageUsageFlags drawImageUsages{};
+	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
+	drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+	VkImageUsageFlags depthImageUsages{};
+	depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+	// Create render targets
+	window->renderTarget = createImage(std::format("drawImage-{}", window->id), drawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_R16G16B16A16_SFLOAT, drawImageUsages, false);
+	window->depthTarget = createImage(std::format("depthImage-{}", window->id), drawImageExtent, context->device, context->vmaAllocator, VK_FORMAT_D32_SFLOAT, depthImageUsages, false);
 }
 
 void initUI(VulkanRendererContext* context) {
-	context->mainUIContext = UI_createContext();
-
 	// Register image to UI system
 	context->sceneTextureId = registerImage(context, &context->sceneDrawImage);
 
 	writeUniform(context, &context->uiViewportMaterialInstance, 1, 0, context->sceneDrawImage.imageView, context->defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, context->sceneTextureId);
-
-	for (auto* window = PrimalEngine::get().firstWindow; window != nullptr; window = window->next) {
-		window->uiData = createBuffer(std::format("uiUniformBuffer-{}", window->id), sizeof(UIUniformData), context->vmaAllocator, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	}
 
 	updateUIData(context, 0.0f);
 }
@@ -2127,11 +2110,8 @@ GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> in
 }
 
 DrawBatchNode* Renderer_getBatch(VulkanRendererContext* context, DrawBatchType type) {
-	if (getCurrentFrame(context).uiWindowBatches.size() <= 0) {
-		return nullptr;
-	}
-
-	for (auto* batchNode = getCurrentFrame(context).uiWindowBatches[0].firstDrawBatch; batchNode != nullptr; batchNode = batchNode->next) {
+	auto currentWindowBatchNode = getCurrentFrame(context).uiWindowBatches.top;
+	for (auto* batchNode = currentWindowBatchNode->value->firstDrawBatch; batchNode != nullptr; batchNode = batchNode->next) {
 		auto& batch = batchNode->drawBatch;
 		if (batch.type == type) {
 			return batchNode;
@@ -2141,12 +2121,10 @@ DrawBatchNode* Renderer_getBatch(VulkanRendererContext* context, DrawBatchType t
 }
 
 DrawBatchNode* Renderer_createBatch(VulkanRendererContext* context, DrawBatchType type) {
-	if (getCurrentFrame(context).uiWindowBatches.size() <= 0) {
-		getCurrentFrame(context).uiWindowBatches.emplace_back(context->rendererState->window);
-	}
+	auto currentWindowBatchNode = getCurrentFrame(context).uiWindowBatches.top;
 	auto* node = new DrawBatchNode();
 	node->drawBatch.type = type;
-	QueuePush(getCurrentFrame(context).uiWindowBatches[0].firstDrawBatch, getCurrentFrame(context).uiWindowBatches[0].lastDrawBatch, node);
+	QueuePush(currentWindowBatchNode->value->firstDrawBatch, currentWindowBatchNode->value->lastDrawBatch, node);
 	return node;
 }
 
@@ -2165,73 +2143,75 @@ DrawBatchNode* Renderer_createBatch(VulkanRendererContext* context, DrawBatchTyp
  */
 
 void Renderer_submit(VulkanRendererContext* context) {
-	for (auto* batchNode = getCurrentFrame(context).uiWindowBatches[0].firstDrawBatch; batchNode != nullptr; batchNode = batchNode->next) {
-		auto& batch = batchNode->drawBatch;
-		batch.meshBuffers = uploadMesh(context, batch.indices, batch.vertices, "uiMeshBuffer");
+	for (auto* windowBatchNode = getCurrentFrame(context).uiWindowBatches.top; windowBatchNode != nullptr; windowBatchNode = windowBatchNode->next) {
+		auto* windowBatch = windowBatchNode->value;
+		auto* window = windowBatch->window;
+		for (auto* batchNode = windowBatch->firstDrawBatch; batchNode != nullptr; batchNode = batchNode->next) {
+			auto& batch = batchNode->drawBatch;
+			batch.meshBuffers = uploadMesh(context, batch.indices, batch.vertices, "uiMeshBuffer");
 
-		getCurrentFrame(context).deletionQueue.push([context, batch]() {
-			destroyBuffer(context->vmaAllocator, batch.meshBuffers.vertexBuffer);
-			destroyBuffer(context->vmaAllocator, batch.meshBuffers.indexBuffer);
-		});
-
-		auto window = context->rendererState->window;
-
-		if (batch.type == DRAW_BATCH_UI) {
-			auto uiDrawCommandsBuffer = createBuffer("uiIndirectCommandBuffer", sizeof(UIIndirectCommand) * batch.uiDrawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			memcpy(uiDrawCommandsBuffer.info.pMappedData, batch.uiDrawCommands.data(), sizeof(UIIndirectCommand) * batch.uiDrawCommands.size());
-
-			auto uiDrawDataBuffer = createBuffer("uiDrawDataBuffer", sizeof(UIDrawData) * batch.uiDrawData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			memcpy(uiDrawDataBuffer.info.pMappedData, batch.uiDrawData.data(), sizeof(UIDrawData) * batch.uiDrawData.size());
-
-			auto uiMaterialDataBuffer = createBuffer("uiMaterialDataBuffer", sizeof(UIMaterialData) * batch.uiMaterialData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			memcpy(uiMaterialDataBuffer.info.pMappedData, batch.uiMaterialData.data(), sizeof(UIMaterialData) * batch.uiMaterialData.size());
-
-			batch.commands = {
-				.buffer = uiDrawCommandsBuffer,
-				.offset = offsetof(UIIndirectCommand, command),
-				.size = (u32)batch.uiDrawCommands.size(),
-				.stride = sizeof(UIIndirectCommand)
-			};
-			batch.material = createMaterialInstance(&context->uiMaterial);
-
-			batch.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, batch.material.material->descriptorLayouts.at(0));
-			writeUniform(context, &batch.material, 0, 0, window->uiData.buffer, sizeof(UIUniformData), 0);
-			writeUniform(context, &batch.material, 0, 1, uiDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * batch.uiDrawCommands.size(), 0);
-			writeUniform(context, &batch.material, 0, 2, uiDrawDataBuffer.buffer, sizeof(UIDrawData) * batch.uiDrawData.size(), 0);
-			writeUniform(context, &batch.material, 0, 3, uiMaterialDataBuffer.buffer, sizeof(UIMaterialData) * batch.uiMaterialData.size(), 0);
-
-			getCurrentFrame(context).deletionQueue.push([context, batch, uiDrawCommandsBuffer, uiDrawDataBuffer, uiMaterialDataBuffer]() {
-				destroyBuffer(context->vmaAllocator, uiDrawCommandsBuffer);
-				destroyBuffer(context->vmaAllocator, uiDrawDataBuffer);
-				destroyBuffer(context->vmaAllocator, uiMaterialDataBuffer);
+			getCurrentFrame(context).deletionQueue.push([context, batch]() {
+				destroyBuffer(context->vmaAllocator, batch.meshBuffers.vertexBuffer);
+				destroyBuffer(context->vmaAllocator, batch.meshBuffers.indexBuffer);
 			});
-		} else if (batch.type == DRAW_BATCH_TEXT) {
-			auto textDrawCommandsBuffer = createBuffer("textIndirectCommandBuffer", sizeof(UIIndirectCommand) * batch.textDrawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			memcpy(textDrawCommandsBuffer.info.pMappedData, batch.textDrawCommands.data(), sizeof(UIIndirectCommand) * batch.textDrawCommands.size());
 
-			auto textDrawDataBuffer = createBuffer("textTransformBuffer", sizeof(FontDrawData) * batch.textDrawData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			memcpy(textDrawDataBuffer.info.pMappedData, batch.textDrawData.data(), sizeof(FontDrawData) * batch.textDrawData.size());
+			if (batch.type == DRAW_BATCH_UI) {
+				auto uiDrawCommandsBuffer = createBuffer("uiIndirectCommandBuffer", sizeof(UIIndirectCommand) * batch.uiDrawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+				memcpy(uiDrawCommandsBuffer.info.pMappedData, batch.uiDrawCommands.data(), sizeof(UIIndirectCommand) * batch.uiDrawCommands.size());
 
-			batch.commands = {
-				.buffer = textDrawCommandsBuffer,
-				.offset = offsetof(UIIndirectCommand, command),
-				.size = (u32)batch.textDrawCommands.size(),
-				.stride = sizeof(UIIndirectCommand)
-			};
+				auto uiDrawDataBuffer = createBuffer("uiDrawDataBuffer", sizeof(UIDrawData) * batch.uiDrawData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+				memcpy(uiDrawDataBuffer.info.pMappedData, batch.uiDrawData.data(), sizeof(UIDrawData) * batch.uiDrawData.size());
 
-			batch.material = createMaterialInstance(&context->uiTextMaterial);
+				auto uiMaterialDataBuffer = createBuffer("uiMaterialDataBuffer", sizeof(UIMaterialData) * batch.uiMaterialData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+				memcpy(uiMaterialDataBuffer.info.pMappedData, batch.uiMaterialData.data(), sizeof(UIMaterialData) * batch.uiMaterialData.size());
 
-			// NOTE(piero): Allocate a frame descriptor set and write uniforms for this material.
-			batch.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, batch.material.material->descriptorLayouts.at(0));
-			writeUniform(context, &batch.material, 0, 0, window->fontData.buffer, sizeof(FontUniformData), 0);
-			writeUniform(context, &batch.material, 0, 1, context->sourceCodeFontTexture.imageView, context->sourceCodeFontTexture.sampler, context->sourceCodeFontTexture.imageLayout);
-			writeUniform(context, &batch.material, 0, 2, textDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * batch.textDrawCommands.size(), 0);
-			writeUniform(context, &batch.material, 0, 3, textDrawDataBuffer.buffer, sizeof(FontDrawData) * batch.textDrawData.size(), 0);
+				batch.commands = {
+					.buffer = uiDrawCommandsBuffer,
+					.offset = offsetof(UIIndirectCommand, command),
+					.size = (u32)batch.uiDrawCommands.size(),
+					.stride = sizeof(UIIndirectCommand)
+				};
+				batch.material = createMaterialInstance(&context->uiMaterial);
 
-			getCurrentFrame(context).deletionQueue.push([context, textDrawCommandsBuffer, textDrawDataBuffer]() {
-				destroyBuffer(context->vmaAllocator, textDrawCommandsBuffer);
-				destroyBuffer(context->vmaAllocator, textDrawDataBuffer);
-			});
+				batch.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, batch.material.material->descriptorLayouts.at(0));
+				writeUniform(context, &batch.material, 0, 0, window->uiData.buffer, sizeof(UIUniformData), 0);
+				writeUniform(context, &batch.material, 0, 1, uiDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * batch.uiDrawCommands.size(), 0);
+				writeUniform(context, &batch.material, 0, 2, uiDrawDataBuffer.buffer, sizeof(UIDrawData) * batch.uiDrawData.size(), 0);
+				writeUniform(context, &batch.material, 0, 3, uiMaterialDataBuffer.buffer, sizeof(UIMaterialData) * batch.uiMaterialData.size(), 0);
+
+				getCurrentFrame(context).deletionQueue.push([context, batch, uiDrawCommandsBuffer, uiDrawDataBuffer, uiMaterialDataBuffer]() {
+					destroyBuffer(context->vmaAllocator, uiDrawCommandsBuffer);
+					destroyBuffer(context->vmaAllocator, uiDrawDataBuffer);
+					destroyBuffer(context->vmaAllocator, uiMaterialDataBuffer);
+				});
+			} else if (batch.type == DRAW_BATCH_TEXT) {
+				auto textDrawCommandsBuffer = createBuffer("textIndirectCommandBuffer", sizeof(UIIndirectCommand) * batch.textDrawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+				memcpy(textDrawCommandsBuffer.info.pMappedData, batch.textDrawCommands.data(), sizeof(UIIndirectCommand) * batch.textDrawCommands.size());
+
+				auto textDrawDataBuffer = createBuffer("textTransformBuffer", sizeof(FontDrawData) * batch.textDrawData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+				memcpy(textDrawDataBuffer.info.pMappedData, batch.textDrawData.data(), sizeof(FontDrawData) * batch.textDrawData.size());
+
+				batch.commands = {
+					.buffer = textDrawCommandsBuffer,
+					.offset = offsetof(UIIndirectCommand, command),
+					.size = (u32)batch.textDrawCommands.size(),
+					.stride = sizeof(UIIndirectCommand)
+				};
+
+				batch.material = createMaterialInstance(&context->uiTextMaterial);
+
+				// NOTE(piero): Allocate a frame descriptor set and write uniforms for this material.
+				batch.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, batch.material.material->descriptorLayouts.at(0));
+				writeUniform(context, &batch.material, 0, 0, window->fontData.buffer, sizeof(FontUniformData), 0);
+				writeUniform(context, &batch.material, 0, 1, context->sourceCodeFontTexture.imageView, context->sourceCodeFontTexture.sampler, context->sourceCodeFontTexture.imageLayout);
+				writeUniform(context, &batch.material, 0, 2, textDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * batch.textDrawCommands.size(), 0);
+				writeUniform(context, &batch.material, 0, 3, textDrawDataBuffer.buffer, sizeof(FontDrawData) * batch.textDrawData.size(), 0);
+
+				getCurrentFrame(context).deletionQueue.push([context, textDrawCommandsBuffer, textDrawDataBuffer]() {
+					destroyBuffer(context->vmaAllocator, textDrawCommandsBuffer);
+					destroyBuffer(context->vmaAllocator, textDrawDataBuffer);
+				});
+			}
 		}
 	}
 }
@@ -2304,8 +2284,8 @@ void Renderer_pushText(VulkanRendererContext* context, vec2 offsetPosition, UIEl
 }
 
 // Local macros to use specific arenas for stacks
-#define StackPushImpl(state, name_upper, name_lower, new_value) StackPushImplArena(state, name_upper, name_lower, new_value, getCurrentFrame(state).perFrameArena)
-#define StackSetNextImpl(state, name_upper, name_lower, new_value) StackSetNextImplArena(state, name_upper, name_lower, new_value, getCurrentFrame(state).perFrameArena)
+#define StackPushImpl(state, name_upper, name_lower, new_value) StackPushImplArena(state, name_upper, name_lower, new_value, getCurrentFrame(state).perWindowArena)
+#define StackSetNextImpl(state, name_upper, name_lower, new_value) StackSetNextImplArena(state, name_upper, name_lower, new_value, getCurrentFrame(state).perWindowArena)
 
 f32 Renderer_pushTransparency(VulkanRendererContext* context, f32 value) { StackPushImpl(context, Transparency, transparency, value); }
 f32 Renderer_popTransparency(VulkanRendererContext* context) { StackPopImpl(context, Transparency, transparency); }

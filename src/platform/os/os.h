@@ -54,7 +54,7 @@ inline void OS_abort() {
 
 inline vec2 OS_mouseFromWindow() {
 	vec2 res{};
-	SDL_GetGlobalMouseState(&res.x, &res.y);
+	SDL_GetMouseState(&res.x, &res.y);
 	return res;
 }
 

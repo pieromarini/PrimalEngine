@@ -72,11 +72,19 @@ function(set_project_warnings project_name)
       -Wuseless-cast # warn if you perform a cast to the same type
   )
 
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CLANG_WARNINGS ${CLANG_WARNINGS} -O0 -fno-inline-functions)
+    set(GCC_WARNINGS ${GCC_WARNINGS} -O0)
+  endif()
+
   if(MSVC)
+    message("Setting MSCV warnings")
     set(PROJECT_WARNINGS ${MSVC_WARNINGS})
   elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    message("Setting Clang warnings")
     set(PROJECT_WARNINGS ${CLANG_WARNINGS})
   else()
+		message("Setting GCC warnings")
     set(PROJECT_WARNINGS ${GCC_WARNINGS})
   endif()
 

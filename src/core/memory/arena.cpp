@@ -37,6 +37,8 @@ Arena* arenaAlloc(ArenaParams params) {
 	arena->pos = ARENA_HEADER_SIZE;
 	arena->commited = commitSize;
 	arena->reserved = reserveSize;
+	AsanPoisonMemoryRegion(base, commitSize);
+ 	AsanUnpoisonMemoryRegion(base, ARENA_HEADER_SIZE);
 
 	if (arena->nameSize != 0) {
 		auto namePtr = (u8*)arenaPush(arena, arena->nameSize, 1);
@@ -86,6 +88,7 @@ void* arenaPush(Arena* arena, u64 size, u64 align) {
 	if (current->commited >= newPos) {
 		result = (u8*)current + lastPos;
 		current->pos = newPos;
+		AsanUnpoisonMemoryRegion(result, size);
 	}
 
 	if (result == nullptr) {
@@ -111,6 +114,7 @@ void arenaPopTo(Arena* arena, u64 pos) {
 	arena->current = current;
 	u64 new_pos = big_pos - current->basePos;
 	assert(new_pos <= current->pos);
+	AsanPoisonMemoryRegion((u8*)current + new_pos, (current->pos - new_pos));
 	current->pos = new_pos;
 }
 

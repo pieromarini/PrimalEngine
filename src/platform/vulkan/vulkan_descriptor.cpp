@@ -44,7 +44,7 @@ void DescriptorAllocator::init(VkDevice device, uint32_t initialSets, std::span<
 	}
 
 	VkDescriptorPool newPool = createPool(device, initialSets, poolRatios);
-	setsPerPool = uint32_t(setsPerPool * 1.5);
+	setsPerPool = uint32_t(initialSets * 1.5);
 	readyPools.push_back(newPool);
 }
 

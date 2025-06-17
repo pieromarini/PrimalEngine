@@ -96,6 +96,35 @@ using f64 = double;
 #define MemoryZeroArray(arr) MemoryZero((arr), sizeof(arr))
 
 #if COMPILER_MSVC
+# if defined(__SANITIZE_ADDRESS__)
+#  define ASAN_ENABLED 1
+#  define no_asan __declspec(no_sanitize_address)
+# else
+#  define no_asan
+# endif
+#elif COMPILER_CLANG
+# if defined(__has_feature)
+#  if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
+#   define ASAN_ENABLED 1
+#  endif
+# endif
+# define no_asan __attribute__((no_sanitize("address")))
+#else
+# define no_asan
+#endif
+
+#if ASAN_ENABLED
+#pragma comment(lib, "clang_rt.asan-x86_64.lib")
+void __asan_poison_memory_region(void const volatile *addr, size_t size);
+void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
+#define AsanPoisonMemoryRegion(addr, size)   __asan_poison_memory_region((addr), (size))
+#define AsanUnpoisonMemoryRegion(addr, size) __asan_unpoison_memory_region((addr), (size))
+#else
+# define AsanPoisonMemoryRegion(addr, size)   ((void)(addr), (void)(size))
+# define AsanUnpoisonMemoryRegion(addr, size) ((void)(addr), (void)(size))
+#endif
+
+#if COMPILER_MSVC
 #define per_thread __declspec(thread)
 #elif COMPILER_CLANG || COMPILER_GCC
 #define per_thread __thread
@@ -175,6 +204,13 @@ struct String32 {
 	u32* str;
 	u64 size;
 };
+
+enum Axis2D {
+	Axis2D_X,
+	Axis2D_Y,
+	Axis2D_COUNT
+};
+#define Axis2D_Flip(a) ((Axis2D)(!(a)))
 
 }// namespace pm
 
