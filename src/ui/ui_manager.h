@@ -98,7 +98,7 @@ UIElement_Rec UIElement_recurseDepthFirst(UIElement *element, UIElement *stopper
 bool UIElement_isNil(UIElement* element);
 #define UIElement_setNil(b) ((b) = &nilUIElement)
 
-UIElement* UIElement_create(UI_ElementFlags flags, char* fmt, ...);
+UIElement* UIElement_create(UI_ElementFlags flags, const char* fmt, ...);
 UIElement* UIElement_create(UI_ElementFlags flags, String8 str);
 UIElement* UIElement_createFromKey(UI_ElementFlags flags, UIKey key);
 UIElement* UIElement_fromKey(UIKey key);

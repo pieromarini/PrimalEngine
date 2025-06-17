@@ -25,7 +25,7 @@ u8 charToUpper(u8 c);
 u8 charToLower(u8 c);
 u8 charToForwardSlash(u8 c);
 
-u64 calculateCStringLength(char* str);
+u64 calculateCStringLength(const char* str);
 
 String8 Str8(u8* str, u64 size);
 
@@ -40,8 +40,8 @@ String32 Str32(u32* str, u64 size);
 
 // Arena functionality
 String8 PushStr8Copy(Arena* arena, String8 string);
-String8 PushStr8FV(Arena* arena, char* fmt, va_list args);
-String8 PushStr8F(Arena* arena, char* fmt, ...);
+String8 PushStr8FV(Arena* arena, const char* fmt, va_list args);
+String8 PushStr8F(Arena* arena, const char* fmt, ...);
 String8 PushStr8FillByte(Arena* arena, u64 size, u8 byte);
 
 // matching

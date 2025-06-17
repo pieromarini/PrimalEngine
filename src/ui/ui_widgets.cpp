@@ -17,7 +17,7 @@ UI_Signal UI_Label(String8 string) {
 	return result;
 }
 
-UI_Signal UI_LabelF(char* fmt, ...) {
+UI_Signal UI_LabelF(const char* fmt, ...) {
 	auto scratch = ScratchBegin();
 
 	va_list args = nullptr;

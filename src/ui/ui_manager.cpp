@@ -127,7 +127,7 @@ bool UIElement_isNil(UIElement* element) {
 	return element == nullptr || element == &nilUIElement;
 }
 
-UIElement* UIElement_create(UI_ElementFlags flags, char* fmt, ...) {
+UIElement* UIElement_create(UI_ElementFlags flags, const char* fmt, ...) {
 	auto scratch = ScratchBegin();
 
 	va_list args;

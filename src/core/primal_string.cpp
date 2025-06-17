@@ -44,7 +44,7 @@ u8 charToForwardSlash(u8 c) {
 	return (c == '\\' ? '/' : c);
 }
 
-u64 calculateCStringLength(char* str) {
+u64 calculateCStringLength(const char* str) {
 	u64 length = 0;
 	for (; str[length]; length += 1);
 	return length;
@@ -87,7 +87,7 @@ String8 PushStr8Copy(Arena* arena, String8 string) {
 	return res;
 }
 
-String8 PushStr8FV(Arena* arena, char* fmt, va_list args) {
+String8 PushStr8FV(Arena* arena, const char* fmt, va_list args) {
 	String8 result = { .str = nullptr };
 	va_list args2 = nullptr;
 	va_copy(args2, args);
@@ -98,7 +98,7 @@ String8 PushStr8FV(Arena* arena, char* fmt, va_list args) {
 	return result;
 }
 
-String8 PushStr8F(Arena* arena, char* fmt, ...) {
+String8 PushStr8F(Arena* arena, const char* fmt, ...) {
 	String8 result = { .str = nullptr };
 	va_list args = nullptr;
 	va_start(args, fmt);
