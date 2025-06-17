@@ -1,4 +1,3 @@
-#include <cinttypes>
 #include "assets/image_loader.h"
 #include "core/core.h"
 #include "core/data_structures/stack.h"
