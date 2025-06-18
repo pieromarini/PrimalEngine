@@ -25,7 +25,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
-# Intel Threading Library. Not working for mac compilation right now (?)
 if(!APPLE)
   find_package(TBB COMPONENTS tbbmalloc tbbmalloc_proxy tbb_preview)
 endif()
@@ -62,10 +61,6 @@ set_project_warnings(project_warnings)
 include(cmake/Sanitizers.cmake)
 enable_sanitizers(project_options)
 
-# Doxygen
-include(cmake/Doxygen.cmake)
-enable_doxygen()
-
 # Check that all submodules are present
 include(cmake/SubmodulesCheck.cmake)
 check_submodules()
@@ -75,13 +70,6 @@ include(FetchContent)
 set(FETCHCONTENT_BASE_DIR ${PROJECT_SOURCE_DIR}/extern CACHE PATH "Missing description." FORCE)
 
 option(BUILD_SHARED_LIBS "Enable compilation of shared libraries" ON)
-option(ENABLE_TESTING "Enable Test Builds" OFF)
-
-if(ENABLE_TESTING)
-  enable_testing()
-  message("Building Tests")
-  add_subdirectory(tests)
-endif()
 
 # ============ Libraries / Linking ============ #
 include(cmake/SrcList.cmake)
@@ -91,7 +79,7 @@ set(SOURCES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(SANDBOX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sandbox")
 set(ENGINE_LIB "primal_engine")
 
-add_library(${ENGINE_LIB} STATIC ${engine_sources})
+add_library(${ENGINE_LIB} STATIC ${ENGINE_SOURCES})
 
 target_include_directories(${ENGINE_LIB} PUBLIC ${SOURCES_DIR})
 target_compile_definitions(${ENGINE_LIB} PUBLIC GLM_FORCE_DEPTH_ZERO_TO_ONE)
@@ -200,7 +188,7 @@ set(KTX_INCLUDE_DIRS
 add_library(ktx SHARED ${KTX_SOURCES})
 target_compile_definitions(ktx PUBLIC LIBKTX)
 if (WIN32)
-	target_compile_definitions(ktx PUBLIC "KTX_API=__declspec(dllexport)")
+  target_compile_definitions(ktx PUBLIC "KTX_API=__declspec(dllexport)")
 endif()
 target_compile_definitions(ktx PUBLIC KTX_FEATURE_WRITE=0)
 target_compile_definitions(ktx PUBLIC BASISD_SUPPORT_KTX2_ZSTD=0)
@@ -209,16 +197,9 @@ target_compile_definitions(ktx PUBLIC BASISU_NO_ITERATOR_DEBUG_LEVEL)
 target_link_libraries(ktx PUBLIC "${Vulkan_LIBRARY}")
 
 target_include_directories(ktx SYSTEM PUBLIC ${KTX_INCLUDE_DIRS} ${Vulkan_INCLUDE_DIRS})
-# set_target_properties(ktx PROPERTIES FOLDER "ThirdParty" POSITION_INDEPENDENT_CODE ON)
-
-# target_include_directories(${ENGINE_LIB} PUBLIC "${KTX_DIR}/include" "${KTX_DIR}/other_include")
 
 set_target_properties(${ENGINE_LIB} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 set_target_properties(${ENGINE_LIB} PROPERTIES CXX_STANDARD_REQUIRED ON)
-
-
-# Setup static analysis
-include(cmake/StaticAnalyzers.cmake)
 
 target_include_directories(${ENGINE_LIB} PUBLIC "${SOURCES_DIR}")
 
@@ -228,14 +209,6 @@ target_compile_definitions(${ENGINE_LIB} PUBLIC GLM_FORCE_DEPTH_ZERO_TO_ONE)
 set(STBDIR "${LIB_DIR}/stb")
 target_include_directories(${ENGINE_LIB} PUBLIC "${STBDIR}")
 
-# NOTE: we are not using assimp yet.
-# [LIB] ASSIMP 
-# FetchContent_Declare(assimp GIT_REPOSITORY https://github.com/assimp/assimp.git GIT_TAG master EXCLUDE_FROM_ALL)
-# set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-# set(ASSIMP_INJECT_DEBUG_POSTFIX OFF CACHE BOOL "" FORCE)
-# set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
-# FetchContent_MakeAvailable(assimp)
-# target_include_directories(${ENGINE_LIB} PUBLIC extern/assimp-src/include)
 # [LIB] fastgltf
 set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(extern/fastgltf EXCLUDE_FROM_ALL)
@@ -273,16 +246,14 @@ target_link_libraries(${ENGINE_LIB} PUBLIC
   vk-bootstrap::vk-bootstrap
   glm::glm
   SDL3::SDL3-static
-	ktx
-  # assimp
+  ktx
 )
 
 if(!APPLE)
-	target_link_libraries(${ENGINE_LIB} PUBLIC tbb)
+  target_link_libraries(${ENGINE_LIB} PUBLIC tbb)
 endif()
 
 # SPIR-V shader compilation
-
 if(UNIX)
   find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin)
 elseif(${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL "AMD64")
@@ -291,27 +262,24 @@ else()
   set(GLSL_VALIDATOR "$ENV{VULKAN_SDK}/Bin32/glslangValidator.exe")
 endif()
 
-foreach(GLSL ${glsl_sources})
+foreach(glsl ${GLSL_SOURCES})
   message(STATUS "BUILDING SHADER")
-  get_filename_component(FILE_NAME ${GLSL} NAME)
+  get_filename_component(FILE_NAME ${glsl} NAME)
   set(SPIRV "${PROJECT_SOURCE_DIR}/res/shaders/${FILE_NAME}.spv")
-  message(STATUS ${GLSL})
+  message(STATUS ${glsl})
   add_custom_command(
     OUTPUT ${SPIRV}
-    COMMAND ${GLSL_VALIDATOR} -V --target-env vulkan1.3 ${GLSL} -o ${SPIRV}
-    DEPENDS ${GLSL} ${glsl_header_files}
+    COMMAND ${GLSL_VALIDATOR} -V --target-env vulkan1.3 ${glsl} -o ${SPIRV}
+    DEPENDS ${glsl} ${GLSL_HEADER_FILES}
   )
   list(APPEND SPIRV_BINARY_FILES ${SPIRV})
-endforeach(GLSL)
+endforeach(glsl)
 
 add_custom_target(Shaders DEPENDS ${SPIRV_BINARY_FILES})
 
-# Engine precompiled headers
-target_precompile_headers(${ENGINE_LIB} INTERFACE <optional> <iostream> <array> <vector> <memory> <string> <vector> <unordered_map> <format> <vulkan/vulkan.h>)
-
 # [EXEC] Main Executable Linking
 set(EXEC_NAME "sandbox")
-add_executable(${EXEC_NAME} ${sandbox_sources})
+add_executable(${EXEC_NAME} ${SANDBOX_SOURCES})
 target_include_directories(${EXEC_NAME} PUBLIC ${SANDBOX_DIR} ${SOURCES_DIR})
 target_link_libraries(${EXEC_NAME} PUBLIC ${ENGINE_LIB} project_options project_warnings)
 
