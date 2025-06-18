@@ -68,7 +68,7 @@ UIContext* UI_createContext() {
 	StackInitNils(context, focusHot, UIFocusKind_Null);
 	StackInitNils(context, focusActive, UIFocusKind_Null);
 
-	StackInitNils(context, hoverCursor, 0);
+	StackInitNils(context, hoverCursor, OS_SYSTEM_CURSOR_DEFAULT);
 	StackInitNils(context, opacity, 0.0f);
 
 	// Text decorations
@@ -87,6 +87,8 @@ UIContext* UI_createContext() {
 	StackInitNils(context, backgroundColor, (vec4{ 0.3f, 0.3f, 0.3f, 1.0f }));
 	StackInitNils(context, borderColor, (vec4{ 0.3f, 0.3f, 0.3f, 1.0f }));
 	StackInitNils(context, overlayColor, (vec4{ 0.3f, 0.3f, 0.3f, 1.0f }));
+
+	StackInitNils(context, fillColor, (vec4{ 0.4f, 0.95f, 1.f, 0.3f }));
 
 	return context;
 }
@@ -781,6 +783,8 @@ void UI_beginBuild(PrimalWindow* window, UI_EventList* events, f32 deltaTime) {
 	uiContext->borderColorStack = StackCreate(uiContext, borderColor);
 	uiContext->overlayColorStack = StackCreate(uiContext, overlayColor);
 
+	uiContext->fillColorStack = StackCreate(uiContext, fillColor);
+
 	// kill action
 	if (uiContext->actionKilledThisFrame) {
 		uiContext->actionKilledThisFrame = 0;
@@ -831,8 +835,7 @@ void UI_endBuild() {
 	UI_popParent();
 
 	auto hotElement = UIElement_fromKey(uiContext->hotKey);
-	// TODO(piero): Check how to set cursor in SDL3. Should do something like:
-	// OS_setCursor(hotElement->hoverCursor);
+	OS_setCursor(hotElement->hoverCursor);
 
 	for (auto axis = (Axis2D)0; axis < Axis2D_COUNT; axis = Axis2D(axis + 1)) {
 		UI_layoutRoot(uiContext->root, axis);
@@ -1087,10 +1090,10 @@ UI_FocusKind UI_pushFocusActive(UI_FocusKind value) { StackPushImpl(uiContext, F
 UI_FocusKind UI_popFocusActive() { StackPopImpl(uiContext, FocusActive, focusActive) }
 UI_FocusKind UI_setNextFocusActive(UI_FocusKind value) { StackSetNextImpl(uiContext, FocusActive, focusActive, value) }
 
-u64 UI_topHoverCursor() { StackTopImpl(uiContext, HoverCursor, hoverCursor) }
-u64 UI_pushHoverCursor(u64 value) { StackPushImpl(uiContext, HoverCursor, hoverCursor, value) }
-u64 UI_popHoverCursor() { StackPopImpl(uiContext, HoverCursor, hoverCursor) }
-u64 UI_setNextHoverCursor(u64 value) { StackSetNextImpl(uiContext, HoverCursor, hoverCursor, value) }
+OS_CursorType UI_topHoverCursor() { StackTopImpl(uiContext, HoverCursor, hoverCursor) }
+OS_CursorType UI_pushHoverCursor(OS_CursorType value) { StackPushImpl(uiContext, HoverCursor, hoverCursor, value) }
+OS_CursorType UI_popHoverCursor() { StackPopImpl(uiContext, HoverCursor, hoverCursor) }
+OS_CursorType UI_setNextHoverCursor(OS_CursorType value) { StackSetNextImpl(uiContext, HoverCursor, hoverCursor, value) }
 
 f32 UI_topOpacity() { StackTopImpl(uiContext, Opacity, opacity)}
 f32 UI_pushOpacity(f32 value) { StackPushImpl(uiContext, Opacity, opacity, value) }
@@ -1163,6 +1166,11 @@ vec4 UI_topOverlayColor() { StackTopImpl(uiContext, OverlayColor, overlayColor)}
 vec4 UI_pushOverlayColor(vec4 value) { StackPushImpl(uiContext, OverlayColor, overlayColor, value) }
 vec4 UI_popOverlayColor() { StackPopImpl(uiContext, OverlayColor, overlayColor) }
 vec4 UI_setNextOverlayColor(vec4 value) { StackSetNextImpl(uiContext, OverlayColor, overlayColor, value) }
+
+vec4 UI_topFillColor() { StackTopImpl(uiContext, FillColor, fillColor)}
+vec4 UI_pushFillColor(vec4 value) { StackPushImpl(uiContext, FillColor, fillColor, value) }
+vec4 UI_popFillColor() { StackPopImpl(uiContext, FillColor, fillColor) }
+vec4 UI_setNextFillColor(vec4 value) { StackSetNextImpl(uiContext, FillColor, fillColor, value) }
 
 #undef StackPushImpl
 #undef StackSetNextImpl

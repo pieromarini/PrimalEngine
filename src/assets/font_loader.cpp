@@ -1,5 +1,6 @@
 #include "font_loader.h"
 #include "assets/image_loader.h"
+#include "core/core.h"
 #include <chrono>
 #include <fastgltf/parser.hpp>
 #include <format>
@@ -38,7 +39,17 @@ MSDFFont loadFontMetadata(std::string_view metadataPath) {
 	auto glyphs = root["glyphs"].get_array();
 	for (auto glyph : glyphs) {
 		Glyph g{};
-		g.unicode = (int32_t)glyph["unicode"].get_int64();
+		auto unicode = glyph["unicode"];
+		i32 value{};
+		if (unicode.error() != simdjson::NO_SUCH_FIELD) {
+			value = (i32)unicode.get_int64();
+		} else {
+			auto index = glyph["index"];
+			// NOTE(piero): For now, don't allow to continue if we have an invalid font.
+			assert(index.error() != simdjson::NO_SUCH_FIELD);
+			value = (i32)index.get_int64();
+		}
+		g.unicode = value;
 		g.advance = (float)glyph["advance"].get_double();
 
 		// Check if we have plane bounds

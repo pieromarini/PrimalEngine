@@ -35,4 +35,6 @@ b32 rect2DContains(Rect2D r, vec2 v) {
 	return (r.min.x <= v.x && v.x <= r.max.x) && (r.min.y <= v.y && v.y <= r.max.y);
 }
 
+vec4 mix(vec4 a, vec4 b, f32 t) { return glm::mix(a, b, t); }
+
 };// namespace pm

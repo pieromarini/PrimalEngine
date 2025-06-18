@@ -5,6 +5,7 @@
 #include "core/core.h"
 #include "core/primal_string.h"
 #include "platform/os/events.h"
+#include "platform/os/os.h"
 #include "platform/window.h"
 
 namespace pm {
@@ -144,7 +145,7 @@ struct UIElement {
 	UI_Size prefSize[Axis2D_COUNT];
 	Axis2D childLayoutAxis;
 	// TODO(piero): Check how to set cursor in SDL3
-	u64 hoverCursor;
+	OS_CursorType hoverCursor;
 	f32 opacity;
 	f32 padding;
 

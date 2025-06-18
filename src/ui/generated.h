@@ -2,6 +2,7 @@
 
 #include "assets/asset.h"
 #include "core/data_structures/stack.h"
+#include "platform/os/os.h"
 #include "ui_types.h"
 
 namespace pm {
@@ -17,7 +18,7 @@ StackDeclareNode(Flags, UI_ElementFlags);
 StackDeclareNode(FocusHot, UI_FocusKind);
 StackDeclareNode(FocusActive, UI_FocusKind);
 
-StackDeclareNode(HoverCursor, u64);
+StackDeclareNode(HoverCursor, OS_CursorType);
 StackDeclareNode(Opacity, f32);
 
 // Text decorations
@@ -36,6 +37,7 @@ StackDeclareNode(BorderThickness, f32);
 StackDeclareNode(BackgroundColor, vec4);
 StackDeclareNode(BorderColor, vec4);
 StackDeclareNode(OverlayColor, vec4);
+StackDeclareNode(FillColor, vec4);
 
 UIElement* UI_topParent();
 UIElement* UI_pushParent(UIElement* value);
@@ -87,10 +89,10 @@ UI_FocusKind UI_pushFocusActive(UI_FocusKind value);
 UI_FocusKind UI_popFocusActive();
 UI_FocusKind UI_setNextFocusActive(UI_FocusKind value);
 
-u64 UI_topHoverCursor();
-u64 UI_pushHoverCursor(u64 value);
-u64 UI_popHoverCursor();
-u64 UI_setNextHoverCursor(u64 value);
+OS_CursorType UI_topHoverCursor();
+OS_CursorType UI_pushHoverCursor(OS_CursorType value);
+OS_CursorType UI_popHoverCursor();
+OS_CursorType UI_setNextHoverCursor(OS_CursorType value);
 
 f32 UI_topOpacity();
 f32 UI_pushOpacity(f32 value);
@@ -164,5 +166,9 @@ vec4 UI_pushOverlayColor(vec4 value);
 vec4 UI_popOverlayColor();
 vec4 UI_setNextOverlayColor(vec4 value);
 
+vec4 UI_topFillColor();
+vec4 UI_pushFillColor(vec4 value);
+vec4 UI_popFillColor();
+vec4 UI_setNextFillColor(vec4 value);
 
 }// namespace pm

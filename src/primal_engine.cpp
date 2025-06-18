@@ -216,6 +216,7 @@ void PrimalEngine::render(f32 deltaTime, UI_EventList* events) {
 				boundaryRect.max[panel->splitAxis] += 2;
 
 				UI_setNextFixedRect(boundaryRect);
+      	UI_setNextHoverCursor(panel->splitAxis == Axis2D_X ? OS_SYSTEM_CURSOR_EW_RESIZE : OS_SYSTEM_CURSOR_NS_RESIZE);
 				auto boundaryElement = UIElement_create(UIElementFlag_Clickable | UIElementFlag_Floating, "###panel_boundary_%p", child);
 				auto sig = UI_signalFromElement(boundaryElement);
 
@@ -283,6 +284,19 @@ void PrimalEngine::render(f32 deltaTime, UI_EventList* events) {
 					if (UI_Button(Str8L("Button 1")).clicked_left) {
 						std::cout << "Clicked button 1\n";
 					}
+
+
+					UI_setNextPrefWidth(UI_Pixels(50.0f, 1.0f));
+					UI_setNextPrefHeight(UI_Pixels(50.0f, 1.0f));
+					UI_Spacer(UI_Em(25.0f, 1.0f));
+					UI_Check(true, Str8L(""));
+					UI_Spacer(UI_Em(25.0f, 1.0f));
+
+					UI_setNextPrefWidth(UI_Pixels(150.0f, 1.0f));
+					UI_setNextPrefHeight(UI_Pixels(100.0f, 1.0f));
+					UI_setNextFont(&rendererContext.iconFont);
+					UI_setNextFontSize(70.0f);
+					UI_LabelF("%c%c%c", 90, 92, 93);
 
 					UI_setNextTextColor({ 1.0f, 0.0f, 0.0f, 1.0f });
 					UI_setNextBackgroundColor({ 0.26f, 0.29f, 0.31f, 1.0f });

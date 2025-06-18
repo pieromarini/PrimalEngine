@@ -63,4 +63,6 @@ Rect2D rect2DShift(Rect2D r, vec2 v);
 f32 clamp1F32(Rect1DF32 r, f32 v);
 b32 rect2DContains(Rect2D r, vec2 v);
 
+vec4 mix(vec4 a, vec4 b, f32 t);
+
 }// namespace pm

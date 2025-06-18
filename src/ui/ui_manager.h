@@ -77,6 +77,7 @@ struct UIContext {
 	StackDeclare(BackgroundColor, backgroundColor);
 	StackDeclare(BorderColor, borderColor);
 	StackDeclare(OverlayColor, overlayColor);
+	StackDeclare(FillColor, fillColor);
 };
 
 UIKey UI_keyZero();
@@ -195,6 +196,7 @@ if(state->cornerRadius11Stack.autoPop) { UI_popCornerRadius11(); state->cornerRa
 if(state->borderThicknessStack.autoPop) { UI_popBorderThickness(); state->borderThicknessStack.autoPop = 0; }\
 if(state->backgroundColorStack.autoPop) { UI_popBackgroundColor(); state->backgroundColorStack.autoPop = 0; }\
 if(state->borderColorStack.autoPop) { UI_popBorderColor(); state->borderColorStack.autoPop = 0; }\
-if(state->overlayColorStack.autoPop) { UI_popOverlayColor(); state->overlayColorStack.autoPop = 0; }
+if(state->overlayColorStack.autoPop) { UI_popOverlayColor(); state->overlayColorStack.autoPop = 0; }\
+if(state->fillColorStack.autoPop) { UI_popFillColor(); state->fillColorStack.autoPop = 0; }
 
 }// namespace pm:

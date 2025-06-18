@@ -812,6 +812,7 @@ void rendererCleanup(VulkanRendererContext* context) {
 	// destroyGBuffer(context);
 
 	destroyImage(context->device, context->vmaAllocator, context->sourceCodeFontTexture);
+	destroyImage(context->device, context->vmaAllocator, context->iconFontTexture);
 
 	destroyFontSDF(context->sourceCodeFont);
 	// destroyFontSDF(context->arialFont);
@@ -1781,6 +1782,9 @@ void updateFontData(VulkanRendererContext* context) {
 
 void initFontData(VulkanRendererContext* context) {
 	context->sourceCodeFont = loadFontSDF("SauceCodePro-Light", "res/fonts/SauceCodePro-Light.png", "res/fonts/SauceCodePro-Light.json");
+	// context->iconFont = loadFontSDF("IconFont", "res/fonts/FA6-Free-Solid-900.png", "res/fonts/FA6-Free-Solid-900.json");
+	context->iconFont = loadFontSDF("IconFont", "res/fonts/FA6-Free-Regular-400.png", "res/fonts/FA6-Free-Regular-400.json");
+	// context->iconFont = loadFontSDF("IconFont", "res/fonts/icon_fonts.png", "res/fonts/icon_fonts.json");
 	// arialFont = loadFontSDF("Arial", "res/fonts/arial.png", "res/fonts/arial.json");
 
 	auto extents = VkExtent3D{
@@ -1790,6 +1794,14 @@ void initFontData(VulkanRendererContext* context) {
 	};
 	context->sourceCodeFontTexture = createImage("SourceCodeFont-Image", context->sourceCodeFont.image.data, extents, context, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 	context->sourceCodeFontTexture.sampler = context->defaultSamplerLinear;
+
+	extents = VkExtent3D{
+		context->iconFont.image.width,
+		context->iconFont.image.height,
+		1
+	};
+	context->iconFontTexture = createImage("IconFont-Image", context->iconFont.image.data, extents, context, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	context->iconFontTexture.sampler = context->defaultSamplerLinear;
 
 	updateFontData(context);
 }
@@ -2088,10 +2100,12 @@ void Renderer_setupBuffers(VulkanRendererContext* context) {
 
 				batch.material = createMaterialInstance(&context->uiTextMaterial);
 
+				auto currentFontTexture = batch.currentFont;
+
 				// NOTE(piero): Allocate a frame descriptor set and write uniforms for this material.
 				batch.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, batch.material.material->descriptorLayouts.at(0));
 				writeUniform(context, &batch.material, 0, 0, window->fontData.buffer, sizeof(FontUniformData), 0);
-				writeUniform(context, &batch.material, 0, 1, context->sourceCodeFontTexture.imageView, context->sourceCodeFontTexture.sampler, context->sourceCodeFontTexture.imageLayout);
+				writeUniform(context, &batch.material, 0, 1, currentFontTexture->imageView, currentFontTexture->sampler, currentFontTexture->imageLayout);
 				writeUniform(context, &batch.material, 0, 2, textDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * batch.textDrawCommands.size(), 0);
 				writeUniform(context, &batch.material, 0, 3, textDrawDataBuffer.buffer, sizeof(FontDrawData) * batch.textDrawData.size(), 0);
 
@@ -2150,12 +2164,22 @@ void Renderer_pushRect(VulkanRendererContext* context, Rect2D rect, UIElement_Re
 }
 
 void Renderer_pushText(VulkanRendererContext* context, vec2 offsetPosition, UIElement_TextExt* style) {
+	// NOTE(piero): Temporary. We look for a text batch that uses the same font as this one.
 	auto batchNode = Renderer_getBatch(context, DRAW_BATCH_TEXT);
+
+	// TEMP. create new batch if fonts are not the same.
+	if (batchNode && batchNode->drawBatch.fontName != style->font->name) {
+		batchNode = nullptr;
+	}
 	if (!batchNode) {
 		batchNode = Renderer_createBatch(context, DRAW_BATCH_TEXT);
 	}
 	auto& batch = batchNode->drawBatch;
 	auto str = style->string;
+
+	// TEMP
+	batch.fontName = style->font->name;
+	batch.currentFont = style->font->name == "SauceCodePro-Light" ? &context->sourceCodeFontTexture : &context->iconFontTexture;
 
 	auto drawId = (u32)batch.textDrawCommands.size();
 	batch.textDrawCommands.push_back({ .drawId = drawId,

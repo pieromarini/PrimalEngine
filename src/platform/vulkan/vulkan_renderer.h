@@ -115,6 +115,8 @@ struct DrawBatch {
 
 	std::vector<UIIndirectCommand> textDrawCommands;
 	std::vector<FontDrawData> textDrawData;
+	AllocatedImage* currentFont;
+	std::string fontName;
 };
 
 struct DrawBatchNode {
@@ -324,7 +326,9 @@ struct VulkanRendererContext {
 	// Testing fonts
 	FontAsset arialFont{};
 	FontAsset sourceCodeFont{};
+	FontAsset iconFont{};
 	AllocatedImage sourceCodeFontTexture{};
+	AllocatedImage iconFontTexture{};
 
 	// Default 3d pipelines
 	PrimalMaterial opaqueMaterial;
