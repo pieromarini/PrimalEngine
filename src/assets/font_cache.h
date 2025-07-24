@@ -5,6 +5,8 @@
 
 namespace pm {
 
-MSDFFont FontCache_metricsFromFontSize(u64 fontId, f32 fontSize);
+using FontHash = u64;
+
+MSDFFont FontCache_metricsFromFontSize(FontHash fontId, f32 fontSize);
 
 };

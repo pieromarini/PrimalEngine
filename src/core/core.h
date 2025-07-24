@@ -132,13 +132,6 @@ void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
 #define per_thread
 #endif
 
-// NOTE(piero): These are used to create a "context" with braces.
-//              Right now they are used in our UI code.
-//              Sample usage: FakeContext(PushSomething, PopSomething) { do some stuff with whatever was pushed }
-#define FakeContext(start, end) for (int _i_ = ((start), 0); _i_ == 0; (_i_ += 1, (end)))
-#define FakeContextChecked(start, end) for(int _i_ = 2 * !(start); (_i_ == 2 ? ((end), 0) : !_i_); _i_ += 1, (end))
-
-
 // Linked List helpers
 // Based on: https://www.youtube.com/watch?v=gAijHHlyD5s
 #define CheckNull(p) ((p)==0)

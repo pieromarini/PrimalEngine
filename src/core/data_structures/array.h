@@ -6,6 +6,8 @@
 
 namespace pm {
 
+#define DynamicArrayDeclare(name, type) struct name { type* data; ptrdiff_t len; ptrdiff_t cap; }
+
 #define DynamicArray_push(arena, s)                             						 \
 	((s)->len >= (s)->cap                                         						 \
 	 ? DynamicArray_grow(arena, s, sizeof(*(s)->data)), (s)->data + (s)->len++ \

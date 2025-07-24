@@ -11,6 +11,6 @@
 
 namespace pm {
 
-vec2 generateTextGeometry(String8 text, float fontSize, FontAsset* font, std::vector<UIVertex>* vertices = nullptr, std::vector<u32>* indices = nullptr, vec2 offset = { 0.0f, 0.0f });
+vec2 generateTextGeometry(String8 text, float fontSize, FontAsset* font, Arena* arena = nullptr, UIVertexArray* vertices = nullptr, UIIndexArray* indices = nullptr, vec2 offset = { 0.0f, 0.0f });
 
 }// namespace pm

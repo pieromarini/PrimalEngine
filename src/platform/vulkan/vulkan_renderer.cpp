@@ -1868,9 +1868,9 @@ uint32_t registerImage(VulkanRendererContext* context, AllocatedImage* image) {
  * Create a staging buffer in CPU memory to hold the vertex + index buffer data.
  * Copy it to a GPU buffer.
  */
-GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<UIVertex> vertices, std::string name) {
-	const auto vertexBufferSize = vertices.size() * sizeof(UIVertex);
-	const auto indexBufferSize = indices.size() * sizeof(uint32_t);
+GPUMeshBuffers uploadMesh(VulkanRendererContext* context, u32* indices, u32 indicesCount, UIVertex* vertices, u32 verticesCount, std::string name) {
+	const auto vertexBufferSize = verticesCount * sizeof(UIVertex);
+	const auto indexBufferSize = indicesCount * sizeof(uint32_t);
 
 	GPUMeshBuffers newSurface{};
 
@@ -1890,9 +1890,9 @@ GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> in
 	AllocatedBuffer staging = createBuffer(name + " Mesh staging", vertexBufferSize + indexBufferSize, context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
 	// copy vertex buffer
-	memcpy(staging.info.pMappedData, vertices.data(), vertexBufferSize);
+	memcpy(staging.info.pMappedData, vertices, vertexBufferSize);
 	// copy index buffer
-	memcpy(static_cast<char*>(staging.info.pMappedData) + vertexBufferSize, indices.data(), indexBufferSize);
+	memcpy(static_cast<char*>(staging.info.pMappedData) + vertexBufferSize, indices, indexBufferSize);
 
 	immediateSubmit(context, [&](VkCommandBuffer cmd) {
 		VkBufferCopy vertexCopy{ 0 };
@@ -2022,33 +2022,28 @@ DrawBatchNode* Renderer_getBatch(VulkanRendererContext* context, DrawBatchType t
 
 DrawBatchNode* Renderer_createBatch(VulkanRendererContext* context, DrawBatchType type) {
 	auto currentWindowBatchNode = getCurrentFrame(context).uiWindowBatches.top;
-	auto* node = new DrawBatchNode();
+	auto* node = PushStruct(getCurrentFrame(context).perFrameArena, DrawBatchNode);
 	node->drawBatch.type = type;
 	QueuePush(currentWindowBatchNode->value->firstDrawBatch, currentWindowBatchNode->value->lastDrawBatch, node);
 	return node;
 }
 
-/*
- *  We should maintain our different batch "types": rectangles, text, viewports (and a separate one for meshes still remains)
- *  Create an arena for each frame:
- *    - Allocate 1 batch for each type
- *    - pushRect/pushText/pushViewport(?) push to their corresponding batch
- *    - process/render all batches inside of `drawUI`
- *
- *  To integrate windows: I think we should rework how we are handling them right now. Feels janky.
- *  Expose an API so that we can call it from sandbox and have an application loop there?
- *  Also, refactor renderer so that we don't have to pass the context around for each renderer call.
- *  
- *  NEXT: - Implement rectangle instancing. UIDrawData is now per-instance data and we can access it using gl_InstanceId from the shader
- */
+DrawBatchNode* Renderer_getOrCreateBatch(VulkanRendererContext* context, DrawBatchType type) {
+	auto batchNode = Renderer_getBatch(context, type);
+	if (!batchNode) {
+		batchNode = Renderer_createBatch(context, type);
+	}
+	return batchNode;
+}
 
+// TODO: Implement rectangle instancing. UIDrawData is now per-instance data and we can access it using gl_InstanceId from the shader
 void Renderer_setupBuffers(VulkanRendererContext* context) {
 	for (auto* windowBatchNode = getCurrentFrame(context).uiWindowBatches.top; windowBatchNode != nullptr; windowBatchNode = windowBatchNode->next) {
 		auto* windowBatch = windowBatchNode->value;
 		auto* window = windowBatch->window;
 		for (auto* batchNode = windowBatch->firstDrawBatch; batchNode != nullptr; batchNode = batchNode->next) {
 			auto& batch = batchNode->drawBatch;
-			batch.meshBuffers = uploadMesh(context, batch.indices, batch.vertices, "uiMeshBuffer");
+			batch.meshBuffers = uploadMesh(context, batch.indices.data, batch.indices.len, batch.vertices.data, batch.vertices.len, "uiMeshBuffer");
 
 			getCurrentFrame(context).deletionQueue.push([context, batch]() {
 				destroyBuffer(context->vmaAllocator, batch.meshBuffers.vertexBuffer);
@@ -2056,28 +2051,28 @@ void Renderer_setupBuffers(VulkanRendererContext* context) {
 			});
 
 			if (batch.type == DRAW_BATCH_UI) {
-				auto uiDrawCommandsBuffer = createBuffer("uiIndirectCommandBuffer", sizeof(UIIndirectCommand) * batch.uiDrawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-				memcpy(uiDrawCommandsBuffer.info.pMappedData, batch.uiDrawCommands.data(), sizeof(UIIndirectCommand) * batch.uiDrawCommands.size());
+				auto uiDrawCommandsBuffer = createBuffer("uiIndirectCommandBuffer", sizeof(UIIndirectCommand) * batch.uiDrawCommands.len, context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+				memcpy(uiDrawCommandsBuffer.info.pMappedData, batch.uiDrawCommands.data, sizeof(UIIndirectCommand) * batch.uiDrawCommands.len);
 
-				auto uiDrawDataBuffer = createBuffer("uiDrawDataBuffer", sizeof(UIDrawData) * batch.uiDrawData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-				memcpy(uiDrawDataBuffer.info.pMappedData, batch.uiDrawData.data(), sizeof(UIDrawData) * batch.uiDrawData.size());
+				auto uiDrawDataBuffer = createBuffer("uiDrawDataBuffer", sizeof(UIDrawData) * batch.uiDrawData.len, context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+				memcpy(uiDrawDataBuffer.info.pMappedData, batch.uiDrawData.data, sizeof(UIDrawData) * batch.uiDrawData.len);
 
-				auto uiMaterialDataBuffer = createBuffer("uiMaterialDataBuffer", sizeof(UIMaterialData) * batch.uiMaterialData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-				memcpy(uiMaterialDataBuffer.info.pMappedData, batch.uiMaterialData.data(), sizeof(UIMaterialData) * batch.uiMaterialData.size());
+				auto uiMaterialDataBuffer = createBuffer("uiMaterialDataBuffer", sizeof(UIMaterialData) * batch.uiMaterialData.len, context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+				memcpy(uiMaterialDataBuffer.info.pMappedData, batch.uiMaterialData.data, sizeof(UIMaterialData) * batch.uiMaterialData.len);
 
 				batch.commands = {
 					.buffer = uiDrawCommandsBuffer,
 					.offset = offsetof(UIIndirectCommand, command),
-					.size = (u32)batch.uiDrawCommands.size(),
+					.size = (u32)batch.uiDrawCommands.len,
 					.stride = sizeof(UIIndirectCommand)
 				};
 				batch.material = createMaterialInstance(&context->uiMaterial);
 
 				batch.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, batch.material.material->descriptorLayouts.at(0));
 				writeUniform(context, &batch.material, 0, 0, window->uiData.buffer, sizeof(UIUniformData), 0);
-				writeUniform(context, &batch.material, 0, 1, uiDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * batch.uiDrawCommands.size(), 0);
-				writeUniform(context, &batch.material, 0, 2, uiDrawDataBuffer.buffer, sizeof(UIDrawData) * batch.uiDrawData.size(), 0);
-				writeUniform(context, &batch.material, 0, 3, uiMaterialDataBuffer.buffer, sizeof(UIMaterialData) * batch.uiMaterialData.size(), 0);
+				writeUniform(context, &batch.material, 0, 1, uiDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * batch.uiDrawCommands.len, 0);
+				writeUniform(context, &batch.material, 0, 2, uiDrawDataBuffer.buffer, sizeof(UIDrawData) * batch.uiDrawData.len, 0);
+				writeUniform(context, &batch.material, 0, 3, uiMaterialDataBuffer.buffer, sizeof(UIMaterialData) * batch.uiMaterialData.len, 0);
 
 				getCurrentFrame(context).deletionQueue.push([context, batch, uiDrawCommandsBuffer, uiDrawDataBuffer, uiMaterialDataBuffer]() {
 					destroyBuffer(context->vmaAllocator, uiDrawCommandsBuffer);
@@ -2085,16 +2080,16 @@ void Renderer_setupBuffers(VulkanRendererContext* context) {
 					destroyBuffer(context->vmaAllocator, uiMaterialDataBuffer);
 				});
 			} else if (batch.type == DRAW_BATCH_TEXT) {
-				auto textDrawCommandsBuffer = createBuffer("textIndirectCommandBuffer", sizeof(UIIndirectCommand) * batch.textDrawCommands.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-				memcpy(textDrawCommandsBuffer.info.pMappedData, batch.textDrawCommands.data(), sizeof(UIIndirectCommand) * batch.textDrawCommands.size());
+				auto textDrawCommandsBuffer = createBuffer("textIndirectCommandBuffer", sizeof(UIIndirectCommand) * batch.textDrawCommands.len, context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+				memcpy(textDrawCommandsBuffer.info.pMappedData, batch.textDrawCommands.data, sizeof(UIIndirectCommand) * batch.textDrawCommands.len);
 
-				auto textDrawDataBuffer = createBuffer("textTransformBuffer", sizeof(FontDrawData) * batch.textDrawData.size(), context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-				memcpy(textDrawDataBuffer.info.pMappedData, batch.textDrawData.data(), sizeof(FontDrawData) * batch.textDrawData.size());
+				auto textDrawDataBuffer = createBuffer("textTransformBuffer", sizeof(FontDrawData) * batch.textDrawData.len, context->vmaAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+				memcpy(textDrawDataBuffer.info.pMappedData, batch.textDrawData.data, sizeof(FontDrawData) * batch.textDrawData.len);
 
 				batch.commands = {
 					.buffer = textDrawCommandsBuffer,
 					.offset = offsetof(UIIndirectCommand, command),
-					.size = (u32)batch.textDrawCommands.size(),
+					.size = (u32)batch.textDrawCommands.len,
 					.stride = sizeof(UIIndirectCommand)
 				};
 
@@ -2106,8 +2101,8 @@ void Renderer_setupBuffers(VulkanRendererContext* context) {
 				batch.material.descriptorSets.at(0) = getCurrentFrame(context).frameDescriptor.allocate(context->device, batch.material.material->descriptorLayouts.at(0));
 				writeUniform(context, &batch.material, 0, 0, window->fontData.buffer, sizeof(FontUniformData), 0);
 				writeUniform(context, &batch.material, 0, 1, currentFontTexture->imageView, currentFontTexture->sampler, currentFontTexture->imageLayout);
-				writeUniform(context, &batch.material, 0, 2, textDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * batch.textDrawCommands.size(), 0);
-				writeUniform(context, &batch.material, 0, 3, textDrawDataBuffer.buffer, sizeof(FontDrawData) * batch.textDrawData.size(), 0);
+				writeUniform(context, &batch.material, 0, 2, textDrawCommandsBuffer.buffer, sizeof(UIIndirectCommand) * batch.textDrawCommands.len, 0);
+				writeUniform(context, &batch.material, 0, 3, textDrawDataBuffer.buffer, sizeof(FontDrawData) * batch.textDrawData.len, 0);
 
 				getCurrentFrame(context).deletionQueue.push([context, textDrawCommandsBuffer, textDrawDataBuffer]() {
 					destroyBuffer(context->vmaAllocator, textDrawCommandsBuffer);
@@ -2119,10 +2114,7 @@ void Renderer_setupBuffers(VulkanRendererContext* context) {
 }
 
 void Renderer_pushRect(VulkanRendererContext* context, Rect2D rect, UIElement_RectStyleExt style) {
-	auto batchNode = Renderer_getBatch(context, DRAW_BATCH_UI);
-	if (!batchNode) {
-		batchNode = Renderer_createBatch(context, DRAW_BATCH_UI);
-	}
+	auto* batchNode = Renderer_getOrCreateBatch(context, DRAW_BATCH_UI);
 	auto& batch = batchNode->drawBatch;
 
 	auto minX = rect.min.x;
@@ -2132,41 +2124,41 @@ void Renderer_pushRect(VulkanRendererContext* context, Rect2D rect, UIElement_Re
 
 	auto size = rect2DSize(rect);
 
-	auto drawId = (u32)batch.uiDrawCommands.size();
-	batch.uiDrawCommands.push_back({ .drawId = drawId,
+	auto drawId = (u32)batch.uiDrawCommands.len;
+	*DynamicArray_push(getCurrentFrame(context).perFrameArena, &batch.uiDrawCommands) = { .drawId = drawId,
 		.command = {
 			.indexCount = 6,
 			.instanceCount = 1,
-			.firstIndex = (u32)batch.indices.size(),
-			.vertexOffset = (i32)batch.vertices.size(),
-			.firstInstance = drawId } });
-	batch.uiDrawData.push_back({ .transform = mat4{ 1.0f }, .materialIndex = drawId });
-	batch.uiMaterialData.push_back({
+			.firstIndex = (u32)batch.indices.len,
+			.vertexOffset = (i32)batch.vertices.len,
+			.firstInstance = drawId } };
+
+	*DynamicArray_push(getCurrentFrame(context).perFrameArena, &batch.uiDrawData) = { .transform = mat4{ 1.0f }, .materialIndex = drawId };
+	*DynamicArray_push(getCurrentFrame(context).perFrameArena, &batch.uiMaterialData) = {
 		.backgroundColor = style.backgroundColor,
 		.rectHalfSize = size / 2.0f,
 		.borderThickness = style.borderThickness,
 		.softness = style.softness,
 		.opacity = Renderer_topTransparency(context),
 		.cornerRadii = { style.cornerRadii[0], style.cornerRadii[1], style.cornerRadii[2], style.cornerRadii[3] }
-	});
+	};
 
-	batch.vertices.push_back({ .position = { maxX, maxY }, .uv = { 1.0f, 1.0f }, .color = style.backgroundColor });
-	batch.vertices.push_back({ .position = { minX, maxY }, .uv = { 0.0f, 1.0f }, .color = style.backgroundColor });
-	batch.vertices.push_back({ .position = { minX, minY }, .uv = { 0.0f, 0.0f }, .color = style.backgroundColor });
-	batch.vertices.push_back({ .position = { maxX, minY }, .uv = { 1.0f, 0.0f }, .color = style.backgroundColor });
+	*DynamicArray_push(getCurrentFrame(context).perFrameArena, &batch.vertices) = { .position = { maxX, maxY }, .uv = { 1.0f, 1.0f }, .color = style.backgroundColor };
+	*DynamicArray_push(getCurrentFrame(context).perFrameArena, &batch.vertices) = { .position = { minX, maxY }, .uv = { 0.0f, 1.0f }, .color = style.backgroundColor };
+	*DynamicArray_push(getCurrentFrame(context).perFrameArena, &batch.vertices) = { .position = { minX, minY }, .uv = { 0.0f, 0.0f }, .color = style.backgroundColor };
+	*DynamicArray_push(getCurrentFrame(context).perFrameArena, &batch.vertices) = { .position = { maxX, minY }, .uv = { 1.0f, 0.0f }, .color = style.backgroundColor };
 
-	batch.indices.push_back(0);
-	batch.indices.push_back(1);
-	batch.indices.push_back(2);
-	batch.indices.push_back(2);
-	batch.indices.push_back(3);
-	batch.indices.push_back(0);
+	*DynamicArray_push(getCurrentFrame(context).perFrameArena, &batch.indices) = 0;
+	*DynamicArray_push(getCurrentFrame(context).perFrameArena, &batch.indices) = 1;
+	*DynamicArray_push(getCurrentFrame(context).perFrameArena, &batch.indices) = 2;
+	*DynamicArray_push(getCurrentFrame(context).perFrameArena, &batch.indices) = 2;
+	*DynamicArray_push(getCurrentFrame(context).perFrameArena, &batch.indices) = 3;
+	*DynamicArray_push(getCurrentFrame(context).perFrameArena, &batch.indices) = 0;
 }
 
 void Renderer_pushText(VulkanRendererContext* context, vec2 offsetPosition, UIElement_TextExt* style) {
 	// NOTE(piero): Temporary. We look for a text batch that uses the same font as this one.
-	auto batchNode = Renderer_getBatch(context, DRAW_BATCH_TEXT);
-
+	auto* batchNode = Renderer_getBatch(context, DRAW_BATCH_TEXT);
 	// TEMP. create new batch if fonts are not the same.
 	if (batchNode && batchNode->drawBatch.fontName != style->font->name) {
 		batchNode = nullptr;
@@ -2181,18 +2173,19 @@ void Renderer_pushText(VulkanRendererContext* context, vec2 offsetPosition, UIEl
 	batch.fontName = style->font->name;
 	batch.currentFont = style->font->name == "SauceCodePro-Light" ? &context->sourceCodeFontTexture : &context->iconFontTexture;
 
-	auto drawId = (u32)batch.textDrawCommands.size();
-	batch.textDrawCommands.push_back({ .drawId = drawId,
+	auto drawId = (u32)batch.textDrawCommands.len;
+	*DynamicArray_push(getCurrentFrame(context).perFrameArena, &batch.textDrawCommands) = { .drawId = drawId,
 		.command = {
 			.indexCount = (u32)str.size * 6,
 			.instanceCount = 1,
-			.firstIndex = (u32)batch.indices.size(),
-			.vertexOffset = (i32)batch.vertices.size(),
-			.firstInstance = drawId } });
+			.firstIndex = (u32)batch.indices.len,
+			.vertexOffset = (i32)batch.vertices.len,
+			.firstInstance = drawId } };
 	auto a = vec4{ style->textColor };
-	batch.textDrawData.emplace_back(a);
 
-	generateTextGeometry(str, style->fontSize, &context->sourceCodeFont, &batch.vertices, &batch.indices, offsetPosition);
+	*DynamicArray_push(getCurrentFrame(context).perFrameArena, &batch.textDrawData) = { .textColor = a };
+
+	generateTextGeometry(str, style->fontSize, &context->sourceCodeFont, getCurrentFrame(context).perFrameArena, &batch.vertices, &batch.indices, offsetPosition);
 }
 
 // Local macros to use specific arenas for stacks

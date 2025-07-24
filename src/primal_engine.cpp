@@ -258,7 +258,6 @@ void PrimalEngine::render(f32 deltaTime, UI_EventList* events) {
 						panel);
 
 				UI_parent(panelElement) UI_seedKey(panelElement->key) {
-
 					UI_setNextPrefWidth(UI_Pct(1.0f, 1.0f));
 					UI_setNextPrefHeight(UI_SizeByChildren(1.0f));
 					UI_setNextChildLayoutAxis(Axis2D_Y);
@@ -285,18 +284,20 @@ void PrimalEngine::render(f32 deltaTime, UI_EventList* events) {
 						std::cout << "Clicked button 1\n";
 					}
 
-
 					UI_setNextPrefWidth(UI_Pixels(50.0f, 1.0f));
 					UI_setNextPrefHeight(UI_Pixels(50.0f, 1.0f));
 					UI_Spacer(UI_Em(25.0f, 1.0f));
 					UI_Check(true, Str8L(""));
 					UI_Spacer(UI_Em(25.0f, 1.0f));
 
-					UI_setNextPrefWidth(UI_Pixels(150.0f, 1.0f));
+					// UI_setNextPrefWidth(UI_TextDim(1.0f));
+					// UI_setNextPrefHeight(UI_TextDim(1.0f));
+
+					UI_setNextPrefWidth(UI_Pixels(650.0f, 1.0f));
 					UI_setNextPrefHeight(UI_Pixels(100.0f, 1.0f));
 					UI_setNextFont(&rendererContext.iconFont);
-					UI_setNextFontSize(70.0f);
-					UI_LabelF("%c%c%c", 90, 92, 93);
+					UI_setNextFontSize(40.0f);
+					UI_LabelF("%c %c %c %c %c %c %c %c", 90, 91, 92, 93, 94, 95, 96, 97);
 
 					UI_setNextTextColor({ 1.0f, 0.0f, 0.0f, 1.0f });
 					UI_setNextBackgroundColor({ 0.26f, 0.29f, 0.31f, 1.0f });

@@ -24,7 +24,7 @@ static UI_Size nilPrefWidth = { .type = UISizeType_Pixels, .value = 200.0f, .str
 static UI_Size nilPrefHeight = { .type = UISizeType_Pixels, .value = 2.0f, .strictness = 1.0f };
 static FontAsset nilFontAsset = {};
 
-__declspec(thread) UIContext* uiContext = nullptr;
+per_thread UIContext* uiContext = nullptr;
 
 UIKey UI_keyZero() {
 	UIKey key = { 0 };
@@ -546,7 +546,7 @@ void UI_solveIndependentSizes(UIElement* root, Axis2D axis) {
 		// TODO(piero): Cache the generated text geometry
 		case Axis2D_X: {
 			auto position = rect2DSize(root->rect);
-			auto textDim = generateTextGeometry(root->textEXT->string, root->textEXT->fontSize, root->textEXT->font, nullptr, nullptr, position);
+			auto textDim = generateTextGeometry(root->textEXT->string, root->textEXT->fontSize, root->textEXT->font, nullptr, nullptr, nullptr, position);
 			root->calcSize[axis] = textDim.x;
 			root->calcSize[axis] += root->textEXT->textEdgePadding * 2.0f;
 			root->calcSize[axis] = std::ceilf(root->calcSize[axis]);
@@ -555,7 +555,7 @@ void UI_solveIndependentSizes(UIElement* root, Axis2D axis) {
 		case Axis2D_Y: {
 			MSDFFont fontInfo = root->textEXT->font->metadata;
 			auto position = rect2DSize(root->rect);
-			auto textDim = generateTextGeometry(root->textEXT->string, root->textEXT->fontSize, root->textEXT->font, nullptr, nullptr, position);
+			auto textDim = generateTextGeometry(root->textEXT->string, root->textEXT->fontSize, root->textEXT->font, nullptr, nullptr, nullptr, position);
 			root->calcSize[axis] = textDim.y;
 			root->calcSize[axis] = std::floorf(root->calcSize[axis]);
 		} break;
@@ -717,7 +717,7 @@ vec2 UI_textPosFromElement(UIElement* element) {
 	auto font = element->textEXT->font;
 	f32 fontSize = element->textEXT->fontSize;
 	MSDFFont fontMetrics = font->metadata;
-	auto textDim = generateTextGeometry(element->textEXT->string, element->textEXT->fontSize, element->textEXT->font, nullptr, nullptr, rectSize);
+	auto textDim = generateTextGeometry(element->textEXT->string, element->textEXT->fontSize, element->textEXT->font, nullptr, nullptr, nullptr, rectSize);
 
 	result.y = std::floorf((element->rect.min.y + element->rect.max.y) / 2.f) - textDim.y;
 
@@ -805,7 +805,10 @@ void UI_beginBuild(PrimalWindow* window, UI_EventList* events, f32 deltaTime) {
 
 	// zero hot key on pruned boxes
 	UIElement* element = UIElement_fromKey(uiContext->hotKey);
-	if (UIElement_isNil(element) && (UI_KeyMatch(UI_keyZero(), uiContext->activeKey[UIMouseButtonSlot_Left]) || !UI_KeyMatch(uiContext->hotKey, uiContext->activeKey[UIMouseButtonSlot_Left])) && (UI_KeyMatch(UI_keyZero(), uiContext->activeKey[UIMouseButtonSlot_Middle]) || !UI_KeyMatch(uiContext->hotKey, uiContext->activeKey[UIMouseButtonSlot_Middle])) && (UI_KeyMatch(UI_keyZero(), uiContext->activeKey[UIMouseButtonSlot_Right]) || !UI_KeyMatch(uiContext->hotKey, uiContext->activeKey[UIMouseButtonSlot_Right]))) {
+	if (UIElement_isNil(element) && (UI_KeyMatch(UI_keyZero(), uiContext->activeKey[UIMouseButtonSlot_Left]) 
+			|| !UI_KeyMatch(uiContext->hotKey, uiContext->activeKey[UIMouseButtonSlot_Left])) && (UI_KeyMatch(UI_keyZero(), uiContext->activeKey[UIMouseButtonSlot_Middle])
+			|| !UI_KeyMatch(uiContext->hotKey, uiContext->activeKey[UIMouseButtonSlot_Middle])) && (UI_KeyMatch(UI_keyZero(), uiContext->activeKey[UIMouseButtonSlot_Right])
+			|| !UI_KeyMatch(uiContext->hotKey, uiContext->activeKey[UIMouseButtonSlot_Right]))) {
 		uiContext->hotKey = UI_keyZero();
 	}
 
@@ -886,6 +889,7 @@ void UI_draw(VulkanRendererContext* context) {
 		if (element->flags & UIElementFlag_DrawBackground) {
 			auto rect = element->rect;
 			UIElement_RectStyleExt style{};
+			// TODO(piero): We should send 4 colors per rectangle as part of the material data so we can support gradients
 			style.backgroundColor = element->rectStyleEXT->backgroundColor;
 			MemoryCopyArray(style.cornerRadii, element->rectStyleEXT->cornerRadii);
 			style.softness = 1.0f;
@@ -914,9 +918,6 @@ void UI_draw(VulkanRendererContext* context) {
 			auto rect = rect2DPad(element->rect, 1.0f);
 			UIElement_RectStyleExt style{};
 			MemoryCopyArray(style.cornerRadii, element->rectStyleEXT->cornerRadii);
-			// TODO(piero): quick hack for now. The renderer should send 4 color values per rectangle.
-			//              We can send 4 color values per vertex, but this seems wasteful and repetitive, since the 4 colors are the same between a rectangle's vertices.
-			//              The idea should be to send 4 colors as part of the UIMaterialData. This should be better memory-wise and it will still be useful once we add instancing for rectangle rendering.
 			style.backgroundColor = element->rectStyleEXT->borderColor;
 			style.borderThickness = element->rectStyleEXT->borderThickness;
 			style.softness = 1.0f;

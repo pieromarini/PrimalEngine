@@ -2,7 +2,7 @@
 
 namespace pm {
 
-__declspec(thread) ThreadCtx* threadCtx = 0;
+per_thread ThreadCtx* threadCtx = 0;
 
 ThreadCtx ThreadCtx_alloc() {
 	ThreadCtx tctx = { .scratchArenas = { nullptr } };

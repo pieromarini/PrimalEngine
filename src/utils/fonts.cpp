@@ -6,7 +6,7 @@
 
 namespace pm {
 
-vec2 generateTextGeometry(String8 text, float fontSize, FontAsset* font, std::vector<UIVertex>* vertices, std::vector<u32>* indices, vec2 offset) {
+vec2 generateTextGeometry(String8 text, float fontSize, FontAsset* font, Arena* arena, UIVertexArray* vertices, UIIndexArray* indices, vec2 offset) {
 	auto& metadata = font->metadata;
 
 	uint32_t vertexIndex = 0;
@@ -31,6 +31,7 @@ vec2 generateTextGeometry(String8 text, float fontSize, FontAsset* font, std::ve
 	float textWidth = 0.0f;
 
 	for (size_t i = 0; i < text.size; i++) {
+		// TODO(piero): Support UTF-8 codepoints
 		int unicode = static_cast<u8>(text.str[i]);
 
 		if (unicode == '\r') {
@@ -47,12 +48,18 @@ vec2 generateTextGeometry(String8 text, float fontSize, FontAsset* font, std::ve
 
 		// If we can't find a glyph, we skip it
 		if (glyphIt == metadata.glyphs.end()) {
+			// TODO(piero): quick hack because our Icon fonts don't have spaces
+			if (unicode == ' ') {
+				cursorX += 0.5f * scale;
+				continue;
+			}
 			std::cout << "Unknown glyph with code: " << unicode << '\n';
 			continue;
 		}
 		auto& glyph = *glyphIt;
 
 		// Apply kerning if there's a next character (and we have kerning)
+		// TODO(piero): Support UTF-8 codepoints
 		if (i < text.size - 1) {
 			int nextUnicode = static_cast<u8>(text.str[i + 1]);
 			auto kerningIt = std::ranges::find_if(metadata.kerning, [&unicode, &nextUnicode](const KerningPair& k) { return k.unicode1 == unicode && k.unicode2 == nextUnicode; });
@@ -86,17 +93,15 @@ vec2 generateTextGeometry(String8 text, float fontSize, FontAsset* font, std::ve
 		minY = std::min({ minY, y0, y1 });
 		maxY = std::max({ maxY, y0, y1 });
 
-		if (vertices) {
-			vertices->push_back({ .position = { x0, y0 }, .uv = { u0, v0 }, .color = { 1.0f, 0.0f, 0.0f, 1.0f } });// Bottom-left
-			vertices->push_back({ .position = { x1, y0 }, .uv = { u1, v0 }, .color = { 1.0f, 0.0f, 0.0f, 1.0f } });// Bottom-right
-			vertices->push_back({ .position = { x1, y1 }, .uv = { u1, v1 }, .color = { 1.0f, 0.0f, 0.0f, 1.0f } });// Top-right
-			vertices->push_back({ .position = { x0, y1 }, .uv = { u0, v1 }, .color = { 1.0f, 0.0f, 0.0f, 1.0f } });// Top-right
-		}
+		if (arena && vertices && indices) {
+			*DynamicArray_push(arena, vertices) = { .position = { x0, y0 }, .uv = { u0, v0 }, .color = { 1.0f, 0.0f, 0.0f, 1.0f } };
+			*DynamicArray_push(arena, vertices) = { .position = { x1, y0 }, .uv = { u1, v0 }, .color = { 1.0f, 0.0f, 0.0f, 1.0f } };
+			*DynamicArray_push(arena, vertices) = { .position = { x1, y1 }, .uv = { u1, v1 }, .color = { 1.0f, 0.0f, 0.0f, 1.0f } };
+			*DynamicArray_push(arena, vertices) = { .position = { x0, y1 }, .uv = { u0, v1 }, .color = { 1.0f, 0.0f, 0.0f, 1.0f } };
 
-		if (indices) {
 			std::array<uint32_t, 6> letterIndices = { 0, 1, 2, 2, 3, 0 };
 			for (auto& index : letterIndices) {
-				indices->push_back(vertexIndex + index);
+				*DynamicArray_push(arena, indices) = vertexIndex + index;
 			}
 		}
 

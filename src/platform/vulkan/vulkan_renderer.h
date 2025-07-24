@@ -26,6 +26,7 @@
 #include "platform/window.h"
 #include "ui/ui_types.h"
 #include "ui/ui_widgets.h"
+#include "core/data_structures/array.h"
 
 
 namespace pm {
@@ -98,6 +99,14 @@ enum DrawBatchType {
 	DRAW_BATCH_VIEWPORT
 };
 
+DynamicArrayDeclare(UIVertexArray, UIVertex);
+DynamicArrayDeclare(UIIndexArray, u32);
+
+DynamicArrayDeclare(UIIndirectCommand_Array, UIIndirectCommand);
+DynamicArrayDeclare(UIDrawData_Array, UIDrawData);
+DynamicArrayDeclare(UIMaterialData_Array, UIMaterialData);
+DynamicArrayDeclare(FontDrawData_Array, FontDrawData);
+
 struct DrawBatch {
 	DrawBatchType type{};
 	DrawBatchCommands commands{};
@@ -106,15 +115,16 @@ struct DrawBatch {
 	MaterialInstance material;
 
 	// TEMP
-	std::vector<UIVertex> vertices{};
-	std::vector<u32> indices{};
+	UIVertexArray vertices;
+	UIIndexArray indices;
 
-	std::vector<UIIndirectCommand> uiDrawCommands{};
-	std::vector<UIDrawData> uiDrawData{};
-	std::vector<UIMaterialData> uiMaterialData{};
+	UIIndirectCommand_Array uiDrawCommands;
+	UIDrawData_Array uiDrawData;
+	UIMaterialData_Array uiMaterialData;
 
-	std::vector<UIIndirectCommand> textDrawCommands;
-	std::vector<FontDrawData> textDrawData;
+	UIIndirectCommand_Array textDrawCommands;
+	FontDrawData_Array textDrawData;
+
 	AllocatedImage* currentFont;
 	std::string fontName;
 };
@@ -447,7 +457,7 @@ void initMeshPipelines(VulkanRendererContext* context);
 
 void initVoxelPipeline(VulkanRendererContext* context);
 
-GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<UIVertex> vertices, std::string name);
+GPUMeshBuffers uploadMesh(VulkanRendererContext* context, u32* indices, u32 indicesCount, UIVertex* vertices, u32 verticesCount, std::string name);
 GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<Vertex> vertices, std::string name);
 GPUMeshBuffers uploadMesh(VulkanRendererContext* context, std::span<uint32_t> indices, std::span<VoxelVertex> vertices, std::string name);
 
@@ -495,6 +505,7 @@ void destroyMaterial(VulkanRendererContext* context, PrimalMaterial& material);
 // API for UI rendering
 DrawBatchNode* Renderer_getBatch(VulkanRendererContext* context, DrawBatchType type);
 DrawBatchNode* Renderer_createBatch(VulkanRendererContext* context, DrawBatchType type);
+DrawBatchNode* Renderer_getOrCreateBatch(VulkanRendererContext* context, DrawBatchType type);
 void Renderer_pushRect(VulkanRendererContext* context, Rect2D rect, UIElement_RectStyleExt style);
 void Renderer_pushText(VulkanRendererContext* context, vec2 offsetPosition, UIElement_TextExt* style);
 
